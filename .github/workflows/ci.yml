@@ -134,9 +134,10 @@ jobs:
     # compiler and the linker again. So the cap is 120 — a real hang is still
     # bounded by the go -timeout below, which kills one with a stack long
     # before this. The run that raised it came in at 1h28m43s, so 120 is about
-    # a third of headroom rather than a comfortable margin; the lever left is
-    # splitting the leg across runners, which halves the compile as well as the
-    # tests but renames a required check.
+    # a third of headroom rather than a comfortable margin. The compiler reading
+    # was wrong: compiling every test binary on the runner is 41s, and the leg
+    # came down to about a quarter of an hour once `go test` ran with -count=1
+    # (see the windows test step).
     timeout-minutes: 120
     env:
       # Whether this leg does real work. The windows runner needs twenty-odd
@@ -228,7 +229,21 @@ jobs:
       # them against 5259s without, one run each, which is inside a leg whose
       # identical runs have come in at 49m, 57m and 62m. Not worth a narrower
       # leg, and not worth measuring again.
-      - run: go test -timeout 25m ./...
+      #
+      # -count=1 is what makes this leg a quarter of an hour instead of an hour
+      # and a half. With the test cache on, `go test` has each test binary log
+      # every file and variable it touches, to key the cached result; on the
+      # runner cmd/deja's log is 1.26 GB, 25M lines. A -debug-trace of the plain
+      # step shows every build done in the first minute and the cmd/deja test
+      # action running 5434s around a binary that reported 912s. Not the tests
+      # and not the keying: replaying cmd/go's hashing over that log on the runner
+      # is 10s, and the binary with the log written to D: is 12 minutes. Where
+      # exactly go test spends the rest of it is not pinned down; -count=1 turns
+      # the log off. On 2026-09-26 the step took 10-15 minutes with it on four
+      # runners in centralus, eastus, eastus2 and northcentralus, where it had
+      # taken 43-94 minutes before. A fresh runner never reuses a cached test
+      # result, so nothing is lost.
+      - run: go test -count=1 -timeout 25m ./...
         if: runner.os == 'Windows' && env.FULL == 'true'
         shell: bash
       - run: go build ./cmd/deja
