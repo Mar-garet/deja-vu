@@ -51,8 +51,10 @@ jobs:
           # the testlog dedup in testing/internal/testdeps, alone and on top of 668636
           cp -R "$RUNNER_TEMP/go-puddsbase" "$RUNNER_TEMP/go-dedup"
           cp -R "$RUNNER_TEMP/go-pudds" "$RUNNER_TEMP/go-puddsdedup"
+          # checkout gives this repo CRLF on Windows; the patch has to stay LF
+          tr -d '\r' < "$GITHUB_WORKSPACE/.github/bench/testdeps-dedup.patch" > "$RUNNER_TEMP/dedup.patch"
           for t in dedup puddsdedup; do
-            git -C "$RUNNER_TEMP/go-$t" apply "$GITHUB_WORKSPACE/.github/bench/testdeps-dedup.patch"
+            git -C "$RUNNER_TEMP/go-$t" apply "$RUNNER_TEMP/dedup.patch"
           done
           for t in puddsbase dedup pudds puddsdedup; do
             echo "== $t $(git -C "$RUNNER_TEMP/go-$t" log -1 --format='%h %s')"
