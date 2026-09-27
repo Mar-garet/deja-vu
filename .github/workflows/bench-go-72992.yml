@@ -56,7 +56,9 @@ jobs:
           for t in dedup puddsdedup; do
             git -C "$RUNNER_TEMP/go-$t" apply "$RUNNER_TEMP/dedup.patch"
           done
-          for t in puddsbase dedup pudds puddsdedup; do
+          # the parent itself is not built or run: it takes 70-85 min and was
+          # measured three times already (3400-4400s of non-test time)
+          for t in dedup pudds puddsdedup; do
             echo "== $t $(git -C "$RUNNER_TEMP/go-$t" log -1 --format='%h %s')"
             (cd "$RUNNER_TEMP/go-$t/src" && GOROOT_BOOTSTRAP="$boot" cmd //c make.bat --no-banner)
             "$RUNNER_TEMP/go-$t/bin/go" version
@@ -75,7 +77,6 @@ jobs:
             local t1=$(date +%s)
             echo "$1: $((t1 - t0))s rc=$rc $(tail -1 "$RUNNER_TEMP/out-$1.txt")" | tee -a "$RUNNER_TEMP/summary.txt"
           }
-          run puddsbase-cached  puddsbase  ""
           run dedup-cached      dedup      ""
           run pudds-cached      pudds      ""
           run puddsdedup-cached puddsdedup ""
