@@ -46,7 +46,13 @@ jobs:
           git -C "$RUNNER_TEMP/go-puddsbase" checkout -q FETCH_HEAD~1
           fetch go-pudds refs/changes/36/668636/7 1
           git -C "$RUNNER_TEMP/go-pudds" checkout -q FETCH_HEAD
-          for t in puddsbase pudds; do
+          # the testlog dedup in testing/internal/testdeps, alone and on top of 668636
+          cp -R "$RUNNER_TEMP/go-puddsbase" "$RUNNER_TEMP/go-dedup"
+          cp -R "$RUNNER_TEMP/go-pudds" "$RUNNER_TEMP/go-puddsdedup"
+          for t in dedup puddsdedup; do
+            git -C "$RUNNER_TEMP/go-$t" apply "$GITHUB_WORKSPACE/.github/bench/testdeps-dedup.patch"
+          done
+          for t in puddsbase dedup pudds puddsdedup; do
             echo "== $t $(git -C "$RUNNER_TEMP/go-$t" log -1 --format='%h %s')"
             (cd "$RUNNER_TEMP/go-$t/src" && GOROOT_BOOTSTRAP="$boot" cmd //c make.bat --no-banner)
             "$RUNNER_TEMP/go-$t/bin/go" version
@@ -65,7 +71,10 @@ jobs:
             local t1=$(date +%s)
             echo "$1: $((t1 - t0))s rc=$rc $(tail -1 "$RUNNER_TEMP/out-$1.txt")" | tee -a "$RUNNER_TEMP/summary.txt"
           }
-          run puddsbase-cached puddsbase ""
-          run pudds-cached     pudds     ""
+          run puddsbase-cached  puddsbase  ""
+          run dedup-cached      dedup      ""
+          run pudds-cached      pudds      ""
+          run puddsdedup-cached puddsdedup ""
+          run base-count1       puddsbase  "-count=1"
           echo "=== summary"; cat "$RUNNER_TEMP/summary.txt"
           cat "$RUNNER_TEMP/summary.txt" >> "$GITHUB_STEP_SUMMARY"
