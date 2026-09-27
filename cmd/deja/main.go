@@ -307,6 +307,15 @@ var commands = map[string]command{
 	"hook-goose-prompt": func(dir string, _ []string) error {
 		return refreshGooseForPrompt(dir, readHookStdin())
 	},
+	// The code extension `deja install reasonix-auto` registers. Reasonix
+	// starts it and speaks JSON-RPC on its stdin; at a terminal it says so
+	// rather than sitting on a read nobody will answer.
+	"reasonix-ext": func(dir string, _ []string) error {
+		if sayIfTypedByHand("reasonix-ext") {
+			return nil
+		}
+		return runReasonixExt(dir, os.Stdin, os.Stdout)
+	},
 	"blame": runBlame,
 }
 
@@ -3282,6 +3291,7 @@ func printSources(dir string) {
 		{"amp", sources.AmpRoot(), []string{sources.AmpRoot()}, sources.AmpThreadFiles, sources.LoadAmp},
 		{"openclaw", sources.OpenClawRoot(), []string{sources.OpenClawRoot()}, sources.OpenClawStoreFiles, sources.LoadOpenClaw},
 		{"codewhale", sources.CodeWhaleRoot(), sources.CodeWhaleRoots(), sources.CodeWhaleSessionFiles, sources.LoadCodeWhale},
+		{"reasonix", sources.ReasonixRoot(), sources.ReasonixRoots(), sources.ReasonixSessionFiles, sources.LoadReasonix},
 		{"deepseek", sources.DeepSeekRoot(), []string{sources.DeepSeekRoot()}, sources.DeepSeekSessionFiles, sources.LoadDeepSeek},
 		{"zed", sources.ZedDB(), []string{sources.ZedDB()}, func() []string { return presentFiles(sources.ZedDB()) }, sources.LoadZed},
 		// The location is the registry, not a store: Crush keeps one store per
@@ -4032,6 +4042,7 @@ var helpHidden = map[string]bool{
 	"hook-goose-prompt": true,
 	"hook-precompact":   true,
 	"hook-refresh":      true,
+	"reasonix-ext":      true,
 	"warmup-status":     true,
 }
 

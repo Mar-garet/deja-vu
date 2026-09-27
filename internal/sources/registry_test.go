@@ -45,6 +45,7 @@ func TestFormatRegistryConformance(t *testing.T) {
 		"DEJA_INCLUDE_SUBAGENTS", "DEJA_OPENCODE_DB", "GEMINI_CLI_HOME",
 		"GROK_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
 		"DEJA_ZED_ROOT", "DEJA_ZED_DB", "FLATPAK_XDG_DATA_HOME",
+		"DEJA_REASONIX_ROOT", "REASONIX_HOME", "REASONIX_STATE_HOME",
 		"DEJA_NOTES_FILE",
 	} {
 		t.Setenv(key, "")
@@ -182,6 +183,12 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 		sessions, err = ParseKimchiFile(path)
 	case "codewhale":
 		sessions, err = ParseCodeWhaleFile(path)
+	case "reasonix":
+		// The 1.x fixture is zstd frames, which only the CLI reads.
+		if filepath.Base(path) == "events.frames" && !ZstdAvailable() {
+			t.Skip("zstd not installed")
+		}
+		sessions, err = ParseReasonixFile(path)
 	case "commandcode":
 		sessions, err = ParseCommandCodeFile(path)
 	case "zcode":

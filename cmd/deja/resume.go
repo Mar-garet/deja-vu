@@ -109,6 +109,10 @@ var resumeIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 // metacharacters into a printed command.
 var openclawKeyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
 
+// reasonixPathPattern is a transcript path that can go on a command line as
+// one unquoted argument: no whitespace, quotes or shell metacharacters.
+var reasonixPathPattern = regexp.MustCompile(`^[A-Za-z0-9/\\:._~+-]+$`)
+
 // Crush names its sessions with a uuid. Nothing else goes on a command line.
 var crushSessionID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
@@ -247,6 +251,38 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// in. `--session-id` is the alias of `--resume` on both the TUI and
 		// `codewhale exec` (verified against 0.9.13's own --help).
 		return s.Project, "codewhale --resume " + s.ID, nil
+	case "reasonix":
+		// `--resume` looks an id up in the store of the workspace it runs in
+		// (the git root of the working directory), so it goes with that
+		// workspace. It also takes a file path, which is the only way back to
+		// a session saved with no workspace (internal/frontend/cli/cli_flags.go).
+		//
+		// 1.x keeps a session as a directory. Its --resume matches the id in
+		// the sessions-v4 store of the working directory and takes no
+		// directory path (internal/cli/cli_flags.go:131-200), so a session in
+		// the global or the desktop store has no command to reopen it by.
+		switch sources.ReasonixStore(s.Path) {
+		case "desktop":
+			return "", "", fmt.Errorf("session %s was made in the Reasonix desktop app and reopens from its sidebar; the CLI does not read that store", digest.Short(s.ID))
+		case "global":
+			return "", "", fmt.Errorf("session %s is in Reasonix's store for sessions with no workspace, which `reasonix --resume` does not search", digest.Short(s.ID))
+		case "project":
+			ws := sources.ReasonixWorkspace(s.Path)
+			if ws == "" {
+				return "", "", fmt.Errorf("session %s: deja cannot tell which directory it was started in; run `reasonix --resume %s` there", digest.Short(s.ID), s.ID)
+			}
+			if !reasonixPathPattern.MatchString(s.ID) {
+				return "", "", fmt.Errorf("session id %q contains characters deja will not place in a command", s.ID)
+			}
+			return ws, "reasonix --resume " + s.ID, nil
+		}
+		if ws := sources.ReasonixWorkspace(s.Path); ws != "" {
+			return ws, "reasonix --resume " + s.ID, nil
+		}
+		if !reasonixPathPattern.MatchString(s.Path) {
+			return "", "", fmt.Errorf("session %s has no workspace and its path holds characters deja will not place in a command — run reasonix --resume with the file %s", digest.Short(s.ID), s.Path)
+		}
+		return "", "reasonix --resume " + s.Path, nil
 	case "qwen":
 		return qwenProjectDirFor(s), "qwen -r " + s.ID, nil
 	case "openclaw":

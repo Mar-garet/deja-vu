@@ -1019,6 +1019,11 @@ func doctorHarnesses(w io.Writer, dir string) {
 	cwRoots := sources.CodeWhaleRoots()
 	printFilesBesideIn("codewhale", sources.CodeWhaleRoot(), cwRoots, false, doctorExists(sources.CodeWhaleRoot()),
 		sources.CodeWhaleSessionFiles(), sources.CodeWhaleSidecarFiles()...)
+	// Reasonix keeps a dozen sidecars beside each transcript — metadata, event
+	// logs, locks, subagent logs — so those are placed, not counted as unread.
+	rxRoot := sources.ReasonixRoot()
+	printFilesBesideIn("reasonix", rxRoot, sources.ReasonixSessionDirsAll(), false, doctorExists(rxRoot),
+		sources.ReasonixSessionFiles(), sources.ReasonixSidecarFiles()...)
 	dshRoot := sources.DeepSeekRoot()
 	printFiles("deepseek", dshRoot, doctorExists(dshRoot), sources.DeepSeekSessionFiles())
 	zedDB := sources.ZedDB()
@@ -1736,6 +1741,9 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"zcode", zcodeConfigPath(), doctorZCodeWired, nil},
 		{"commandcode", commandCodeMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"cherrystudio", cherryStudioImportPath(), doctorFileWired, nil},
+		// The server rides in deja's plugin package; the manifest Reasonix
+		// loaded it from is the file that says so.
+		{"reasonix", reasonixInstalledManifest(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 	}
 }
 

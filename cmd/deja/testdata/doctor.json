@@ -286,6 +286,15 @@
       "indexed_sessions": 0
     },
     {
+      "name": "reasonix",
+      "state": "missing",
+      "paths": [
+        "<tmp>/home/.reasonix"
+      ],
+      "files": 0,
+      "indexed_sessions": 0
+    },
+    {
       "name": "deepseek",
       "state": "missing",
       "paths": [
@@ -479,6 +488,11 @@
       "name": "cherrystudio",
       "state": "config-missing",
       "path": "<tmp>/home/.config/deja/cherrystudio-mcp.json"
+    },
+    {
+      "name": "reasonix",
+      "state": "config-missing",
+      "path": "<tmp>/home/.reasonix/plugins/deja/reasonix-plugin.json"
     }
   ],
   "auto_recall": [
@@ -598,6 +612,11 @@
       "path": "<tmp>/home/.commandcode/settings.json"
     },
     {
+      "name": "reasonix",
+      "state": "missing",
+      "path": "<tmp>/home/.reasonix/plugins/deja/reasonix-plugin.json"
+    },
+    {
       "name": "aider",
       "state": "missing",
       "path": "<tmp>/home/.config/deja/aider-context.md"
@@ -658,6 +677,11 @@
       "name": "copilot-chat",
       "state": "missing",
       "path": "<tmp>/home/.config/Code/User/prompts/deja.prompt.md"
+    },
+    {
+      "name": "reasonix",
+      "state": "missing",
+      "path": "<tmp>/home/.reasonix/plugins/deja/commands/deja.md"
     },
     {
       "name": "antigravity",
