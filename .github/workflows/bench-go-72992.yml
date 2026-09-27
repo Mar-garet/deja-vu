@@ -1,0 +1,75 @@
+# Throwaway: compares cmd/go test-cache handling for golang/go#72992 on one
+# runner. Region changes the result by 2x (#4056), so every toolchain runs on
+# the same machine, one after another, each with a cold cache of its own.
+name: bench go 72992
+
+on:
+  push:
+    branches: [bench/go-72992]
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: windows-latest
+    timeout-minutes: 355
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: stable
+          cache: false
+
+      - name: runner region
+        run: |
+          curl -s --max-time 5 -H Metadata:true \
+            "http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01&format=text" \
+            || echo unknown
+          echo
+
+      - name: build toolchains
+        run: |
+          set -euo pipefail
+          boot="$(go env GOROOT)"
+          fetch() { # dir ref depth
+            git init -q "$RUNNER_TEMP/$1"
+            git -C "$RUNNER_TEMP/$1" fetch -q --depth="$3" https://go.googlesource.com/go "$2"
+          }
+          # base: the master commit CL 839645 is on, so it differs from the stack only by the stack
+          fetch go-base refs/changes/45/839645/2 2
+          git -C "$RUNNER_TEMP/go-base" checkout -q FETCH_HEAD~1
+          fetch go-jake refs/changes/46/839646/2 1
+          git -C "$RUNNER_TEMP/go-jake" checkout -q FETCH_HEAD
+          fetch go-pudds refs/changes/36/668636/5 1
+          git -C "$RUNNER_TEMP/go-pudds" checkout -q FETCH_HEAD
+          for t in base jake pudds; do
+            echo "== $t $(git -C "$RUNNER_TEMP/go-$t" log -1 --format='%h %s')"
+            (cd "$RUNNER_TEMP/go-$t/src" && GOROOT_BOOTSTRAP="$boot" cmd //c make.bat --no-banner)
+            "$RUNNER_TEMP/go-$t/bin/go" version
+          done
+
+      - name: measure
+        run: |
+          set -uo pipefail
+          run() { # label toolchain extra-flags
+            local go="$RUNNER_TEMP/go-$2/bin/go"
+            local cache="$RUNNER_TEMP/cache-$1"
+            rm -rf "$cache"
+            local t0=$(date +%s)
+            GOCACHE="$cache" "$go" test $3 -timeout 40m ./cmd/deja > "$RUNNER_TEMP/out-$1.txt" 2>&1
+            local rc=$?
+            local t1=$(date +%s)
+            echo "$1: $((t1 - t0))s rc=$rc $(tail -1 "$RUNNER_TEMP/out-$1.txt")" | tee -a "$RUNNER_TEMP/summary.txt"
+          }
+          run base-cached  base  ""
+          run jake-cached  jake  ""
+          run pudds-cached pudds ""
+          run base-count1  base  "-count=1"
+          echo "=== summary"; cat "$RUNNER_TEMP/summary.txt"
+          cat "$RUNNER_TEMP/summary.txt" >> "$GITHUB_STEP_SUMMARY"
