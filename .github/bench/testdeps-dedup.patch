@@ -1,30 +1,39 @@
 diff --git a/src/testing/internal/testdeps/deps.go b/src/testing/internal/testdeps/deps.go
-index 5ab377da..0eff1283 100644
+index 5ab377da..25db5912 100644
 --- a/src/testing/internal/testdeps/deps.go
 +++ b/src/testing/internal/testdeps/deps.go
-@@ -77,6 +77,34 @@ type testLog struct {
+@@ -77,6 +77,58 @@ type testLog struct {
  	mu  sync.Mutex
  	w   *bufio.Writer
  	set bool
 +
-+	// recent holds entries written since the last chdir, one per slot,
-+	// indexed by a hash of the entry. cmd/go hashes each entry from its
-+	// op, name and the current directory, so writing the same entry again
-+	// adds nothing to the test's inputs. Tests that stat or read the same
-+	// files in a loop can otherwise produce logs of millions of lines, all
-+	// of which cmd/go reads back. A fixed table keeps memory bounded: a
-+	// collision only overwrites a slot, so the worst case is a repeat
-+	// that gets written, never an entry that gets lost.
-+	recent *[testLogSlots]testLogEntry
++	// recent holds entries written since the last chdir. cmd/go hashes
++	// each entry from its op, name and the current directory, so writing
++	// the same entry again adds nothing to the test's inputs. Tests that
++	// stat or read the same files in a loop can otherwise produce logs of
++	// millions of lines, all of which cmd/go reads back and caches.
++	//
++	// The table is fixed in size so memory stays bounded however many
++	// distinct entries a test produces. An entry that falls out of its
++	// set is simply written again next time; nothing is ever dropped
++	// that was not already written.
++	recent *[testLogSets]testLogSet
 +}
 +
-+const testLogSlots = 4096
++const (
++	testLogSets = 1024
++	testLogWays = 4
++)
++
++// testLogSet holds the most recently written entries with the same
++// hash, most recent first.
++type testLogSet [testLogWays]testLogEntry
 +
 +type testLogEntry struct {
 +	op, name string
 +}
 +
-+func (e testLogEntry) slot() uint32 {
++func (e testLogEntry) set() uint32 {
 +	// FNV-1a
 +	h := uint32(2166136261)
 +	for i := 0; i < len(e.op); i++ {
@@ -33,11 +42,26 @@ index 5ab377da..0eff1283 100644
 +	for i := 0; i < len(e.name); i++ {
 +		h = (h ^ uint32(e.name[i])) * 16777619
 +	}
-+	return h % testLogSlots
++	return h % testLogSets
++}
++
++// seen reports whether e is in s, and makes e the most recent entry
++// of s either way.
++func (s *testLogSet) seen(e testLogEntry) bool {
++	for i := range s {
++		if s[i] == e {
++			copy(s[1:i+1], s[:i])
++			s[0] = e
++			return true
++		}
++	}
++	copy(s[1:], s[:len(s)-1])
++	s[0] = e
++	return false
  }
  
  func (l *testLog) Getenv(key string) {
-@@ -106,6 +134,22 @@ func (l *testLog) add(op, name string) {
+@@ -106,6 +158,20 @@ func (l *testLog) add(op, name string) {
  	if l.w == nil {
  		return
  	}
@@ -48,14 +72,12 @@ index 5ab377da..0eff1283 100644
 +		}
 +	} else {
 +		if l.recent == nil {
-+			l.recent = new([testLogSlots]testLogEntry)
++			l.recent = new([testLogSets]testLogSet)
 +		}
 +		e := testLogEntry{op, name}
-+		s := &l.recent[e.slot()]
-+		if *s == e {
++		if l.recent[e.set()].seen(e) {
 +			return
 +		}
-+		*s = e
 +	}
  	l.w.WriteString(op)
  	l.w.WriteByte(' ')
