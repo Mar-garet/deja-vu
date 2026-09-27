@@ -39,6 +39,8 @@ jobs:
           boot="$(go env GOROOT)"
           fetch() { # dir ref depth
             git init -q "$RUNNER_TEMP/$1"
+            # LF checkout, so the dedup patch applies as written
+            git -C "$RUNNER_TEMP/$1" config core.autocrlf false
             git -C "$RUNNER_TEMP/$1" fetch -q --depth="$3" https://go.googlesource.com/go "$2"
           }
           # control for CL 668636: its own parent, so the pair differs only by the CL
