@@ -79,6 +79,5 @@ jobs:
           run dedup-cached      dedup      ""
           run pudds-cached      pudds      ""
           run puddsdedup-cached puddsdedup ""
-          run base-count1       puddsbase  "-count=1"
           echo "=== summary"; cat "$RUNNER_TEMP/summary.txt"
           cat "$RUNNER_TEMP/summary.txt" >> "$GITHUB_STEP_SUMMARY"

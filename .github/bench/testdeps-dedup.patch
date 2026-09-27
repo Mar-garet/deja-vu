@@ -1,50 +1,62 @@
 diff --git a/src/testing/internal/testdeps/deps.go b/src/testing/internal/testdeps/deps.go
-index 5ab377da..3d17922d 100644
+index 5ab377da..0eff1283 100644
 --- a/src/testing/internal/testdeps/deps.go
 +++ b/src/testing/internal/testdeps/deps.go
-@@ -77,6 +77,17 @@ type testLog struct {
+@@ -77,6 +77,34 @@ type testLog struct {
  	mu  sync.Mutex
  	w   *bufio.Writer
  	set bool
 +
-+	// seen holds the entries written since the last chdir.
-+	// cmd/go hashes each entry from its op, name and the current directory,
-+	// so writing the same entry again adds nothing to the test's inputs.
-+	// Tests that stat or read the same files in a loop can otherwise
-+	// produce logs of millions of lines, all of which cmd/go reads back.
-+	seen map[testLogEntry]struct{}
++	// recent holds entries written since the last chdir, one per slot,
++	// indexed by a hash of the entry. cmd/go hashes each entry from its
++	// op, name and the current directory, so writing the same entry again
++	// adds nothing to the test's inputs. Tests that stat or read the same
++	// files in a loop can otherwise produce logs of millions of lines, all
++	// of which cmd/go reads back. A fixed table keeps memory bounded: a
++	// collision only overwrites a slot, so the worst case is a repeat
++	// that gets written, never an entry that gets lost.
++	recent *[testLogSlots]testLogEntry
 +}
++
++const testLogSlots = 4096
 +
 +type testLogEntry struct {
 +	op, name string
++}
++
++func (e testLogEntry) slot() uint32 {
++	// FNV-1a
++	h := uint32(2166136261)
++	for i := 0; i < len(e.op); i++ {
++		h = (h ^ uint32(e.op[i])) * 16777619
++	}
++	for i := 0; i < len(e.name); i++ {
++		h = (h ^ uint32(e.name[i])) * 16777619
++	}
++	return h % testLogSlots
  }
  
  func (l *testLog) Getenv(key string) {
-@@ -106,6 +117,19 @@ func (l *testLog) add(op, name string) {
+@@ -106,6 +134,22 @@ func (l *testLog) add(op, name string) {
  	if l.w == nil {
  		return
  	}
 +	if op == "chdir" {
 +		// Relative names after this resolve against the new directory.
-+		clear(l.seen)
++		if l.recent != nil {
++			clear(l.recent[:])
++		}
 +	} else {
++		if l.recent == nil {
++			l.recent = new([testLogSlots]testLogEntry)
++		}
 +		e := testLogEntry{op, name}
-+		if _, ok := l.seen[e]; ok {
++		s := &l.recent[e.slot()]
++		if *s == e {
 +			return
 +		}
-+		if l.seen == nil {
-+			l.seen = make(map[testLogEntry]struct{})
-+		}
-+		l.seen[e] = struct{}{}
++		*s = e
 +	}
  	l.w.WriteString(op)
  	l.w.WriteByte(' ')
  	l.w.WriteString(name)
-@@ -117,6 +141,7 @@ var log testLog
- func (TestDeps) StartTestLog(w io.Writer) {
- 	log.mu.Lock()
- 	log.w = bufio.NewWriter(w)
-+	clear(log.seen)
- 	if !log.set {
- 		// Tests that define TestMain and then run m.Run multiple times
- 		// will call StartTestLog/StopTestLog multiple times.
