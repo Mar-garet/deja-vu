@@ -139,3 +139,44 @@ func TestOpenClawEmptyStoreIsQuietAndAForeignOneSaysSo(t *testing.T) {
 		t.Errorf("a store without transcript_events must surface an error, got %v %v", got, err)
 	}
 }
+
+func TestOpenClawSessionKeyFromInitialSQLiteSchema(t *testing.T) {
+	if !SQLite3Available() {
+		t.Skip("sqlite3 not installed")
+	}
+	db := filepath.Join(t.TempDir(), "openclaw-agent.sqlite")
+	stmts := `create table sessions(session_id text primary key, session_key text not null);
+create table session_routes(session_key text primary key, session_id text not null);
+insert into sessions values('old', 'agent:main:main'), ('current', 'agent:main:main'), ('other', 'agent:main:other');
+insert into session_routes values('agent:main:main', 'current'), ('agent:main:other', 'other');`
+	if out, err := exec.Command("sqlite3", db, stmts).CombinedOutput(); err != nil {
+		t.Fatalf("create initial SQLite schema: %v: %s", err, out)
+	}
+	for _, tc := range []struct {
+		id, want string
+	}{
+		{"current", "agent:main:main"},
+		{"other", "agent:main:other"},
+		{"old", ""},
+		{"missing", ""},
+		{"current' OR 1=1 --", ""},
+	} {
+		got, err := OpenClawSessionKey(db, tc.id)
+		if err != nil || got != tc.want {
+			t.Errorf("OpenClawSessionKey(%q) = %q, %v; want %q", tc.id, got, err, tc.want)
+		}
+	}
+}
+
+func TestOpenClawSessionKeyRejectsUnknownSQLiteSchema(t *testing.T) {
+	if !SQLite3Available() {
+		t.Skip("sqlite3 not installed")
+	}
+	db := filepath.Join(t.TempDir(), "openclaw-agent.sqlite")
+	if out, err := exec.Command("sqlite3", db, "create table unrelated(id text)").CombinedOutput(); err != nil {
+		t.Fatalf("create unknown schema: %v: %s", err, out)
+	}
+	if _, err := OpenClawSessionKey(db, "session-id"); err == nil {
+		t.Fatal("an unreadable session schema must not look like a missing session")
+	}
+}

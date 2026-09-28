@@ -51,12 +51,13 @@ against a 2026.8.2 store and openclaw source
   adds the digest at `agent:bootstrap`, which fires only in gateway mode.
 - **Resume**: `openclaw chat --session <key>`. OpenClaw addresses a
   conversation by key (`agent:<id>:<name>`); the uuid its transcript is named
-  after opens nothing, and the mapping lives in `sessions.json` beside the
-  transcripts. deja reads the key from there. Live-verified: the terminal UI
-  came up on `agent:main:main` with that session's history, and a run through
-  `openclaw agent --session-id` answered from it. The lookup reads the
-  `sessions.json` beside a JSONL transcript, so a session read from the
-  SQLite store gets no command.
+  after opens nothing. Legacy JSONL sessions use `sessions.json` beside the
+  transcripts; SQLite sessions use the store's current-session mapping. An
+  earlier reset window remains searchable but cannot reopen the current one
+  under its old id. Live-verified for JSONL: the terminal UI came up on
+  `agent:main:main` with that session's history, and a run through
+  `openclaw agent --session-id` answered from it. SQLite key lookup is covered
+  by synthetic database tests.
 - **Handoff**: paste.
 
 **Last verified:** 2026-09-02

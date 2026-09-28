@@ -211,27 +211,27 @@ func openclawProject(path string) string {
 	return "openclaw"
 }
 
-// OpenClawSessionKey returns the session key that owns a transcript, or "" when
-// the store does not name one. OpenClaw addresses a conversation by key
-// (`agent:<id>:<name>`) rather than by the uuid its file is named after: the
-// terminal UI takes `--session <key>` and nothing takes the uuid. The mapping
-// lives in sessions.json beside the transcripts.
-func OpenClawSessionKey(path string) string {
+// OpenClawSessionKey returns the key for the current session at path, or ""
+// when that session is no longer current. SQLite stores keep the id-to-key
+// mapping in the database; legacy transcripts keep it in sessions.json.
+func OpenClawSessionKey(path, id string) (string, error) {
+	if filepath.Base(path) == "openclaw-agent.sqlite" {
+		return openclawDBSessionKey(path, id)
+	}
 	b, err := os.ReadFile(filepath.Join(filepath.Dir(path), "sessions.json"))
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	var store map[string]struct {
 		SessionID string `json:"sessionId"`
 	}
 	if err := json.Unmarshal(b, &store); err != nil {
-		return ""
+		return "", nil
 	}
-	id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 	for key, rec := range store {
 		if rec.SessionID == id {
-			return key
+			return key, nil
 		}
 	}
-	return ""
+	return "", nil
 }

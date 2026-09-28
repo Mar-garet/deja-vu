@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -48,6 +49,52 @@ func OpenClawStoreFiles() []string {
 // openclawDBAgent is the agent id a store belongs to: agents/<agent>/agent/db.
 func openclawDBAgent(db string) string {
 	return filepath.Base(filepath.Dir(filepath.Dir(db)))
+}
+
+// openclawDBSessionKey resolves the current window, not merely any historical
+// window with the same key: a reset keeps the old transcript in the database,
+// but `openclaw chat --session <key>` opens only the current one.
+func openclawDBSessionKey(db, id string) (string, error) {
+	known, err := sqliteOutput(db, `select name from sqlite_master where type='table' `+
+		`and name in ('session_nodes','session_windows','sessions','session_routes')`)
+	if err != nil {
+		return "", fmt.Errorf("openclaw: read session schema: %w", err)
+	}
+	tables := make(map[string]bool)
+	for _, name := range strings.Fields(string(known)) {
+		tables[name] = true
+	}
+	quotedID := strings.ReplaceAll(id, "'", "''")
+	var query string
+	switch {
+	case tables["session_windows"] && tables["session_nodes"]:
+		query = `select json_object('key', w.session_key) from session_windows w ` +
+			`join session_nodes n on n.session_key = w.session_key ` +
+			`and n.current_session_id = w.session_id where w.session_id = '` + quotedID + `'`
+	case tables["sessions"] && tables["session_routes"]:
+		// The first 2026.8 schema called windows `sessions` and kept the
+		// current id for each key in session_routes.
+		query = `select json_object('key', s.session_key) from sessions s ` +
+			`join session_routes r on r.session_key = s.session_key ` +
+			`and r.session_id = s.session_id where s.session_id = '` + quotedID + `'`
+	default:
+		return "", fmt.Errorf("openclaw: store has no supported current-session mapping")
+	}
+	raw, err := sqliteOutput(db, query)
+	if err != nil {
+		return "", fmt.Errorf("openclaw: read current session key: %w", err)
+	}
+	type keyRow struct {
+		Key string `json:"key"`
+	}
+	rows, err := sqliteObjects[keyRow](raw)
+	if err != nil {
+		return "", fmt.Errorf("openclaw: decode current session key: %w", err)
+	}
+	if len(rows) != 1 {
+		return "", nil
+	}
+	return rows[0].Key, nil
 }
 
 // ParseOpenClawDB reads every session held in a per-agent store.

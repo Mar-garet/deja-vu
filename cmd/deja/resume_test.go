@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/vshulcz/deja-vu/internal/index"
 	"github.com/vshulcz/deja-vu/internal/model"
+	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
 func TestResumeCommandPerHarness(t *testing.T) {
@@ -243,6 +245,68 @@ func TestResumeOpenClawUsesTheSessionKey(t *testing.T) {
 	if _, _, err := resumeCommand(model.Session{Harness: "openclaw", ID: "deadbeef", Path: orphan}); err == nil {
 		t.Fatal("a session missing from the store resumed anyway")
 	}
+}
+
+func TestResumeOpenClawSQLiteUsesTheCurrentSessionKey(t *testing.T) {
+	if !sources.SQLite3Available() {
+		t.Skip("sqlite3 not installed")
+	}
+	sql, err := os.ReadFile(filepath.Join("..", "..", "fixtures", "registry", "openclaw", "agent", "openclaw-agent.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := filepath.Join(t.TempDir(), "agents", "main", "agent", "openclaw-agent.sqlite")
+	if err := os.MkdirAll(filepath.Dir(db), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	create := exec.Command("sqlite3", db)
+	create.Stdin = bytes.NewReader(sql)
+	if out, err := create.CombinedOutput(); err != nil {
+		t.Fatalf("create OpenClaw store: %v: %s", err, out)
+	}
+	// The transcript fixture omits the current-session table; resume must not
+	// guess which window the key opens when that mapping is absent.
+	if _, _, err := resumeCommand(model.Session{Harness: "openclaw", ID: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", Path: db}); err == nil {
+		t.Fatal("resume accepted a store without a current-session mapping")
+	}
+	// A reset leaves both windows searchable, but only the pointed-to one
+	// may be reopened under their shared key.
+	check := func(current, old string) {
+		t.Helper()
+		sessions, err := sources.ParseOpenClawDB(db)
+		if err != nil || len(sessions) != 2 {
+			t.Fatalf("parse OpenClaw store: sessions=%v err=%v", sessions, err)
+		}
+		for _, s := range sessions {
+			_, cmd, err := resumeCommand(s)
+			switch s.ID {
+			case current:
+				if err != nil || cmd != "openclaw chat --session agent:main:main" {
+					t.Errorf("current session %s: cmd=%q err=%v", s.ID, cmd, err)
+				}
+			case old:
+				if err == nil {
+					t.Errorf("old window %s reopened the current session with %q", s.ID, cmd)
+				}
+			default:
+				t.Errorf("unexpected session %s", s.ID)
+			}
+		}
+	}
+	first := "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+	second := "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"
+	stmt := "CREATE TABLE session_nodes (session_key TEXT PRIMARY KEY, current_session_id TEXT NOT NULL); " +
+		"INSERT INTO session_nodes VALUES ('agent:main:main', '" + second + "');"
+	if out, err := exec.Command("sqlite3", db, stmt).CombinedOutput(); err != nil {
+		t.Fatalf("add current-session pointer: %v: %s", err, out)
+	}
+	check(second, first)
+	// Changing the authoritative pointer must change which window is safe to resume.
+	stmt = "UPDATE session_nodes SET current_session_id = '" + first + "' WHERE session_key = 'agent:main:main'"
+	if out, err := exec.Command("sqlite3", db, stmt).CombinedOutput(); err != nil {
+		t.Fatalf("update current-session pointer: %v: %s", err, out)
+	}
+	check(first, second)
 }
 
 // Hermes was the one harness deja gave up on, while its own CLI takes the

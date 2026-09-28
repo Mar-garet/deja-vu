@@ -94,12 +94,13 @@
 <li><strong>Resume</strong>: <code>openclaw chat --session &lt;key&gt;</code>. OpenClaw addresses a</li>
 </ul>
 <p>conversation by key (<code>agent:&lt;id&gt;:&lt;name&gt;</code>); the uuid its transcript is named</p>
-<p>after opens nothing, and the mapping lives in <code>sessions.json</code> beside the</p>
-<p>transcripts. deja reads the key from there. Live-verified: the terminal UI</p>
-<p>came up on <code>agent:main:main</code> with that session&#39;s history, and a run through</p>
-<p><code>openclaw agent --session-id</code> answered from it. The lookup reads the</p>
-<p><code>sessions.json</code> beside a JSONL transcript, so a session read from the</p>
-<p>SQLite store gets no command.</p>
+<p>after opens nothing. Legacy JSONL sessions use <code>sessions.json</code> beside the</p>
+<p>transcripts; SQLite sessions use the store&#39;s current-session mapping. An</p>
+<p>earlier reset window remains searchable but cannot reopen the current one</p>
+<p>under its old id. Live-verified for JSONL: the terminal UI came up on</p>
+<p><code>agent:main:main</code> with that session&#39;s history, and a run through</p>
+<p><code>openclaw agent --session-id</code> answered from it. SQLite key lookup is covered</p>
+<p>by synthetic database tests.</p>
 <ul>
 <li><strong>Handoff</strong>: paste.</li>
 </ul>

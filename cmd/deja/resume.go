@@ -286,7 +286,10 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "qwen":
 		return qwenProjectDirFor(s), "qwen -r " + s.ID, nil
 	case "openclaw":
-		key := sources.OpenClawSessionKey(s.Path)
+		key, err := sources.OpenClawSessionKey(s.Path, s.ID)
+		if err != nil {
+			return "", "", err
+		}
 		if key == "" {
 			return "", "", fmt.Errorf("session %s is not in openclaw's session store, so it has no key to reopen by", digest.Short(s.ID))
 		}
