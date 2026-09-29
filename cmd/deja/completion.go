@@ -110,7 +110,10 @@ _deja_completion() {
         index)
             COMPREPLY=( $(compgen -W "--rebuild -rebuild --quiet -quiet" -- "$cur") )
             ;;
-        install|uninstall)
+        install)
+            COMPREPLY=( $(compgen -W "$install_targets --no-guidance --no-index --force" -- "$cur") )
+            ;;
+        uninstall)
             COMPREPLY=( $(compgen -W "$install_targets --no-guidance" -- "$cur") )
             ;;
         last)
@@ -271,7 +274,10 @@ _deja() {
     index)
       _arguments '--rebuild[force a full rebuild]' '-rebuild[force a full rebuild]' '--quiet[say nothing when it worked]' '-quiet[say nothing when it worked]'
       ;;
-    install|uninstall)
+    install)
+      _arguments '--no-guidance[skip guidance files]' '--no-index[skip indexing]' '--force[replace edited guidance files]' "1:target:($install_targets)"
+      ;;
+    uninstall)
       _arguments '--no-guidance[skip guidance files]' "1:target:($install_targets)"
       ;;
     last)
@@ -370,6 +376,8 @@ complete -c deja -n '__fish_seen_subcommand_from hook-context' -l notes
 complete -c deja -n '__fish_seen_subcommand_from index' -l rebuild
 complete -c deja -n '__fish_seen_subcommand_from install uninstall' -a '%INSTALL_TARGETS% --all --auto'
 complete -c deja -n '__fish_seen_subcommand_from install uninstall' -l no-guidance
+complete -c deja -n '__fish_seen_subcommand_from install' -l no-index -d 'Skip indexing'
+complete -c deja -n '__fish_seen_subcommand_from install' -l force -d 'Replace edited guidance files'
 complete -c deja -n '__fish_seen_subcommand_from show' -l json
 complete -c deja -n '__fish_seen_subcommand_from show' -l harness -r -a '%HARNESSES%'
 complete -c deja -n '__fish_seen_subcommand_from show' -l offset -r
@@ -459,7 +467,8 @@ Register-ArgumentCompleter -Native -CommandName deja -ScriptBlock {
             }
             'hook-context' { @('--plain', '--once', '--notes') }
             'index' { @('--rebuild', '-rebuild') }
-            { $_ -in @('install', 'uninstall') } { $installTargets + @('--no-guidance') }
+            'install' { $installTargets + @('--no-guidance', '--no-index', '--force') }
+            'uninstall' { $installTargets + @('--no-guidance') }
             'last' {
                 if ($previous -eq '--harness') { $harnesses }
                 elseif ($previous -eq '--role') { @('user', 'assistant', 'tool') }
