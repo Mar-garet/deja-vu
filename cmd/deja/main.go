@@ -402,12 +402,25 @@ func run(args []string) error {
 	return runBareSearch(dir, args, sourceInstance)
 }
 
-func cmdVersion(_ string, _ []string) error {
+func cmdVersion(_ string, rest []string) error {
+	if len(rest) > 0 {
+		return fmt.Errorf("version takes no arguments — got %q", rest[0])
+	}
 	fmt.Fprintf(os.Stdout, "deja %s\n", version)
 	return nil
 }
 
-func cmdWarmup(dir string, _ []string) error {
+func cmdWarmup(dir string, rest []string) error {
+	// The arguments were thrown away here, so `deja warmup --rebuild` ran the
+	// ordinary incremental build, said nothing and exited 0 (#4109). The
+	// rebuild lives on index; a near miss of it is pointed there too.
+	if len(rest) > 0 {
+		a := rest[0]
+		if a == "--rebuild" || a == "-rebuild" || nearestKnownFlag(a, []string{"--rebuild"}) != "" {
+			return fmt.Errorf("warmup: unknown flag %q — the rebuild is deja index --rebuild", a)
+		}
+		return fmt.Errorf("warmup takes no arguments — got %q", a)
+	}
 	stop := publishBuildProgress(dir)
 	defer stop()
 	prepareFirstIndexGreeting(dir)
