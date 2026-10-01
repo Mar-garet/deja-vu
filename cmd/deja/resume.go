@@ -371,7 +371,9 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// Amp takes the thread id as a positional argument; there is no flag.
 		return "", "amp threads continue " + s.ID, nil
 	case "prime":
-		return "", "prime-agent --resume " + s.ID, nil
+		// In the session's own directory: prime-agent refuses a session from
+		// another project (#4408).
+		return existingDir(sources.PrimeSessionDir(s.Path)), "prime-agent --resume " + s.ID, nil
 	case "copilot":
 		return "", "copilot --resume=" + s.ID, nil
 	case "copilot-chat":

@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -108,6 +109,18 @@ func ParsePrimeFileFromOffset(path string, offset int64) ([]model.Session, error
 
 func parsePrimeFileFromOffset(path string, offset int64) ([]model.Session, error) {
 	return parsePiShaped(path, offset, "prime", primeProject(path), true)
+}
+
+// PrimeSessionDir is the cwd a prime-agent session's header records, for the
+// cd in front of `prime-agent --resume`: prime resumes a session only from the
+// project it ran in (#4408).
+func PrimeSessionDir(path string) string {
+	if path == "" {
+		return ""
+	}
+	header := leadingJSONLHeader(path, math.MaxInt64, isPiHeader)
+	cwd, _ := header["cwd"].(string)
+	return cwd
 }
 
 // primeProject is the fallback name when the header carries no cwd: the

@@ -62,7 +62,8 @@ Sessions are indexed and searchable like any other harness.
   `session_compact` runs `deja hook-precompact`. It registers `/deja
   <query>`, which runs `deja search`. `tool_result` does not fire in
   `--print` on 0.9.1, so the repair line after a failed command is not wired.
-- **Resume**: `prime-agent --resume <id>`.
+- **Resume**: `cd <cwd> && prime-agent --resume <id>`, with the `cwd` from the
+  header; prime-agent resumes a session only from the project it ran in.
 - **Handoff**: exec.
 
 Reported and specified from source by @iMaxTomas in #2529.
