@@ -46,8 +46,14 @@
 <li><strong>Format</strong>: SQLite relational store</li>
 </ul>
 <p>A flat <code>messages</code> table, grouped by <code>session_id</code>: <code>role</code>, <code>content</code>, and <code>timestamp</code></p>
-<p>as REAL epoch seconds. Rows with <code>role</code> of <code>tool</code> carry no prose and are skipped, as</p>
-<p>are rows with a null <code>content</code>. A <code>sessions</code> table beside it carries <code>id</code>, <code>cwd</code>,</p>
+<p>as REAL epoch seconds. An assistant row that calls tools has no <code>content</code> and an</p>
+<p>OpenAI-style <code>tool_calls</code> array instead; the result lands on a <code>tool</code> row under the</p>
+<p>same <code>tool_call_id</code>. Calls to <code>terminal</code> become commands (a non-zero <code>exit_code</code> from</p>
+<p>the result rides on the command), <code>read_file</code>, <code>write_file</code> and <code>patch</code> name the files,</p>
+<p>and <code>patch</code> and <code>write_file</code> give the edit and written sides — <code>patch</code> in its V4A</p>
+<p>mode the same way an apply_patch does. A <code>tool</code> row is kept as tool output: the</p>
+<p><code>output</code> of a terminal result, the JSON as written for anything else (#4242). The</p>
+<p>Postgres path still reads prose only. A <code>sessions</code> table beside it carries <code>id</code>, <code>cwd</code>,</p>
 <p><code>git_repo_root</code> and <code>title</code>; the <code>cwd</code> is where the work happened and is what names</p>
 <p>the project, the same way a Cline or Roo workspace does. A store without that table,</p>
 <p>or a session whose row has no <code>cwd</code>, falls back to the profile name. The title is left</p>

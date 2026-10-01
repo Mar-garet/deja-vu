@@ -8,8 +8,14 @@
 - **Format**: SQLite relational store
 
 A flat `messages` table, grouped by `session_id`: `role`, `content`, and `timestamp`
-as REAL epoch seconds. Rows with `role` of `tool` carry no prose and are skipped, as
-are rows with a null `content`. A `sessions` table beside it carries `id`, `cwd`,
+as REAL epoch seconds. An assistant row that calls tools has no `content` and an
+OpenAI-style `tool_calls` array instead; the result lands on a `tool` row under the
+same `tool_call_id`. Calls to `terminal` become commands (a non-zero `exit_code` from
+the result rides on the command), `read_file`, `write_file` and `patch` name the files,
+and `patch` and `write_file` give the edit and written sides — `patch` in its V4A
+mode the same way an apply_patch does. A `tool` row is kept as tool output: the
+`output` of a terminal result, the JSON as written for anything else (#4242). The
+Postgres path still reads prose only. A `sessions` table beside it carries `id`, `cwd`,
 `git_repo_root` and `title`; the `cwd` is where the work happened and is what names
 the project, the same way a Cline or Roo workspace does. A store without that table,
 or a session whose row has no `cwd`, falls back to the profile name. The title is left
