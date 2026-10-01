@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A CodeWhale `edit_file` call written with `search` and `replace`, CodeWhale's own names for the two sides, leaves an edit and a wrote record, so `deja restore` and blame see it; only `old_string`/`new_string` was read. The other spellings CodeWhale accepts there are read too. The index rebuilds once (#4404).
 - With `deja install reasonix-auto`, a file's history arrives on Reasonix's `read_file`, before the edit. It came only on the `edit_file` or `write_file` result, after the file had changed, and Reasonix refuses an edit on a file the session has not read, so the read is the last step where it can still matter (#4410).
 - `deja doctor` no longer calls Reasonix's MCP server wired after `reasonix plugin disable deja`. The server rides in deja's plugin package, so Reasonix stops starting it too; the row now carries a line saying it is switched off and `"switched_off": true` in `--json`, as the auto-recall row already went stale (#4409).
 - `deja resume` on a prime-agent session `cd`s into the directory it ran in. prime-agent resumes a session only from its own project, so the bare `prime-agent --resume <id>` failed anywhere else with "belongs to a different project" (#4408).

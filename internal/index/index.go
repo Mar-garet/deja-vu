@@ -356,6 +356,9 @@ import (
 //
 // 60 also: an omp session indexed mid-way keeps its header id instead of
 // splitting off the appended turns under the file name (#4406).
+//
+// 60 also: a CodeWhale edit_file call written with search/replace, its own
+// argument names, leaves an edit and a wrote record (#4404).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
