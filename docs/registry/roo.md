@@ -20,7 +20,10 @@ there — the SEARCH body is the replaced span `deja restore` hands back, the
 REPLACE body becomes the hashed written lines line-level blame matches. A
 `search_and_replace` with `use_regex` records neither side, because a pattern is
 not text the file held, and a block whose closing marker never arrives records
-nothing rather than guessing where it ended.
+nothing rather than guessing where it ended. Current Roo also offers
+`search_replace`, `edit_file` and `edit`, which take `old_string` and
+`new_string` under `file_path`, and `apply_patch`, whose paths and `-`/`+` lines
+are read out of the patch body.
 
 A call names its file relative to the workspace, so the path is resolved against
 the `workspace` in `history_item.json` before it is recorded — a one-segment

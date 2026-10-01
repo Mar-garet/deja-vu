@@ -353,6 +353,9 @@ import (
 // only the path (#4265).
 //
 // 60 also: a failed Kimi Code command carries its exit status (#4262).
+//
+// 60 also: Roo and Kilo extension tasks read apply_patch, search_replace,
+// edit_file and edit calls into files, edit and wrote records (#4419).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

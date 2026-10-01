@@ -361,11 +361,15 @@ var clineDialect = toolDialect{
 // replace_in_file. Neither reader emitted a call as a work record before
 // #3295. The two sides of an edit come out of rooEditRecords rather than the
 // shared helper: apply_diff carries a SEARCH/REPLACE block, not an
-// old_string.
+// old_string. Current Roo adds search_replace, edit_file and edit, which name
+// the file `file_path`, and apply_patch, whose paths are in the patch body
+// (#4419).
 var rooDialect = toolDialect{
-	pathKey: "path",
+	pathKey:    "path",
+	pathKeyAlt: "file_path",
 	pathTools: map[string]bool{"read_file": true, "write_to_file": true, "apply_diff": true,
-		"insert_content": true, "search_and_replace": true, "replace_in_file": true},
+		"insert_content": true, "search_and_replace": true, "replace_in_file": true,
+		"search_replace": true, "edit_file": true, "edit": true},
 	shellTool: "execute_command",
 	editTools: map[string]bool{},
 }
@@ -379,7 +383,7 @@ func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string) []model
 	}
 	var out []model.Message
 	if IndexToolPaths() {
-		if p := rooResolvePaths(toolPathsIn(blocks, rooDialect), workspace); p != "" {
+		if p := rooResolvePaths(rooPatchPaths(blocks, toolPathsIn(blocks, rooDialect)), workspace); p != "" {
 			out = append(out, model.Message{Role: RoleFiles, Text: p, Time: ts})
 		}
 	}
