@@ -102,17 +102,17 @@ func liveDirs(paths []string) []string {
 	return live
 }
 
-// cherryStudioAppDirs is where the app keeps its data on this platform, then
-// every directory the user moved it to in the app's settings. The move is kept
-// in ~/.cherrystudio/boot-config.json under app.user_data_path, a map from the
+// cherryStudioAppDirs is every directory the user moved the app's data to in
+// its settings, then where the app keeps it by default. The move is kept in
+// ~/.cherrystudio/boot-config.json under app.user_data_path, a map from the
 // executable to the directory, which the app reads at startup to set userData;
-// without it a moved store reads as an empty one (#4347).
+// without it a moved store reads as an empty one (#4347). The moved ones come
+// first: a move can leave the old directory behind, and a reader that wants
+// one file of the app's, such as its database, has to find the live one.
 func cherryStudioAppDirs() []string {
-	dirs := []string{cherryStudioDefaultDir()}
-	for _, d := range cherryStudioMovedDirs() {
-		if !slices.Contains(dirs, d) {
-			dirs = append(dirs, d)
-		}
+	dirs := cherryStudioMovedDirs()
+	if def := cherryStudioDefaultDir(); !slices.Contains(dirs, def) {
+		dirs = append(dirs, def)
 	}
 	return dirs
 }

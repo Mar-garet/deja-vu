@@ -277,3 +277,23 @@ func TestCherryStudioMovedToHomeLeavesClaudesStoreAlone(t *testing.T) {
 		t.Errorf("Cherry Studio lists Claude Code's own transcript: %q", got)
 	}
 }
+
+// A move can leave the old data dir behind. The directory the app runs from
+// comes first, so a reader that takes one file of the app's — its database,
+// for doctor — reads the live one rather than the copy left at the default
+// (#4347).
+func TestCherryStudioMovedDirComesBeforeTheDefault(t *testing.T) {
+	home := cherryHome(t)
+	moved := filepath.Join(home, "elsewhere", "CherryStudio")
+	if err := os.MkdirAll(filepath.Join(home, ".cherrystudio"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := json.Marshal(map[string]any{"app.user_data_path": map[string]string{"/Applications/Cherry Studio.app/Contents/MacOS/Cherry Studio": moved}})
+	if err := os.WriteFile(filepath.Join(home, ".cherrystudio", "boot-config.json"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dirs := cherryStudioAppDirs()
+	if len(dirs) != 2 || dirs[0] != moved || dirs[1] != cherryStudioDefaultDir() {
+		t.Errorf("app dirs = %q, want the moved one, then the default", dirs)
+	}
+}
