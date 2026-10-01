@@ -365,6 +365,8 @@ import (
 // result text is unwrapped (#4425).
 // 60 also: a pi, Senpi, omp, OpenClaw, gjc, prime or Kimchi session takes its
 // project from the header's cwd as it is, not decoded from the folder (#4427).
+// 60 also: a ZCode CLI session keeps its Bash, Read, Edit and Write calls
+// (#4428).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

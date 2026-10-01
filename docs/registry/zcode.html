@@ -52,10 +52,11 @@
 <p><strong>Last verified:</strong> 2026-09-17</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
-<li><strong>The CLI database is read on a third party&#39;s word.</strong> It goes through</li>
+<li><strong>The CLI database is OpenCode&#39;s schema with Claude Code&#39;s tool names.</strong></li>
 </ul>
-<p>OpenCode&#39;s schema reader (see below); that shape has not been checked</p>
-<p>against a running ZCode.</p>
+<p>It goes through OpenCode&#39;s schema reader (see below), checked against a</p>
+<p>store the ZCode 3.14.4 runtime wrote, whose tool parts needed their own</p>
+<p>names read (#4428).</p>
 <ul>
 <li>Wiring: <code>deja install zcode</code> writes the server into <code>mcp.servers</code> in</li>
 </ul>
@@ -90,8 +91,12 @@ SELECT json_extract(data, &#39;$.role&#39;) FROM message GROUP BY role
 SELECT json_extract(data, &#39;$.type&#39;) FROM part GROUP BY type</code></pre>
 <p><code>session</code> / <code>message(data)</code> / <code>part(data)</code> is OpenCode&#39;s schema, which deja</p>
 <p>already parses for OpenCode and for Kilo Code&#39;s CLI, so this is one more root</p>
-<p>rather than a new reader: text parts, <code>read</code>, <code>bash</code> and <code>apply_patch</code> calls,</p>
-<p>as the opencode page describes.</p>
+<p>rather than a new reader. The tool parts are not opencode&#39;s, though: a store the</p>
+<p>ZCode 3.14.4 runtime wrote names them as Claude Code does, with its arguments —</p>
+<p><code>Bash {command}</code>, <code>Read {file_path}</code>, `Edit {file_path, old_string,</p>
+<p>new_string}<code>, </code>Write {file_path, content}`. deja reads those for ZCode as</p>
+<p>commands with their output, files, edit spans and written lines; an <code>Edit</code></p>
+<p>ZCode refused (<code>state.status: &#34;error&#34;</code>) is not recorded as a change (#4428).</p>
 <p>Said plainly: that is a third party&#39;s attestation, not a running ZCode checked</p>
 <p>here. <code>task_type</code> also separates <code>subagent_child</code> and <code>fork</code> from <code>interactive</code>,</p>
 <p>which is the distinction <code>DEJA_INCLUDE_SUBAGENTS</code> draws elsewhere — left alone</p>

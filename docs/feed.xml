@@ -74,6 +74,13 @@
     <summary>Where Qwen Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
+    <title>Where Senpi stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/senpi.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/senpi.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Senpi writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>给 Qwen Code 加记忆：召回这台机器上所有智能体的历史会话 — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html"></link>
@@ -144,11 +151,11 @@
     <summary>Where opencode writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
-    <title>Where Senpi stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/senpi.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/senpi.html"></link>
+    <title>Where ZCode stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/zcode.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/zcode.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Senpi writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+    <summary>Where ZCode writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>What compaction drops, and how to get it back — deja-vu</title>
@@ -282,12 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-gemini-cli-history.html"></link>
     <updated>2026-09-30T00:00:00Z</updated>
     <summary>Where Gemini CLI keeps chats under ~/.gemini/tmp, how to map a project id back to a directory, what to delete and what the prompt log keeps.</summary>
-  </entry>
-  <entry>
-    <title>Delete Kilo Code task history — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-kilo-code-task-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-kilo-code-task-history.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>Kilo Code keeps each task as JSON under the VS Code extension&#39;s storage, and its CLI keeps a separate SQLite store.</summary>
   </entry>
 </feed>

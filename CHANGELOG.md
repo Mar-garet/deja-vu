@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ZCode CLI sessions keep their tool calls. ZCode's database is opencode's schema but names its tools `Bash`, `Read`, `Edit` and `Write` with Claude Code's arguments, and the reader matched only opencode's lowercase names, so every command, file and edit was dropped. An edit ZCode refused is not recorded. The index rebuilds once (#4428).
 - `deja resume` on a Senpi session `cd`s into the directory the session ran in. From anywhere else Senpi offered to fork the session rather than reopen it (#4426).
 - A pi or Senpi session in `my-app` is no longer filed under `my/app`. The project comes from the `cwd` in the session header instead of the folder name, which turns every `/` into `-`. omp, OpenClaw, gjc, prime-agent and Kimchi read the header already but encoded it and decoded it back, which made the same guess. The index rebuilds once (#4427).
 - Senpi sessions keep the commands, reads and edits its eval cells ran. With codemode on, Senpi's default, the shell runs only inside a cell, so these were the only commands a Senpi session had, and none were indexed. The cell's output reads as text rather than a JSON string (#4425).

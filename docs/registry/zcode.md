@@ -16,9 +16,10 @@ block, which deja has no use for and ignores.
 
 ## Known quirks and drift
 
-- **The CLI database is read on a third party's word.** It goes through
-  OpenCode's schema reader (see below); that shape has not been checked
-  against a running ZCode.
+- **The CLI database is OpenCode's schema with Claude Code's tool names.**
+  It goes through OpenCode's schema reader (see below), checked against a
+  store the ZCode 3.14.4 runtime wrote, whose tool parts needed their own
+  names read (#4428).
 - Wiring: `deja install zcode` writes the server into `mcp.servers` in
   `~/.zcode/cli/config.json` — one level deeper than the `mcpServers` every
   other client here uses — and `deja install zcode-auto` adds the hooks to the
@@ -53,8 +54,12 @@ SELECT json_extract(data, '$.type') FROM part GROUP BY type
 
 `session` / `message(data)` / `part(data)` is OpenCode's schema, which deja
 already parses for OpenCode and for Kilo Code's CLI, so this is one more root
-rather than a new reader: text parts, `read`, `bash` and `apply_patch` calls,
-as the opencode page describes.
+rather than a new reader. The tool parts are not opencode's, though: a store the
+ZCode 3.14.4 runtime wrote names them as Claude Code does, with its arguments —
+`Bash {command}`, `Read {file_path}`, `Edit {file_path, old_string,
+new_string}`, `Write {file_path, content}`. deja reads those for ZCode as
+commands with their output, files, edit spans and written lines; an `Edit`
+ZCode refused (`state.status: "error"`) is not recorded as a change (#4428).
 
 Said plainly: that is a third party's attestation, not a running ZCode checked
 here. `task_type` also separates `subagent_child` and `fork` from `interactive`,

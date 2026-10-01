@@ -22,8 +22,8 @@ import (
 // data)` with `json_extract(data,'$.role')`, and `part(data)` with
 // `json_extract(data,'$.type')`. That is OpenCode's schema, which deja already
 // parses for OpenCode itself and for Kilo's CLI, so this is one more root
-// rather than a new reader. Not yet checked against a running ZCode, which the
-// registry entry says (#3675).
+// rather than a new reader (#3675). A store the 3.14.4 runtime wrote confirms
+// the schema, with Claude Code's tool names in the parts (#4428).
 
 // ZCodeConfigDir is ZCode's user directory: the project store, and under
 // `cli/config.json` everything it is configured with — the server map and the
