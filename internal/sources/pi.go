@@ -131,8 +131,9 @@ func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
 }
 
 // PiHeaderCwd is the working directory a pi-shaped transcript's `session`
-// header records, or "" when it records none. gjc and Kimchi reopen a session
-// only from that directory, so resume runs there (#4395, #4400).
+// header records, or "" when it records none. gjc, Kimchi and Senpi reopen a
+// session only from that directory, so resume runs there (#4395, #4400,
+// #4426).
 func PiHeaderCwd(path string) string {
 	m, _ := firstJSONLRecord(path)
 	if typ, _ := m["type"].(string); typ != "session" {

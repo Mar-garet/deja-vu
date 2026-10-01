@@ -30,7 +30,9 @@ of `@code-yeongyu/senpi` every surface answered on senpi's own screen.
   returned as `{"type":"custom_message","customType":"deja-recall"}` — which is
   auto-recall arriving, in senpi's own transcript.
 - `--session <path|id>`, `--resume` and `--fork` are in its own help, so
-  `deja resume` prints `senpi --session <id>`.
+  `deja resume` prints `senpi --session <id>`, after a `cd` into the
+  directory the header records: from anywhere else Senpi offers to fork the
+  session into the current directory instead of reopening it (#4426).
 
 **Last verified:** 2026-09-17
 

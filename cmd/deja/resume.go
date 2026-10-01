@@ -194,8 +194,10 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "senpi":
 		// `--session <path|id>` takes a partial uuid, from senpi's own help, and
 		// `--fork` is beside it for the copy-instead-of-continue case. Measured
-		// on @code-yeongyu/senpi (#3670).
-		return "", "senpi --session " + s.ID, nil
+		// on @code-yeongyu/senpi (#3670). It finds the session from anywhere,
+		// but outside its project asks to fork it, as Kimchi does, so the
+		// command runs in the directory the header records (#4426).
+		return existingDir(resumeRecordedDir(s)), "senpi --session " + s.ID, nil
 	case "kimchi":
 		// Kimchi's own argument parser rewrites `--resume <selector>` to
 		// `--session <id>` (src/cli-args.ts), so the id deja indexes is the
@@ -403,12 +405,13 @@ func existingDir(p string) string {
 
 // resumeRecordedDir is the directory a session recorded running in, for the
 // harnesses whose resume command goes there when it still exists: opencode and
-// Kilo keep it as the session's path, gjc and Kimchi in the transcript header.
+// Kilo keep it as the session's path, gjc, Kimchi and Senpi in the transcript
+// header.
 func resumeRecordedDir(s model.Session) string {
 	switch s.Harness {
 	case "opencode", "kilocode":
 		return s.Path
-	case "gjc", "kimchi":
+	case "gjc", "kimchi", "senpi":
 		return sources.PiHeaderCwd(s.Path)
 	}
 	return ""
@@ -416,8 +419,8 @@ func resumeRecordedDir(s model.Session) string {
 
 // resumeDirGoneNote says where a session whose directory is gone will run:
 // opencode and Kilo reopen it from anywhere, and their tools then work in the
-// directory the command is run from; gjc and Kimchi offer to fork it there
-// instead.
+// directory the command is run from; gjc, Kimchi and Senpi offer to fork it
+// there instead.
 func resumeDirGoneNote(s model.Session, dir string) string {
 	recorded := resumeRecordedDir(s)
 	if dir != "" || recorded == "" {
@@ -426,7 +429,7 @@ func resumeDirGoneNote(s model.Session, dir string) string {
 	if _, err := os.Stat(recorded); !os.IsNotExist(err) {
 		return ""
 	}
-	if s.Harness == "gjc" || s.Harness == "kimchi" {
+	if s.Harness == "gjc" || s.Harness == "kimchi" || s.Harness == "senpi" {
 		return fmt.Sprintf("the directory this session ran in is gone (%s); from any other directory %s offers to fork it rather than reopen it", recorded, s.Harness)
 	}
 	return fmt.Sprintf("the directory this session ran in is gone (%s); it reopens in the one you run the command from", recorded)
