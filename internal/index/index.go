@@ -305,7 +305,33 @@ import (
 // transcripts: `credential` 171→49, openai-key 137→189, github-token 87→123.
 // The same values were masked before and after; a store built before this
 // keeps the old labels until it re-reads its sources (#536).
-const version = 53
+// 54 keeps what a Claude subagent changed. Its run was cut to the task and the
+// answer, and the edit, written and file records went with the prose, so blame
+// never named the subagent that changed a file: 1,668 edits on one machine,
+// none indexed (#4163). Paths inside a Claude Code worktree were also dropped
+// as the agent's own files (#4164). A finished subagent transcript is never
+// re-read, so only a rebuild brings either in.
+//
+// 55: an interactive Codex session was owned by its history.jsonl line and
+// filed under the project "history" (#4180); the row is decided when a session
+// is written, so a rebuild.
+//
+// 56: a Claude Code session run in a directory with characters outside
+// [A-Za-z0-9] took its project from the folder name, where those characters
+// are blanked, and landed under the parent; it now reads the recorded cwd
+// (#4175). Projects are set when a transcript is read, so a rebuild.
+//
+// 57: a Cursor CLI session gains its tool results from the chat store — the
+// exit status on a command and the output it printed (#4187). A finished
+// transcript is never re-read, so a rebuild.
+//
+// 58: a Cursor CLI session takes its project from the chat's meta.json cwd;
+// the folder name blanks a dot, a space or a non-ASCII character, so those
+// were filed under a split or empty name (#4193). A rebuild.
+//
+// 59: a failed Gemini CLI command carries its exit status (#4208); a
+// finished chat file is not re-read, so a rebuild.
+const version = 59
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an

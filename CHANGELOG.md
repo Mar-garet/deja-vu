@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A failed Gemini CLI command is indexed with its exit status (`$ git log …  → exit 128`), the way Codex, opencode and Cursor commands are, so the failed-command recall sees it. The index rebuilds once (#4208).
+- `deja resume` refuses an opencode or Kilo CLI session that was deleted in the agent and points at `deja show`; it printed `opencode -s <id>`, which failed with "Session not found" (#4205).
+- `deja install opencode-auto` writes its entry above the comment on your first MCP server instead of between the two, where the comment read as describing deja (#4203).
+- `deja resume` on an opencode session whose directory has been deleted prints `opencode -s <id>` without the `cd`, which failed before opencode started; opencode reopens the session from any directory. Kilo CLI sessions get the same treatment, and resume says on stderr which directory the session will run in (#4201).
+- opencode no longer gets its own opening prompt back as recalled history. The plugin asks for the session digest after the first message is stored, and it now sends its session id so the digest leaves that session out (#4199).
+- `deja resume` on a Cursor CLI chat `cd`s into the directory the chat ran in when its path has a dot, a space or a non-ASCII character. cursor-agent finds a chat by that directory, and the command came out without the `cd`. Those sessions also get their real project name, and a chat whose directory is gone or that cursor-agent no longer has is refused with `deja show`. The index rebuilds once (#4193).
+- Deleting a Cursor, Copilot CLI or Kimi session keeps it searchable, as a deleted Claude transcript already was. Those clients keep each session in its own directory, and the pass read the directory going with it as a store that was uninstalled, dropped the session and suggested reconnecting a disk (#4195).
+- `deja doctor` reads a config with comments, trailing commas or a byte-order mark, so an opencode MCP entry whose deja binary is gone is reported as such (`binary_missing`) instead of `wired` when `opencode.json` carries a comment (#4197).
+- After a Homebrew upgrade, the wiring repair keeps MCP entries on the `bin/deja` link instead of rewriting them to the versioned `Cellar` path, which the next upgrade removed. Entries that still worked are left alone, and the "rewrote its wiring" line no longer appears for them (#4189).
+- Cursor CLI sessions carry what their tools returned: the command output and the exit status of a failed command, read from the chat store beside the transcript, which records only the calls. On the machine this was measured on, tool output went from 0% of Cursor sessions to 53%. The index rebuilds once (#4187).
+- `deja resume` refuses a session whose transcript the agent has deleted, and points at `deja show`, which still has it; it printed a command the agent then failed ("No saved session found" from Codex). An archived or compressed Codex rollout still resumes (#4185).
+- `deja uninstall codex-auto` takes out the trust pins Codex wrote in `config.toml` when you approved deja's hooks, and moves the pins of your own hooks to where those hooks now sit. Left behind, they kept the file from coming back as it was and let a reinstall start already trusted (#4183).
+- An interactive Codex session is filed under the directory it ran in and `deja resume` reopens it. The incremental pass read `history.jsonl` on its own, so the prompt line took the session: project `history`, the prompt shown twice, and resume refusing it as an exec entry. The index rebuilds once (#4180).
+- `deja doctor --json` marks an MCP entry that names a deja binary that is no longer there with `"binary_missing": true`, as the `auto_recall` rows already did; the text report said so and the JSON read plain `wired` (#4177).
+- `deja blame` names the Claude subagent that changed a file. A subagent run is indexed as its task and its answer, and the edits went with the rest of the middle, so the 1,668 subagent edits on the machine this was measured on were never indexed. Files changed inside a Claude Code worktree (`.claude/worktrees/`) were also skipped as the agent's own files. The index rebuilds once to pick up finished subagent runs (#4163, #4164).
+- Installing and uninstalling no longer re-sorts the keys of a hook entry you wrote on one line in `~/.claude/settings.json` (or any JSON config deja edits): entries inside a block deja adds to keep their text, so an install followed by an uninstall gives the file back byte for byte (#4167).
+- A Claude Code session run in a directory named with characters outside A–Z and 0–9 (Cyrillic, CJK, accents, spaces) is filed under that directory rather than its parent, so recall in that directory finds it, and `deja resume` cds into it instead of `parent///////`. The index rebuilds once (#4175).
+
 ## [0.21.4] - 2026-09-29
 
 One rules file for every agent: `deja rules sync` copies yours into the global

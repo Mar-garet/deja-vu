@@ -182,13 +182,47 @@ const SubagentTailKept = 4
 // are what it concluded. The middle is the reading and the searching — verbose,
 // often duplicated in the parent's summary, and the reason these files were
 // skipped whole.
+//
+// What the child changed stays: its edit, wrote and files records are what
+// blame, attribution and restore read, they are small, and nothing else holds
+// them. Cut with the prose, blame never named the subagent that changed a file
+// (#4163).
 func KeepSubagentTail(ms []model.Message) []model.Message {
 	if len(ms) <= SubagentTailKept+1 {
 		return ms
 	}
+	tail := len(ms) - SubagentTailKept
+	// A files record names everything a turn opened, reads included, so only
+	// the paths the child changed are kept from it — the ones an edit or a
+	// write in the middle names on its first line. The read-only exploring a
+	// subagent does stays out with the prose.
+	changed := map[string]bool{}
+	for _, m := range ms[1:tail] {
+		if m.Role == RoleEdit || m.Role == RoleWrote {
+			path, _, _ := strings.Cut(m.Text, "\n")
+			changed[path] = true
+		}
+	}
 	kept := make([]model.Message, 0, SubagentTailKept+1)
 	kept = append(kept, ms[0])
-	return append(kept, ms[len(ms)-SubagentTailKept:]...)
+	for _, m := range ms[1:tail] {
+		switch m.Role {
+		case RoleEdit, RoleWrote:
+			kept = append(kept, m)
+		case RoleFiles:
+			var paths []string
+			for _, p := range strings.Split(m.Text, "\n") {
+				if changed[p] {
+					paths = append(paths, p)
+				}
+			}
+			if len(paths) > 0 {
+				m.Text = strings.Join(paths, "\n")
+				kept = append(kept, m)
+			}
+		}
+	}
+	return append(kept, ms[tail:]...)
 }
 
 func ParseClaudeFile(path string) ([]model.Session, error) {
@@ -207,7 +241,7 @@ func parseClaudeFileFromOffset(path string, offset int64) ([]model.Session, erro
 // reference the typed parser is proved against — including on a real store,
 // where the shapes nobody thought of live.
 func parseClaudeGenericFromOffset(path string, offset int64) ([]model.Session, error) {
-	s := model.Session{Harness: "claude", ID: strings.TrimSuffix(filepath.Base(path), ".jsonl"), Project: claudeProjectName(claudeProjectDir(path)), Path: path}
+	s := model.Session{Harness: "claude", ID: strings.TrimSuffix(filepath.Base(path), ".jsonl"), Project: claudeProjectNameFor(path), Path: path}
 	// Where each Bash call's record landed, so the result that arrives in a
 	// later record can stamp its outcome onto it.
 	commandAt := map[string][]int{}
@@ -403,6 +437,15 @@ func resolveEncodedPath(base string) string {
 	}
 	var try func(done, seg string, i int) string
 	try = func(done, seg string, i int) string {
+		// An empty segment is a character the encoding blanked, not a
+		// directory: closing it as one handed back the parent with slashes
+		// on, "007///////" (#4175).
+		if seg == "" {
+			if i == len(parts) {
+				return ""
+			}
+			return try(done, seg+"-"+parts[i], i+1)
+		}
 		if i == len(parts) {
 			p := done + string(filepath.Separator) + seg
 			if fi, err := os.Stat(p); err == nil && fi.IsDir() {

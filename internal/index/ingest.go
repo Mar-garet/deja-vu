@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -890,6 +891,7 @@ func orphanedSessions(dir, harness string, files map[string]FileState) orphanSta
 		return out
 	}
 	want := map[string]bool{}
+	var present map[string]bool
 	for _, p := range sortedKeys(m.Files) {
 		if p == syncImportPath {
 			continue // importedSessions carries these
@@ -909,8 +911,18 @@ func orphanedSessions(dir, harness string, files map[string]FileState) orphanSta
 		if _, err := os.Lstat(p); err == nil {
 			continue // on disk after all, just not in this pass's set
 		}
-		if _, err := os.Stat(filepath.Dir(p)); err != nil {
+		if !deletedFromLiveStore(p) {
 			continue
+		}
+		// Moved with its directory, not deleted: the session is read from
+		// where it is now (#4195).
+		if d := goneSessionDir(p); d != "" {
+			if present == nil {
+				present = sessionDirsUnder(files)
+			}
+			if present[filepath.Base(d)] {
+				continue
+			}
 		}
 		want[p] = true
 	}
@@ -2172,6 +2184,11 @@ func mergeTouched(have, add []string) []string {
 // stored paths held no repository file at all for a session whose work was
 // entirely in one.
 func agentOwnedFile(p string) bool {
+	// A worktree Claude Code made for an isolated agent sits under .claude/
+	// and holds the repository's own source: the edits in it are the work,
+	// not the agent's bookkeeping. Only the .claude/ segment is forgiven;
+	// every other rule still applies inside it (#4164).
+	p = strings.ReplaceAll(p, "/.claude/worktrees/", "/")
 	for _, seg := range []string{"/scratchpad/", "/tasks/", "/.claude/", "/.cache/", "/claude-501/", "/node_modules/", "/.git/"} {
 		if strings.Contains(p, seg) {
 			return true
@@ -2620,7 +2637,24 @@ func attributeSession(held SessionMeta, s model.Session) (owns, collided bool) {
 			return !newIsDiff, false
 		}
 	}
+	// Codex writes an interactive session to its rollout and a line of it to
+	// history.jsonl under the same id. The rollout holds the conversation and
+	// the directory it ran in; the history line holds the prompt and the
+	// project "history". Sort order gave the row to history.jsonl, so a TUI
+	// session was filed outside its project and resume refused it as an exec
+	// entry (#4180).
+	if s.Harness == "codex" {
+		if newIsHist, heldIsHist := isCodexHistory(s.Path), isCodexHistory(held.Path); newIsHist != heldIsHist {
+			return !newIsHist, false
+		}
+	}
 	return s.Path < held.Path, true
+}
+
+// isCodexHistory reports whether a path is Codex's prompt log rather than a
+// rollout. Named, for the reason isGooseStore gives.
+func isCodexHistory(path string) bool {
+	return strings.EqualFold(filepath.Base(path), "history.jsonl")
 }
 
 // isOpencodeDiff reports whether a path is one of opencode's per-session diff
@@ -3408,9 +3442,28 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	// over transcripts can offer against a 30-day default, and `deja forget`
 	// is the deliberate path for a session that must go (#2970). A tree that
 	// is gone whole is an uninstall or a move, and is dropped as before.
+	// Cursor, Copilot CLI and Kimi keep each session in a directory of its
+	// own, so deleting one takes the directory with the file. A missing tree
+	// named after a session, under a parent that is still there, is that
+	// deletion and not a store that went away (#4195).
+	stores := gone[:0]
+	for _, g := range gone {
+		if g.mount || g.renamed != "" || !deletedSessionDir(g.dir) {
+			stores = append(stores, g)
+		}
+	}
+	gone = stores
+	// A session directory that turns up under another parent in the same pass
+	// moved rather than went: its id is its name. Keeping the old copy then
+	// made the session its own second copy, and the append path below, which
+	// takes over once nothing is removed, has no pairing to catch it.
+	arrivedDirs := sessionDirsUnder(changed)
 	kept := map[string]bool{}
 	for p := range removed {
-		if _, err := os.Stat(filepath.Dir(p)); err != nil {
+		if !deletedFromLiveStore(p) {
+			continue
+		}
+		if d := goneSessionDir(p); d != "" && arrivedDirs[filepath.Base(d)] {
 			continue
 		}
 		if of, ok := old.Files[p]; ok {
@@ -3536,8 +3589,12 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	for _, r := range replacements {
 		arrivedIn[r.Harness+":"+r.ID] = filepath.Dir(r.Path)
 	}
+	// A session kept in a directory of its own moves with the directory, so
+	// the arrival is never beside the old path; its id is a UUID, which two
+	// projects do not share by accident, so the id alone says it moved.
 	for key, meta := range old.Sessions {
-		if kept[meta.Path] && replaceKeys[key] && arrivedIn[key] == filepath.Dir(meta.Path) {
+		movedDir := arrivedIn[key] == filepath.Dir(meta.Path) || sessionDirName.MatchString(filepath.Base(filepath.Dir(meta.Path)))
+		if kept[meta.Path] && replaceKeys[key] && movedDir {
 			removed[meta.Path] = true
 			delete(files, meta.Path)
 			delete(kept, meta.Path)
@@ -4429,6 +4486,72 @@ func missingTrees(removed map[string]bool) []missingTree {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].dir < out[j].dir })
 	return out
+}
+
+// sessionDirName is a directory named for one session: the id itself
+// (Cursor, Copilot CLI, Antigravity, a Claude transcript's sidecar), Kimi's
+// session_<id>, DeepSeek's session-<id>, Kiro's sess_<id>. Anchored, because
+// an encoded working directory under a store root carries a UUID whenever the
+// directory did — a temp dir, a sandbox — and that folder is a project, not a
+// session.
+var sessionDirName = regexp.MustCompile(`^(?:session[_-]|sess_)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// deletedFromLiveStore reports whether a file no longer on disk was deleted
+// from a store that is still there — the client's cleanup or a deletion by
+// hand, which the index keeps (#2970) — rather than with a store that went
+// away whole: its directory is still there, or the directory that went with
+// it was one session's (#4195).
+func deletedFromLiveStore(p string) bool {
+	if _, err := os.Stat(filepath.Dir(p)); err == nil {
+		return true
+	}
+	return goneSessionDir(p) != ""
+}
+
+// sessionDirsUnder names the session directories the given files sit in.
+func sessionDirsUnder(files map[string]FileState) map[string]bool {
+	out := map[string]bool{}
+	for p := range files {
+		for d, i := filepath.Dir(p), 0; i < 4; d, i = filepath.Dir(d), i+1 {
+			if b := filepath.Base(d); sessionDirName.MatchString(b) {
+				out[b] = true
+			}
+		}
+	}
+	return out
+}
+
+// goneSessionDir is the session directory that went with a file, when the
+// topmost directory missing above it is one session's under a parent that is
+// still there; "" otherwise.
+func goneSessionDir(p string) string {
+	dir := filepath.Dir(p)
+	if _, err := os.Stat(dir); err == nil {
+		return ""
+	}
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		if _, err := os.Stat(parent); err == nil {
+			if deletedSessionDir(dir) {
+				return dir
+			}
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// deletedSessionDir reports whether a missing directory is one session's,
+// deleted from a store that is still there.
+func deletedSessionDir(dir string) bool {
+	if !sessionDirName.MatchString(filepath.Base(dir)) {
+		return false
+	}
+	_, err := os.Stat(filepath.Dir(dir))
+	return err == nil
 }
 
 func pluralFiles(n int) string {
