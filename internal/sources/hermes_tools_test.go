@@ -172,7 +172,7 @@ func TestHermesCompactionAndRewind(t *testing.T) {
 		 ('s','tool','{"success": true, "diff": "-old\n+new"}','c1',NULL,'patch',1785000002.0,0,1),
 		 ('s','user','[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below.',NULL,NULL,NULL,1785000010.0,1,0),
 		 ('s','assistant','',NULL,`+call("c1", "/w/a.py")+`,NULL,1785000010.0,1,0),
-		 ('s','tool','[Old tool output cleared to save context space]','c1',NULL,'patch',1785000011.0,1,0),
+		 ('s','tool','[Old tool output cleared to save context space]','c1',NULL,'patch',1785000010.0,1,0),
 		 ('s','user','try b.py instead',NULL,NULL,NULL,1785000020.0,0,0),
 		 ('s','assistant','',NULL,`+call("c9", "/w/b.py")+`,NULL,1785000021.0,0,0);`)
 	by := hermesRoles(t, db)
@@ -335,8 +335,8 @@ func TestHermesCompactionDoesNotRepeatProse(t *testing.T) {
 		 ('s','user','fix the retry budget',NULL,NULL,NULL,1785000000.0,0,1),
 		 ('s','assistant','looking at it now',NULL,NULL,NULL,1785000001.0,0,1),
 		 ('s','user','fix the retry budget',NULL,NULL,NULL,1785000010.0,1,0),
-		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below.',NULL,NULL,NULL,1785000011.0,1,0),
-		 ('s','assistant','looking at it now',NULL,NULL,NULL,1785000012.0,1,0),
+		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below.',NULL,NULL,NULL,1785000010.0,1,0),
+		 ('s','assistant','looking at it now',NULL,NULL,NULL,1785000010.0,1,0),
 		 ('s','user','now the pool size',NULL,NULL,NULL,1785000020.0,1,0);`)
 	by := hermesRoles(t, db)
 	if got := strings.Join(by["user"], "|"); got != "fix the retry budget|now the pool size" {
@@ -431,5 +431,114 @@ func TestHermesLegacySummaryPrefix(t *testing.T) {
 	by := hermesRoles(t, db)
 	if len(by["assistant"]) != 0 || len(by[RoleSummary]) != 1 {
 		t.Errorf("assistant = %q, summary = %q", by["assistant"], by[RoleSummary])
+	}
+}
+
+// A second compaction archives the first one's batch — its head copy,
+// summary and tail copy — so every summary is an anchor, archived or not.
+func TestHermesTwoCompactions(t *testing.T) {
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,timestamp,active,compacted) VALUES
+		 ('s','user','set up the repo',10.0,0,1),
+		 ('s','assistant','done',11.0,0,1),
+		 ('s','user','add the billing tables',12.0,0,1),
+		 ('s','assistant','added',13.0,0,1),
+		 ('s','user','set up the repo',20.0,0,1),
+		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] first summary',20.000001,0,1),
+		 ('s','user','add the billing tables',20.000002,0,1),
+		 ('s','assistant','added',20.000003,0,1),
+		 ('s','user','now the invoices',30.0,0,1),
+		 ('s','assistant','invoices done',31.0,0,1),
+		 ('s','user','set up the repo',40.0,1,0),
+		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] second summary',40.000001,1,0),
+		 ('s','user','now the invoices',40.000002,1,0),
+		 ('s','assistant','invoices done',40.000003,1,0);`)
+	by := hermesRoles(t, db)
+	if got := strings.Join(by["user"], "|"); got != "set up the repo|add the billing tables|now the invoices" {
+		t.Errorf("user = %q", by["user"])
+	}
+	if got := strings.Join(by["assistant"], "|"); got != "done|added|invoices done" {
+		t.Errorf("assistant = %q", by["assistant"])
+	}
+	if len(by[RoleSummary]) != 2 {
+		t.Errorf("summary = %q", by[RoleSummary])
+	}
+}
+
+// Compaction writes its copies in one transaction, at the time of the
+// summary or under their original timestamp (hermes_state.py
+// _insert_message_rows). A turn typed minutes later is new, however much it
+// looks like the archive's end.
+func TestHermesTurnAfterCompactionLikeTheArchiveEnd(t *testing.T) {
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,timestamp,active,compacted) VALUES
+		 ('s','user','start the migration',1.0,0,1),
+		 ('s','assistant','sure',2.0,0,1),
+		 ('s','user','continue',3.0,0,1),
+		 ('s','assistant','ok',4.0,0,1),
+		 ('s','user','continue',5.0,0,1),
+		 ('s','assistant','ok',6.0,0,1),
+		 ('s','user','start the migration',100.0,1,0),
+		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] summary',100.0,1,0),
+		 ('s','user','continue',100.000001,1,0),
+		 ('s','assistant','ok',100.000002,1,0),
+		 ('s','user','continue',400.0,1,0),
+		 ('s','assistant','ok',401.0,1,0);`)
+	by := hermesRoles(t, db)
+	if got := strings.Count(strings.Join(by["user"], "|"), "continue"); got != 3 {
+		t.Errorf("user = %q, want continue three times", by["user"])
+	}
+}
+
+// An empty tail, then a rerun that repeats the archive's last exchange with
+// the same derived call id: a result that is neither the archived one nor a
+// stub is no copy.
+func TestHermesRerunAfterEmptyTail(t *testing.T) {
+	call := `'[{"id":"call_3f1a2b4c5d6e","type":"function","function":{"name":"terminal","arguments":"{\"command\": \"go test ./...\"}"}}]'`
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,tool_call_id,tool_calls,tool_name,timestamp,active,compacted) VALUES
+		 ('s','user','make the tests pass',NULL,NULL,NULL,1.0,0,1),
+		 ('s','assistant','',NULL,`+call+`,NULL,2.0,0,1),
+		 ('s','tool','{"output": "FAIL pool_test.go:12", "exit_code": 1}','call_3f1a2b4c5d6e',NULL,'terminal',3.0,0,1),
+		 ('s','user','make the tests pass',NULL,NULL,NULL,100.0,1,0),
+		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] summary',NULL,NULL,NULL,100.0,1,0),
+		 ('s','assistant','',NULL,`+call+`,NULL,200.0,1,0),
+		 ('s','tool','{"output": "ok  example/pool 0.2s", "exit_code": 0}','call_3f1a2b4c5d6e',NULL,'terminal',201.0,1,0);`)
+	by := hermesRoles(t, db)
+	if got := strings.Join(by[RoleCommand], "|"); got != "$ go test ./...  → exit 1|$ go test ./..." {
+		t.Errorf("commands = %q", by[RoleCommand])
+	}
+	if got := strings.Join(by[RoleToolOutput], "|"); got != "FAIL pool_test.go:12|ok  example/pool 0.2s" {
+		t.Errorf("tool output = %q", by[RoleToolOutput])
+	}
+}
+
+// Compaction replaces an image in a kept message with a text part
+// (agent/context_compressor.py _strip_historical_media); the copy is still a
+// copy, and the placeholder says nothing.
+func TestHermesCompactionStrippedImage(t *testing.T) {
+	orig := `[{"type": "text", "text": "why is this chart flat"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo"}}]`
+	stripped := `[{"type": "text", "text": "why is this chart flat"}, {"type": "text", "text": "[Attached image — stripped after compression]"}]`
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,timestamp,active,compacted) VALUES
+		 ('s','user',char(0)||'json:'||'`+orig+`',1.0,0,1),
+		 ('s','assistant','it is clipped at 100',2.0,0,1),
+		 ('s','user',char(0)||'json:'||'`+stripped+`',100.0,1,0),
+		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] summary',100.0,1,0);`)
+	if got := strings.Join(hermesRoles(t, db)["user"], "|"); got != "why is this chart flat" {
+		t.Errorf("user = %q", got)
+	}
+}
+
+// The Postgres path reads in insertion order like the SQLite one, which is
+// the order Hermes reads its own sessions in.
+func TestHermesPGReadsInInsertionOrder(t *testing.T) {
+	var sql string
+	defer SetHermesPGRunner(func(_, q string) ([]byte, error) { sql = q; return []byte("[]"), nil })()
+	if _, err := ParseHermesPG("postgres://deja@192.0.2.1/hermes", 0); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sql, "order by session_id,id)") {
+		t.Errorf("query = %q, want insertion order", sql)
 	}
 }

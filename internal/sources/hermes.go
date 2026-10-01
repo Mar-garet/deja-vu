@@ -270,6 +270,11 @@ func hermesText(content string) string {
 			if e["type"] != nil && e["type"] != "text" {
 				continue
 			}
+			if hermesMediaPlaceholder[str(e["text"])] {
+				// What compaction leaves where it took an image out
+				// (agent/context_compressor.py); it says nothing.
+				continue
+			}
 			if s, _ := e["text"].(string); s != "" {
 				out = append(out, s)
 			} else if s, _ := e["text_summary"].(string); s != "" {
@@ -278,6 +283,11 @@ func hermesText(content string) string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+var hermesMediaPlaceholder = map[string]bool{
+	"[Attached image — stripped after compression]": true,
+	"[screenshot removed to save context]":          true,
 }
 
 // hermesTime reads Hermes' REAL epoch seconds. The shared parser handles

@@ -45,6 +45,7 @@ type hermesRow struct {
 	// left of the row after it.
 	summary string
 	copy    bool
+	k       string
 }
 
 func newHermesSession(s model.Session) *hermesSession {
@@ -89,72 +90,18 @@ func (h *hermesSession) row(r map[string]any) {
 
 // key is what a copy of the row shares with its archived original: the text
 // and call ids, not the results, which compaction replaces with stubs.
-func (r hermesRow) key() string {
+func (r *hermesRow) key() string {
+	if r.k == "" {
+		r.k = r.makeKey()
+	}
+	return r.k
+}
+
+func (r *hermesRow) makeKey() string {
 	if r.role == "tool" && r.callID != "" {
 		return "tool\x00" + r.callID
 	}
 	return r.role + "\x00" + r.text + "\x00" + strings.Join(hermesCallIDs(r.calls), " ")
-}
-
-// markCopies finds compaction's copies. In-place compaction archives every
-// live row (compacted=1) and writes the kept head, the summary and the kept
-// tail as one batch of live rows (hermes_state.py archive_and_compact): the
-// head copies the first archived rows in order, the tail copies the last
-// ones, and after the tail come rows of the turn in flight, which were never
-// archived, and then the session goes on. A row is a copy only in that
-// position, so a request and a run repeated after the batch are kept even
-// with the same text and, with no provider id, the same call id Hermes
-// derives from name and arguments.
-func (h *hermesSession) markCopies() {
-	var archived []string
-	afterArchive := 0
-	for i := range h.rows {
-		r := h.rows[i]
-		if r.archived {
-			archived = append(archived, r.key())
-			afterArchive = i + 1
-			continue
-		}
-		if r.summary == "" || len(archived) == 0 {
-			continue
-		}
-		for j, p := afterArchive, 0; j < i && p < len(archived) && h.rows[j].key() == archived[p]; j, p = j+1, p+1 {
-			h.rows[j].copy = true
-		}
-		// The tail starts at the row the summary was merged into, if any.
-		start := i + 1
-		if r.text != "" {
-			start = i
-		}
-		end := start
-		for end < len(h.rows) && !h.rows[end].archived && (end == i || h.rows[end].summary == "") {
-			end++
-		}
-		last := archived[len(archived)-1]
-		for k := min(end-start, len(archived)); k > 0; k-- {
-			if h.rows[start+k-1].key() != last || !h.tailMatches(start, k, archived) {
-				continue
-			}
-			for j := start; j < start+k; j++ {
-				if j == i {
-					// Its copy goes; the summary it carries stays.
-					h.rows[j].text, h.rows[j].calls = "", ""
-					continue
-				}
-				h.rows[j].copy = true
-			}
-			break
-		}
-	}
-}
-
-func (h *hermesSession) tailMatches(start, k int, archived []string) bool {
-	for n := 0; n < k; n++ {
-		if h.rows[start+n].key() != archived[len(archived)-k+n] {
-			return false
-		}
-	}
-	return true
 }
 
 // done reads the rows and hands the session back, without the command
