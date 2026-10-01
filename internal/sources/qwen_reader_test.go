@@ -117,3 +117,26 @@ func TestAQwenSessionInANonASCIIDirectoryKeepsItsProject(t *testing.T) {
 		t.Errorf("a cwd from another folder named the project: %#v", ss)
 	}
 }
+
+// Qwen 0.20 writes notes after the footer, separated by a blank line: a hint
+// once a foreground command has run for half its timeout (60 s by default),
+// and an attribution warning on git commit. The status is read from the
+// footer itself, not from the last line of the result (#4255).
+func TestQwenExitCodeIsReadPastTheNotesAfterTheFooter(t *testing.T) {
+	footer := "Command: make test\nDirectory: (root)\nOutput: FAIL\nError: (none)\nExit Code: 2\nSignal: (none)\nProcess Group PGID: 4242"
+	cases := map[string]int{
+		footer: 2,
+		footer + "\n\nNote: this foreground command ran for 75s. Next time you run a similar long-running process (build watchers, dev servers, soak tests, polling loops), pass `is_background: true`.": 2,
+		footer + "\n\nAI attribution note skipped: could not analyze the commit diff (shallow clone, missing reflog for --amend, or partial `git diff` failure). Co-authored-by trailer is unaffected.":  2,
+		strings.ReplaceAll(footer, "\n", "\r\n") + "\r\n\r\nNote: this foreground command ran for 75s.":                                                                                                  2,
+		"FAIL\nok": 0,
+		"Command: true\nDirectory: (root)\nOutput: (empty)\nError: (none)\nExit Code: 0\nSignal: (none)\nProcess Group PGID: 7": 0,
+		// A line the command printed is not the footer, notes or not.
+		"Command: x\nOutput: Exit Code: 3\nExit Code: 3\nok\n\nNote: this foreground command ran for 75s.": 0,
+	}
+	for out, want := range cases {
+		if got := geminiExitCode(out); got != want {
+			t.Errorf("geminiExitCode(%q) = %d, want %d", out, got, want)
+		}
+	}
+}

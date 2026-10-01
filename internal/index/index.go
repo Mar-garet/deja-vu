@@ -335,7 +335,9 @@ import (
 // 60: Qwen Code — an `edit` or `write_file` call leaves files, wrote and edit
 // records (#4254), a failed command carries its exit status (#4255), and a
 // session in a non-ASCII directory takes its project from the recorded cwd
-// (#4258). A finished transcript is not re-read, so a rebuild.
+// (#4258). Gemini CLI reads through the same dialect, so its `write_file`
+// leaves a wrote record too. A finished transcript is not re-read, so a
+// rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

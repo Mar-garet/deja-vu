@@ -268,23 +268,57 @@ var geminiExit = regexp.MustCompile(`^Exit Code: (\d+)$`)
 // output — Exit Code (only when non-zero), then Signal, Background PIDs and
 // the process group — so a line the command printed itself is not taken for
 // it. 0 when the footer carries none.
+//
+// Qwen writes the same footer, Exit Code always, and then may add notes after
+// a blank line: a hint once a foreground command has run for half its timeout,
+// an attribution warning on git commit. So the footer is the last run of
+// footer lines that either ends the text or ends on the process group line
+// with a blank line after it (#4255).
 func geminiExitCode(out string) int {
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	lines := strings.Split(out, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	tail := true
 	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
-		if m := geminiExit.FindStringSubmatch(l); m != nil {
-			code, _ := strconv.Atoi(m[1])
-			return code
+		if lines[i] == "" || lines[i] == "</untrusted_context>" {
+			continue
 		}
-		footer := l == "" || l == "</untrusted_context>"
-		for _, label := range []string{"Signal: ", "Background PIDs: ", "Process Group PGID: "} {
-			footer = footer || strings.HasPrefix(l, label)
+		if !geminiFooterLine(lines[i]) {
+			tail = false
+			continue
 		}
-		if !footer {
-			return 0
+		end, start := i, i
+		for start > 0 && geminiFooterLine(lines[start-1]) {
+			start--
 		}
+		i = start
+		closed := strings.HasPrefix(lines[end], "Process Group PGID: ") && end+1 < len(lines) && lines[end+1] == ""
+		if !tail && !closed {
+			continue
+		}
+		for j := end; j >= start; j-- {
+			if m := geminiExit.FindStringSubmatch(lines[j]); m != nil {
+				code, _ := strconv.Atoi(m[1])
+				return code
+			}
+		}
+		return 0
 	}
 	return 0
+}
+
+// geminiFooterLine reports whether a trimmed line is one of the footer's own.
+func geminiFooterLine(l string) bool {
+	if geminiExit.MatchString(l) {
+		return true
+	}
+	for _, label := range []string{"Signal: ", "Background PIDs: ", "Process Group PGID: "} {
+		if strings.HasPrefix(l, label) {
+			return true
+		}
+	}
+	return false
 }
 
 type geminiCall struct {
