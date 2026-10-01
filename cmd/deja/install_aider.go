@@ -51,6 +51,7 @@ func installAider(_ string, uninstall bool) (installResult, error) {
 	}
 	if uninstall {
 		_ = os.Remove(aiderContextPath())
+		_ = os.Remove(aiderContextPath() + ".lock")
 		return installResult{Path: path, Action: a}, nil
 	}
 	// Write the file now: aider fails the read outright if it is missing, and
@@ -246,6 +247,10 @@ func cmdAider(dir string, rest []string, sourceInstance string) error {
 	if len(rest) == 0 {
 		return cmdSearch(dir, []string{"aider"}, sourceInstance)
 	}
+	// Every `deja aider` running holds this, so the last one out knows it is
+	// the last; taken before the digest is written, so one starting while
+	// another restores the placeholder writes after it.
+	done, held := holdAiderRun(aiderContextPath() + ".lock")
 	body := aiderContextBody(dir)
 	if err := writeAiderContext(body); err != nil {
 		// A failed recall is not a reason to keep the user out of their editor.
@@ -255,20 +260,28 @@ func cmdAider(dir string, rest []string, sourceInstance string) error {
 		// line is the only thing telling the user memory is in there.
 		fmt.Fprintf(os.Stderr, "deja: recalled %d past sessions into aider's read-only context\n", n)
 	}
+	// The config points every aider on the machine at this one file, so the
+	// digest leaves with the aider it was built for: plain aider started next,
+	// in any project, reads the placeholder rather than this project's sessions
+	// as its own (#4328). Only once no other `deja aider` is running: two in
+	// one project write the same digest, and the first out took it from the
+	// one still running. Without a lock, only while the file is still ours.
+	defer func() {
+		restore := func() {
+			if b, err := os.ReadFile(aiderContextPath()); err == nil && string(b) != aiderPlaceholder {
+				_ = writeAiderContext(aiderPlaceholder)
+			}
+		}
+		if held {
+			done(restore)
+		} else if b, err := os.ReadFile(aiderContextPath()); err == nil && string(b) == body {
+			restore()
+		}
+	}()
 	bin, err := exec.LookPath("aider")
 	if err != nil {
 		return fmt.Errorf("aider is not on PATH: %w", err)
 	}
-	// The config points every aider on the machine at this one file, so the
-	// digest leaves with the aider it was built for: plain aider started next,
-	// in any project, reads the placeholder rather than this project's sessions
-	// as its own (#4328). Only while the file is still ours — a second `deja
-	// aider` that has written since keeps its digest.
-	defer func() {
-		if b, err := os.ReadFile(aiderContextPath()); err == nil && string(b) == body && body != aiderPlaceholder {
-			_ = writeAiderContext(aiderPlaceholder)
-		}
-	}()
 	// Ctrl-C reaches the whole foreground group and is aider's own key for
 	// stopping a reply; left to its default it ended this process instead, and
 	// the file kept the digest.
