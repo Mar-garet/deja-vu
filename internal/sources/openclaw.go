@@ -1,11 +1,8 @@
 package sources
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -177,20 +174,15 @@ func zstdToTempNamed(path, harness string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("zstd", "-d", "-c", "-q")
-	cmd.Stdin = bytes.NewReader(raw)
-	var out, errBuf bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%s: zstd -d %s: %w: %s", harness, filepath.Base(path), err,
-			strings.TrimSpace(errBuf.String()))
+	out, err := zstdDecodeFile(path, harness, raw)
+	if err != nil {
+		return "", err
 	}
 	f, err := os.CreateTemp("", "deja-"+harness+"-*.jsonl")
 	if err != nil {
 		return "", err
 	}
-	if _, err := f.Write(out.Bytes()); err != nil {
+	if _, err := f.Write(out); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return "", err
