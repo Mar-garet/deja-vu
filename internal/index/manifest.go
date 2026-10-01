@@ -713,7 +713,13 @@ func DamageReason(dir string) string {
 		}
 		return ""
 	}
-	reason := recordsDamage(dir, m, false)
+	// A longer log is not damage to a reader. An incremental pass appends to
+	// records.bin before it commits the manifest, the tail is unreferenced, and
+	// search already reads past it (recordsReadable). Calling it damage sent
+	// MCP recall to "deja is indexing" for 17 of 60 calls made during a pass,
+	// over a complete snapshot (#4266). The writer still checks strictly and
+	// rebuilds over a tail a crash left behind.
+	reason := recordsDamage(dir, m, true)
 	if reason == "" {
 		return ""
 	}
@@ -741,7 +747,7 @@ func DamageReason(dir string) string {
 		// damage; the next call sees the new one.
 		return ""
 	}
-	return recordsDamage(dir, m2, false)
+	return recordsDamage(dir, m2, true)
 }
 
 // RebuildInProgress reports whether another process holds the index lock. A
