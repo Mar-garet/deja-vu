@@ -23,6 +23,11 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-claude-code.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>How to give Claude Code recall over every coding agent&#39;s sessions on this machine — the MCP server, the SessionStart hook and the plugin marketplace.</summary>
+    <title>Add memory to Qwen Code: every agent&#39;s sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-qwen.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-qwen.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>How to give Qwen Code recall over every coding agent&#39;s sessions on this machine — the Gemini extension format, and Claude-format marketplaces.</summary>
   </entry>
   <entry>
     <title>Resume yesterday&#39;s Claude Code or Codex session — deja-vu</title>
@@ -84,6 +89,13 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/opencode.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>Where opencode writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>给 Qwen Code 加记忆：召回这台机器上所有智能体的历史会话 — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>如何让 Qwen Code 查到这台机器上每个编程智能体的会话：走 Gemini 扩展格式，也走 Claude 格式的插件市场。</summary>
   </entry>
   <entry>
     <title>What compaction drops, and how to get it back — deja-vu</title>

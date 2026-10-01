@@ -348,6 +348,10 @@ import (
 // chat file is re-read whole only when it changes, so a rebuild. A failed
 // Kimi Code command carries its exit status (#4262); a finished wire.jsonl is
 // not re-read either.
+//
+// Also 60: a Qwen Code or Gemini CLI shell result is indexed without the report
+// around it, so `Error: (none)` no longer reads as a failure and a fix pair is
+// stored under the error itself, not `Output: <error>` (#4256). A rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

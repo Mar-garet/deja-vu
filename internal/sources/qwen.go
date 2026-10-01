@@ -283,6 +283,18 @@ func qwenWorkRecords(v any, t time.Time) []model.Message {
 				out, _ = r["error"].(string)
 				out = strings.TrimSpace(out)
 			}
+			// The shell's result is a report, not the output: indexed as is,
+			// qwen's `Error: (none)` made every command read as failed and the
+			// error was stored as `Output: <error>`, which no lookup asks for
+			// (#4256).
+			if name, _ := resp["name"].(string); qwenDialect.isShellTool(name) {
+				out = strings.TrimSpace(UnwrapShellReport(out))
+				// A command that printed nothing and hit no error: `(empty)`
+				// is the report's word for it, not output.
+				if out == "(empty)" {
+					out = ""
+				}
+			}
 			if out != "" {
 				results = append(results, capParsedMessage(out))
 			}
@@ -343,4 +355,48 @@ func qwenText(v any) string {
 		b.WriteString(text)
 	}
 	return b.String()
+}
+
+// UnwrapShellReport strips the frame gemini and qwen put around a command's
+// output before handing it to the model. Gemini fences it in
+// <untrusted_context> with an "Output:" marker; qwen writes a labelled report —
+// Command, Directory, Output, Error, Exit Code, Signal, PGID. The marker is
+// what matters: with it in front, the first line of a build failure stops
+// looking like an error, and the fix pair went silent on a failure it answers
+// the moment the marker is gone (gemini-cli 0.55.1, qwen-code 0.20.0). The
+// index and the failure hook both read it through here, so the error a pair is
+// stored under is the one the hook looks up (#4256).
+func UnwrapShellReport(s string) string {
+	if !strings.Contains(s, "Output:") {
+		return s
+	}
+	var kept []string
+	labelled := false
+	for _, line := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(line)
+		// `Error: (none)` is qwen's report saying there was no error. A real
+		// one keeps its label: it is the failure, and a line the command
+		// printed itself may start the same way.
+		if t == "<untrusted_context>" || t == "</untrusted_context>" || t == "Error: (none)" || shellReportLabel(t) {
+			continue
+		}
+		// The label introduces the payload on its first line only; what follows
+		// is the command's own output, untouched.
+		if !labelled && strings.HasPrefix(line, "Output: ") {
+			line, labelled = line[len("Output: "):], true
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// shellReportLabel reports whether a line is part of the shell report rather
+// than the command's output.
+func shellReportLabel(t string) bool {
+	for _, label := range []string{"Command: ", "Directory: ", "Exit Code: ", "Signal: ", "Background PIDs: ", "Process Group PGID:"} {
+		if strings.HasPrefix(t, label) {
+			return true
+		}
+	}
+	return false
 }
