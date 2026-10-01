@@ -175,12 +175,13 @@ func nothingWired() bool {
 	if claudeHookWiringState().state != "missing" {
 		return false
 	}
-	// Codex's row reads hooks.json without asking whether any entry in it is
-	// deja's (#4297), so the brief asks: one of deja's events, or the plugin.
-	codex := codexHookWiringState()
-	if codex.state == "plugin" {
+	// Codex counts with one of deja's events in hooks.json or the plugin
+	// enabled, asked here rather than read off the row: hooks.json also holds
+	// the user's own hooks, and the row says plugin only without the file.
+	if codexPluginInstalled() {
 		return false
 	}
+	codex := codexHookWiringState()
 	for _, h := range codexHookWiring {
 		if hookEventWired(codex.hooks, h.Event, h.Sub) {
 			return false

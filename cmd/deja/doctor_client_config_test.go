@@ -143,6 +143,28 @@ func TestNothingWiredCountsThePluginAndClaudeHooks(t *testing.T) {
 			}
 		})
 	}
+	// The Codex plugin carries deja's hooks under its own root, so a
+	// hooks.json beside it with only the user's hook leaves codex wired.
+	t.Run("codex plugin beside the user's hooks", func(t *testing.T) {
+		hermeticEnv(t)
+		home := sources.CodexHome()
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		own := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"/usr/local/bin/my-notes --start"}]}]}}`
+		if err := os.WriteFile(filepath.Join(home, "hooks.json"), []byte(own), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if !nothingWired() {
+			t.Fatal("control: the user's own codex hook already counts as wired")
+		}
+		if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[plugins.\"deja-vu@deja-vu\"]\nenabled = true\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if nothingWired() {
+			t.Error("the Codex plugin is enabled, and the brief says no agent is wired")
+		}
+	})
 	t.Run("codex deja hooks", func(t *testing.T) {
 		hermeticEnv(t)
 		if _, err := installCodexHooks("/usr/local/bin/deja", false); err != nil {
