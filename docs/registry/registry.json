@@ -850,15 +850,18 @@
         "~/.kiro/sessions/cli/*.jsonl",
         "~/.kiro/sessions/*/sess_*/messages.jsonl",
         "${DEJA_KIRO_ROOT}/cli/*.jsonl",
-        "${DEJA_KIRO_ROOT}/*/sess_*/messages.jsonl"
+        "${DEJA_KIRO_ROOT}/*/sess_*/messages.jsonl",
+        "~/Library/Application Support/kiro-cli/data.sqlite3",
+        "~/.local/share/kiro-cli/data.sqlite3",
+        "${DEJA_KIRO_DB}"
       ],
-      "format_kind": "jsonl",
+      "format_kind": "jsonl+sqlite",
       "fixture_paths": [
         "fixtures/registry/kiro/cli/registry-kiro.jsonl",
         "fixtures/registry/kiro/w-api/sess_00000000-0000-4000-8000-000000000000/messages.jsonl"
       ],
       "parser_source": "internal/sources/kiro.go",
-      "last_verified": "2026-09-17",
+      "last_verified": "2026-10-01",
       "display_name": "Kiro",
       "capabilities": {
         "mcp": true,
@@ -867,7 +870,7 @@
         "command": false,
         "resume": true,
         "handoff": "paste",
-        "prereq": "none"
+        "prereq": "sqlite3 for the CLI database"
       },
       "gaps": {
         "auto": {

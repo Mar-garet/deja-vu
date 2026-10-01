@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Kiro CLI sessions carry their work: the shell commands, the files written and read, and what the tools returned, so `deja how`, `deja files` and `last --role command` see them. `kiro-cli chat --no-interactive` runs, which kiro-cli keeps only in its `data.sqlite3`, are indexed too. The index rebuilds once (#4299, #4300).
 - A VS Code Copilot Chat session stays in the index while VS Code is writing its last line; a half-written tail used to drop the whole chat from search and `show` until the next pass (#4229).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).
 - `deja resume` on a Gemini CLI session runs `gemini --resume` in the directory the session ran in, read from `projects.json` / `.project_root`; from anywhere else Gemini answered "No previous sessions found for this project" (#4211).

@@ -334,7 +334,9 @@ import (
 //
 // 60: a resumed Gemini CLI session keeps the prompts deja's recall was
 // prepended to; Gemini's own resume history leaves them out (#4214). The
-// chat file is re-read whole only when it changes, so a rebuild.
+// chat file is re-read whole only when it changes, so a rebuild. It also
+// brings in a Kiro CLI session's tool calls and results, which were dropped as
+// not text (#4299); a finished transcript is not re-read.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

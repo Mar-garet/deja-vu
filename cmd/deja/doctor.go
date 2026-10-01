@@ -988,7 +988,15 @@ func doctorHarnesses(w io.Writer, dir string) {
 	if kiroIDE > 0 {
 		kiroDetail += ", " + doctorCount(kiroIDE, "IDE file")
 	}
-	printRow("kiro", kiroRoot, kiroCLI+kiroIDE > 0, kiroDetail)
+	// `kiro-cli chat --no-interactive` writes only to its database (#4300).
+	kiroLoc := kiroRoot
+	kiroDB := sources.KiroDB()
+	kiroHasDB := doctorExists(kiroDB)
+	if kiroHasDB {
+		kiroLoc += string(os.PathListSeparator) + kiroDB
+		kiroDetail += ", CLI store present" + doctorDBPrereqNote(sqlite)
+	}
+	printRow("kiro", kiroLoc, kiroCLI+kiroIDE > 0 || kiroHasDB, kiroDetail)
 
 	// Cherry Studio writes Claude Code transcripts under its own app data, so
 	// the row names the roots it found rather than the app directory (#3644).

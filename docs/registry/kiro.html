@@ -41,9 +41,10 @@
 <li><strong>ID</strong>: <code>kiro</code></li>
 <li><strong>Store (CLI)</strong>: <code>~/.kiro/sessions/cli/&lt;sessionId&gt;.jsonl</code>, with the header <code>~/.kiro/sessions/cli/&lt;sessionId&gt;.json</code> beside it</li>
 <li><strong>Store (IDE)</strong>: <code>~/.kiro/sessions/&lt;workspace&gt;/sess_&lt;uuid&gt;/messages.jsonl</code>, with <code>session.json</code> beside it</li>
-<li><strong>Read override</strong>: <code>DEJA_KIRO_ROOT</code> replaces the session root</li>
-<li><strong>Format</strong>: JSONL, one shape per client</li>
-<li><strong>Needs</strong>: nothing</li>
+<li><strong>Store (headless CLI)</strong>: <code>kiro-cli/data.sqlite3</code> in the local data directory (<code>~/Library/Application Support</code> on macOS, <code>~/.local/share</code> on Linux, <code>%LOCALAPPDATA%</code> on Windows), table <code>conversations_v2</code></li>
+<li><strong>Read override</strong>: <code>DEJA_KIRO_ROOT</code> replaces the session root, <code>DEJA_KIRO_DB</code> the database</li>
+<li><strong>Format</strong>: JSONL, one shape per client, and a SQLite row per headless conversation</li>
+<li><strong>Needs</strong>: <code>sqlite3</code> for the database only</li>
 </ul>
 <p>Kiro (kiro.dev) ships a CLI and an IDE — a VS Code fork — and they do not write</p>
 <p>the same file. The CLI stores a pair per session: a header naming the session id</p>
@@ -53,7 +54,12 @@
 <p>directory per session under the workspace, holding <code>session.json</code> (id, model,</p>
 <p><code>workspacePaths</code>, timestamps) and <code>messages.jsonl</code>, whose lines carry</p>
 <p><code>payload.type</code> and <code>payload.content</code> with an RFC 3339 <code>timestamp</code>.</p>
-<p><strong>Last verified:</strong> 2026-09-17</p>
+<p><code>kiro-cli chat --no-interactive</code> writes neither file. Each conversation is a</p>
+<p>row of <code>conversations_v2</code> keyed by the directory it ran in, and the row&#39;s JSON</p>
+<p><code>history</code> holds the turns: a <code>Prompt</code> or <code>ToolUseResults</code> user side, a</p>
+<p><code>ToolUse</code> or <code>Response</code> assistant side. `kiro-cli chat --resume-id</p>
+<p>&lt;conversation_id&gt;` reopens a row.</p>
+<p><strong>Last verified:</strong> 2026-10-01</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li>Resume: <code>kiro-cli chat --resume-id &lt;sessionId&gt;</code>, which needs Kiro CLI 2.2.0</li>
@@ -81,13 +87,21 @@
 <p>type is not one is dropped rather than attributed to a role, and a test pins</p>
 <p>that.</p>
 <ul>
+<li><strong>Tool calls.</strong> The TUI writes <code>toolUse</code> parts inside an</li>
+</ul>
+<p><code>AssistantMessage</code> and the results as a <code>ToolResults</code> record; the database</p>
+<p>has <code>tool_uses</code> and <code>ToolUseResults</code>. The TUI names its tools <code>shell</code>,</p>
+<p><code>write</code> and <code>read</code> (<code>content</code>, <code>oldStr</code>, <code>newStr</code>, <code>operations[].path</code>); the</p>
+<p>headless path keeps <code>execute_bash</code>, <code>fs_write</code> and <code>fs_read</code> (<code>file_text</code>,</p>
+<p><code>old_str</code>, <code>new_str</code>). Both are read into commands, files, edits and tool</p>
+<p>output (#4299). Only the <code>Prompt</code> record carries a timestamp, so the reply</p>
+<p>and its calls take the prompt&#39;s.</p>
+<ul>
 <li><strong>Not read yet.</strong> The IDE mirrors chats into its globalStorage</li>
 </ul>
-<p>(<code>kiro.kiroagent/&lt;workspace&gt;/*.chat</code> beside extensionless execution records)</p>
-<p>and the TUI keeps sessions in <code>kiro-cli/data.sqlite3</code>, table</p>
-<p><code>conversations_v2</code>. No sample of either is in hand — Kiro is not installed on</p>
-<p>the machine this was written on — and a reader built against a guessed shape</p>
-<p>is one that drops history without saying so.</p>
+<p>(<code>kiro.kiroagent/&lt;workspace&gt;/*.chat</code> beside extensionless execution records).</p>
+<p>No sample is in hand, and a reader built against a guessed shape is one that</p>
+<p>drops history without saying so.</p>
 <ul>
 <li>Wiring: <code>deja install kiro</code> writes the server into</li>
 </ul>
