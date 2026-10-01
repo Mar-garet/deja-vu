@@ -16,11 +16,17 @@ If that working-directory URI is absent or not a file URI, the project falls
 back to the title.
 
 A thread's `messages` are retained only for `user` and `assistant` roles. Within
-each message, blocks with `type: "text"` are joined in order; other block types
-are ignored. Amp does not write per-message timestamps, so every retained
-message uses the thread's `created` Unix-millisecond timestamp. This is an
-intentional approximation for ordering and recency, not an inferred message
-time.
+each message, blocks with `type: "text"` are joined in order. `tool_use` blocks
+become work records: `Bash` (`cmd`) a command, `Read`, `edit_file` and
+`create_file` (`path`) the files touched, `edit_file`'s `old_str`/`new_str` an
+edit span and the written side, `create_file`'s `content` the written side. A
+`tool_result` block holds a `run`; its `result.output` (or a string result, or
+the run's error) is kept as tool output.
+
+A user message is stamped with `meta.sentAt` (Unix milliseconds) and an
+assistant message with `usage.timestamp` (ISO 8601). A message with neither,
+such as a user turn holding only tool results, takes the previous message's
+time, and the first one the thread's `created` time.
 
 A malformed or truncated JSON file is reported as a per-file ingestion error
 and skipped by discovery/load and index rebuilds; it does not prevent other
@@ -33,4 +39,4 @@ uses the normal full-file parse path when a file changes.
 is a minimal conformance sample with deterministic IDs, paths, and timestamps.
 It contains no personal data or credentials.
 
-**Last verified:** 2026-09-02
+**Last verified:** 2026-10-01
