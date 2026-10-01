@@ -90,6 +90,28 @@ func TestUninstallCherryStudioTakesTheSkillItWrote(t *testing.T) {
 	}
 }
 
+// grok writes the shared skill too, for Grok Build, which reads nothing else of
+// deja's. Cherry Studio leaving must not take it; kiro and cline read their
+// own files, so with only them left the skill goes.
+func TestUninstallCherryStudioKeepsTheSkillGrokReads(t *testing.T) {
+	for other, keep := range map[string]bool{"grok": true, "kiro": false, "cline": false} {
+		t.Run(other, func(t *testing.T) {
+			hermeticEnv(t)
+			dir := index.DefaultDir()
+			if err := runInstall(dir, []string{"cherrystudio", other, "--no-index"}, false); err != nil {
+				t.Fatal(err)
+			}
+			if err := runInstall(dir, []string{"cherrystudio"}, true); err != nil {
+				t.Fatal(err)
+			}
+			_, err := os.Stat(sharedSkillPath())
+			if got := err == nil; got != keep {
+				t.Errorf("with %s installed, the shared skill kept = %v, want %v", other, got, keep)
+			}
+		})
+	}
+}
+
 // cherryStudioDBFixture writes the app's MCP table with the given rows.
 func cherryStudioDBFixture(t *testing.T, rows ...[3]string) string {
 	t.Helper()
@@ -104,9 +126,9 @@ func cherryStudioDBFixture(t *testing.T, rows ...[3]string) string {
 	if err := os.MkdirAll(filepath.Dir(db), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sql := "create table mcp_server (id text primary key, name text not null, command text, args text);"
+	sql := "create table mcp_server (id text primary key, name text not null, command text, args text, is_active integer not null default 1);"
 	for i, r := range rows {
-		sql += "insert into mcp_server values ('" + string(rune('a'+i)) + "', '" + r[0] + "', '" + r[1] + "', '" + r[2] + "');"
+		sql += "insert into mcp_server (id, name, command, args) values ('" + string(rune('a'+i)) + "', '" + r[0] + "', '" + r[1] + "', '" + r[2] + "');"
 	}
 	if out, err := exec.Command("sqlite3", db, sql).CombinedOutput(); err != nil {
 		t.Fatalf("sqlite3: %v %s", err, out)
@@ -219,5 +241,28 @@ func TestDoctorCherryStudioWithoutTheAppsDatabase(t *testing.T) {
 	b, _ := json.Marshal(row)
 	if !strings.Contains(string(b), "Import from JSON") {
 		t.Errorf("--json row carries no caveat: %s", b)
+	}
+}
+
+// Each server in Cherry Studio has a switch, and the app starts only the ones
+// that are on. A deja server imported and left off is not wired (#4344).
+func TestDoctorCherryStudioSaysWhenDejasServerIsOff(t *testing.T) {
+	hermeticEnv(t)
+	exe := filepath.Join(t.TempDir(), "deja")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installCherryStudio(exe, false); err != nil {
+		t.Fatal(err)
+	}
+	db := cherryStudioDBFixture(t, [3]string{"deja", exe, `["mcp"]`})
+	if out, err := exec.Command("sqlite3", db, "update mcp_server set is_active = 0;").CombinedOutput(); err != nil {
+		t.Fatalf("sqlite3: %v %s", err, out)
+	}
+	if row := cherryMCPRow(t); row.State != "disabled" || row.Path != db {
+		t.Fatalf("switched-off server: %+v, want disabled at the database", row)
+	}
+	if text := cherryMCPText(t); !strings.Contains(text, "disabled") || !strings.Contains(text, "turn it on") {
+		t.Errorf("text row:\n%s", text)
 	}
 }

@@ -107,10 +107,11 @@ func cherryStudioResult(res, skill installResult) installResult {
 // false when they cannot be read — no database, no sqlite3 — and then the
 // import file is all doctor has to go on. path is the database when the app
 // has deja, and missing the binary its entry names when that is gone (#4344).
-func cherryStudioAppWiring() (known, wired bool, path, missing string) {
+// off is a deja server the app has but does not start: its switch is off.
+func cherryStudioAppWiring() (known, wired, off bool, path, missing string) {
 	db, servers, ok := sources.CherryStudioMCPServers()
 	if !ok {
-		return false, false, "", ""
+		return false, false, false, "", ""
 	}
 	for _, s := range servers {
 		args := make([]any, len(s.Args))
@@ -121,15 +122,19 @@ func cherryStudioAppWiring() (known, wired bool, path, missing string) {
 		if !entryRunsDeja(entry) {
 			continue
 		}
+		if !s.Active {
+			off = true
+			continue
+		}
 		cmd := mcpEntryDejaCommand(entry)
 		if filepath.IsAbs(cmd) {
 			if _, err := os.Stat(cmd); err != nil {
-				return true, true, db, cmd
+				return true, true, false, db, cmd
 			}
 		}
-		return true, true, db, ""
+		return true, true, false, db, ""
 	}
-	return true, false, db, ""
+	return true, false, off, db, ""
 }
 
 // cherryStudioFirstRoot is what says the app is on this machine: a transcript

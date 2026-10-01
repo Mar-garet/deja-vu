@@ -102,6 +102,9 @@ type CherryStudioMCPServer struct {
 	Name    string
 	Command string
 	Args    []string
+	// Active is the switch beside each server in Settings → MCP. The app
+	// starts only the servers that have it on, and is_active defaults to off.
+	Active bool
 }
 
 // CherryStudioMCPServers reads the MCP servers the app itself has, from the
@@ -122,7 +125,7 @@ func CherryStudioMCPServers() (db string, servers []CherryStudioMCPServer, ok bo
 		return db, nil, false
 	}
 	out, err := sqliteOutput(db,
-		"select json_object('name', name, 'command', coalesce(command, ''), 'args', coalesce(args, '')) from mcp_server;")
+		"select json_object('name', name, 'command', coalesce(command, ''), 'args', coalesce(args, ''), 'active', coalesce(is_active, 0)) from mcp_server;")
 	if err != nil {
 		return db, nil, false
 	}
@@ -130,12 +133,13 @@ func CherryStudioMCPServers() (db string, servers []CherryStudioMCPServer, ok bo
 		Name    string `json:"name"`
 		Command string `json:"command"`
 		Args    string `json:"args"`
+		Active  int    `json:"active"`
 	}](out)
 	if err != nil {
 		return db, nil, false
 	}
 	for _, r := range rows {
-		s := CherryStudioMCPServer{Name: r.Name, Command: r.Command}
+		s := CherryStudioMCPServer{Name: r.Name, Command: r.Command, Active: r.Active != 0}
 		// args is a JSON array in a text column; a row that does not parse
 		// keeps its command, which is still enough to recognise deja.
 		_ = json.Unmarshal([]byte(r.Args), &s.Args)

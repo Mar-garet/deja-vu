@@ -1716,11 +1716,16 @@ func jsonKeyOpening(trimmed string) (string, bool) {
 // import-file row and its caveat to the caller. The import file existing says
 // nothing about the app having the server (#4344).
 func doctorCherryStudioMCP(w io.Writer, fileStatus, importPath string) bool {
-	known, wired, db, missing := cherryStudioAppWiring()
+	known, wired, off, db, missing := cherryStudioAppWiring()
 	if !known {
 		return false
 	}
 	guidance := guidanceStatus(guidanceHarness("cherrystudio"))
+	if off {
+		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", "cherrystudio", "disabled", guidance, reportPath(db))
+		fmt.Fprintf(w, "  %-12s %s\n", "", "Cherry Studio has deja's server switched off, so it never starts — turn it on in Settings → MCP")
+		return true
+	}
 	if !wired {
 		status := "not imported"
 		if fileStatus == "config missing" {

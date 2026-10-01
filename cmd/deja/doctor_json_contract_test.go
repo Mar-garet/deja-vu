@@ -64,7 +64,7 @@ func TestDoctorJSONKeysMatchTheDocumentedContract(t *testing.T) {
 		"malformed": true, "clipped": true,
 		"failed_files": true, "last_error": true,
 		// doctorAutoStatus
-		"auto_recall": true, "binary_missing": true,
+		"auto_recall": true, "binary_missing": true, "note": true,
 		// doctorCommandStatus
 		"commands": true,
 		// index.DeepReport / index.DeepFinding

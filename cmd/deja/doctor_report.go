@@ -926,9 +926,11 @@ func collectDoctorMCP() []doctorMCPStatus {
 		// The app's own table, when it can be read, rather than the file it
 		// imports from (#4344).
 		if config.name == "cherrystudio" {
-			if known, wired, db, missing := cherryStudioAppWiring(); known {
+			if known, wired, off, db, missing := cherryStudioAppWiring(); known {
 				row.BinaryMissing = false
 				switch {
+				case off:
+					row.State, row.Path = "disabled", db
 				case wired:
 					row.State, row.Path, row.BinaryMissing = "wired", db, missing != ""
 				case state != "config-missing":

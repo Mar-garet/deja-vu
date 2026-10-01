@@ -530,7 +530,9 @@ server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
 start the server. `cherrystudio` is read from the app's own database: `wired`
 with that database as `path` when one of its servers runs `deja mcp`, and
-`not-imported` with the import file as `path` when none does. Where the database
+`disabled` with the database as `path` when deja's server is there with its
+switch off, and `not-imported` with the import file as `path` when there is
+none. Where the database
 or sqlite3 is missing, the row falls back to the import file and carries the
 caveat in `note`.
 
