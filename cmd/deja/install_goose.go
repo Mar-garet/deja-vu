@@ -114,8 +114,14 @@ func installGoose(exe string, uninstall bool) (installResult, error) {
 		if v := inlineYAMLValue(next, "extensions:"); v != "" {
 			return installResult{}, fmt.Errorf("%s: extensions: %s is on one line, and deja edits the block form — move it to a block and run this again", path, v)
 		}
-		if i := strings.Index("\n"+next, "\nextensions:\n"); i >= 0 {
-			at := i + len("\nextensions:\n") - 1
+		if next != "" && !strings.HasSuffix(next, "\n") {
+			next += "\n"
+		}
+		at, err := yamlTopKeyEnd(next, "extensions:")
+		if err != nil {
+			return installResult{}, fmt.Errorf("%s: %w", path, err)
+		}
+		if at >= 0 {
 			// goose keys extensions by name. Writing our mapping entry under a
 			// key whose value is a sequence leaves a mapping and a sequence
 			// under one key, which no parser accepts — a config that was
@@ -127,9 +133,6 @@ func installGoose(exe string, uninstall bool) (installResult, error) {
 			}
 			next = next[:at] + entry + next[at:]
 		} else {
-			if next != "" && !strings.HasSuffix(next, "\n") {
-				next += "\n"
-			}
 			next += "extensions:\n" + entry
 		}
 	}

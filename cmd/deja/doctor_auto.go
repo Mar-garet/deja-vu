@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -288,17 +289,75 @@ func yamlKeyLine(line, key string) bool {
 	return strings.TrimSpace(line) == key
 }
 
+// yamlTopKeyEnd is where the first child of the top-level `key` (colon
+// included) goes, just past the key's line, or -1 when the document has none.
+// doc must end in a newline. A second top-level key, or the key under another
+// spelling (`"key":`, `key :`, an inline value), is refused: the client reads
+// the last one, so joining the first left deja unloaded while doctor said
+// wired, and appending another hid the reader's own entries (#4289).
+func yamlTopKeyEnd(doc, key string) (int, error) {
+	name := strings.TrimSuffix(key, ":")
+	at, found := 0, -1
+	for _, line := range strings.SplitAfter(doc, "\n") {
+		start := at
+		at += len(line)
+		if yamlIndentWidth(line) != 0 || strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if yamlKeyLine(line, key) {
+			if found >= 0 {
+				return -1, fmt.Errorf("%s is written twice at the top level, and only the last one is read — keep one and run this again", key)
+			}
+			found = start + len(line)
+			continue
+		}
+		head, rest, ok := strings.Cut(line, ":")
+		if !ok || strings.Trim(strings.TrimSpace(head), `"'`) != name {
+			continue
+		}
+		v := strings.TrimSpace(rest)
+		if i := strings.Index(v, " #"); i >= 0 {
+			v = strings.TrimSpace(v[:i])
+		}
+		switch v {
+		case "{}", "[]", "~", "null":
+			// Nothing of the reader's under it: a block written after it
+			// shadows nothing, and uninstall takes that block back.
+			continue
+		}
+		return -1, fmt.Errorf("%s is written as %q, and deja edits only the block form `%s` on a line of its own — rewrite it that way and run this again", key, strings.TrimSpace(line), key)
+	}
+	if found < 0 {
+		return -1, nil
+	}
+	// Past any comment or blank line under the key: a comment there heads the
+	// reader's entries, and an entry written above it would carry it away
+	// when uninstall takes that entry out (#4289).
+	for found < len(doc) {
+		end := strings.IndexByte(doc[found:], '\n')
+		if end < 0 {
+			break
+		}
+		t := strings.TrimSpace(doc[found : found+end])
+		if t != "" && !strings.HasPrefix(t, "#") {
+			break
+		}
+		found += end + 1
+	}
+	return found, nil
+}
+
 func yamlHasChildKey(path, parent, key string) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
-	lines := strings.Split(string(b), "\n")
+	lines := strings.Split(string(bytes.TrimPrefix(b, utf8BOM)), "\n")
 	inBlock := false
 	child := -1
 	for _, raw := range lines {
 		line := strings.TrimRight(raw, " \t\r")
-		if strings.TrimSpace(line) == "" {
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
 		if yamlKeyLine(line, parent) && yamlIndentWidth(line) == 0 {
