@@ -1,6 +1,10 @@
 package sources
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -68,4 +72,31 @@ func commandCodeProject(path string) string {
 		return ""
 	}
 	return claudeProjectName(dir)
+}
+
+// CommandCodeSessionDir is the directory a session ran in: the cwd on the v3
+// header line, or on any of the first records that carries one. The folder
+// name is a lossy slug of it. "" when none names an absolute path (#4372).
+func CommandCodeSessionDir(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+	for i := 0; i < claudeCWDScanLines; i++ {
+		line, err := r.ReadBytes('\n')
+		if bytes.Contains(line, []byte(`"cwd"`)) {
+			var v struct {
+				CWD string `json:"cwd"`
+			}
+			if json.Unmarshal(line, &v) == nil && filepath.IsAbs(v.CWD) {
+				return v.CWD
+			}
+		}
+		if err != nil {
+			return ""
+		}
+	}
+	return ""
 }
