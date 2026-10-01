@@ -371,8 +371,15 @@ func existingDir(p string) string {
 
 // resumeDirGoneNote says where a session whose directory is gone will run:
 // opencode and Kilo reopen it from anywhere, and their tools then work in the
-// directory the command is run from.
+// directory the command is run from. Cline does the same, and its directory
+// is the manifest's rather than the store path's (#4318).
 func resumeDirGoneNote(s model.Session, dir string) string {
+	if dir == "" && s.Harness == "cline" && s.Path != "" {
+		if d := sources.ClineSessionDir(s.Path); d != "" {
+			return fmt.Sprintf("the directory this session ran in is gone (%s); it reopens in the one you run the command from", d)
+		}
+		return ""
+	}
 	if dir != "" || s.Path == "" || (s.Harness != "opencode" && s.Harness != "kilocode") {
 		return ""
 	}

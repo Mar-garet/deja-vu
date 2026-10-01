@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -42,7 +43,22 @@ func TestResumeClineRunsInTheSessionDirectory(t *testing.T) {
 	if err := os.RemoveAll(proj); err != nil {
 		t.Fatal(err)
 	}
-	if got, cmd, _ := resumeCommand(model.Session{Harness: "cline", ID: id, Path: transcript}); got != "" || cmd != "cline --id "+id {
+	sess := model.Session{Harness: "cline", ID: id, Path: transcript}
+	got, cmd, _ = resumeCommand(sess)
+	if got != "" || cmd != "cline --id "+id {
 		t.Errorf("got (%q, %q) for a directory that is gone", got, cmd)
+	}
+	// And it says so: the tools will run wherever the command is typed.
+	if note := resumeDirGoneNote(sess, got); !strings.Contains(note, proj) {
+		t.Errorf("no note naming the gone directory: %q", note)
+	}
+
+	// A relative cwd would be resolved against wherever deja runs.
+	man, _ = json.Marshal(map[string]string{"cwd": "."})
+	if err := os.WriteFile(filepath.Join(dir, id+".json"), man, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := resumeCommand(sess); got != "" {
+		t.Errorf("dir = %q for a relative cwd", got)
 	}
 }

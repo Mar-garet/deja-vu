@@ -163,7 +163,8 @@ func ParseClineFile(path string) ([]model.Session, error) {
 
 // ClineSessionDir is the directory a Cline CLI session ran in, from the
 // <id>.json manifest beside its transcript: cwd, else workspace_root. "" when
-// neither names one (#4318).
+// neither names an absolute path; a relative one would be read against
+// wherever deja runs (#4318).
 func ClineSessionDir(path string) string {
 	sessionDir := filepath.Dir(path)
 	b, err := os.ReadFile(filepath.Join(sessionDir, filepath.Base(sessionDir)+".json"))
@@ -174,7 +175,10 @@ func ClineSessionDir(path string) string {
 	if json.Unmarshal(b, &man) != nil {
 		return ""
 	}
-	return firstNonEmpty(man.CWD, man.WorkspaceRoot)
+	if d := firstNonEmpty(man.CWD, man.WorkspaceRoot); filepath.IsAbs(d) {
+		return d
+	}
+	return ""
 }
 
 type clineManifest struct {
