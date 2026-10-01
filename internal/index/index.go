@@ -359,6 +359,8 @@ import (
 // 60 also: a Cline CLI run_commands or read_files result, written as a list of
 // per-command entries, is indexed as tool output (#4315); a finished
 // transcript is not re-read, so a rebuild.
+// 60 also: a dsh session gains its command, files, edit and wrote records from
+// its tool/call events (#4291); a finished log is not re-read, so a rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
