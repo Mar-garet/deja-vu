@@ -287,6 +287,9 @@ func toolHookLineSkipping(dir, cwd string, input toolHookInput, used func(string
 		"search_replace", "write",
 		// Crush names its editors in lowercase.
 		"edit", "multiedit",
+		// Command Code sends its internal names; EDIT and WRITE are only what
+		// its matcher sees (#4371).
+		"edit_file", "write_file",
 		// pi and omp have no pre-tool seam: the only handler whose return the
 		// model reads is the one holding a finished tool result. An edit there
 		// is already made, so the file's history goes out on their lowercase
