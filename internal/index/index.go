@@ -332,7 +332,18 @@ import (
 // 59: a failed Gemini CLI command carries its exit status (#4208); a
 // finished chat file is not re-read, so a rebuild.
 //
-// 60: a Qwen Code or Gemini CLI shell result is indexed without the report
+// 60: Qwen Code — an `edit` or `write_file` call leaves files, wrote and edit
+// records (#4254), a failed command carries its exit status (#4255), and a
+// session in a non-ASCII directory takes its project from the recorded cwd
+// (#4258). Gemini CLI reads through the same dialect, so its `write_file`
+// leaves a wrote record too. A finished transcript is not re-read, so a
+// rebuild.
+//
+// Also 60: a resumed Gemini CLI session keeps the prompts deja's recall was
+// prepended to; Gemini's own resume history leaves them out (#4214). The
+// chat file is re-read whole only when it changes, so a rebuild.
+//
+// Also 60: a Qwen Code or Gemini CLI shell result is indexed without the report
 // around it, so `Error: (none)` no longer reads as a failure and a fix pair is
 // stored under the error itself, not `Output: <error>` (#4256). A rebuild.
 const version = 60

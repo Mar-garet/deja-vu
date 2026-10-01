@@ -143,6 +143,15 @@ func parseGeminiJSONL(path string) ([]model.Session, error) {
 	var s model.Session
 	started := false
 	var msgs []geminiMessage
+	msgAt := map[string]int{} // id -> index in msgs, rebuilt when msgs is
+	reindex := func() {
+		msgAt = make(map[string]int, len(msgs))
+		for i, m := range msgs {
+			if m.ID != "" {
+				msgAt[m.ID] = i
+			}
+		}
+	}
 	err := scanJSONLFromOffset(path, 0, func(m map[string]any) {
 		if !started {
 			id, _ := m["sessionId"].(string)
@@ -163,7 +172,12 @@ func parseGeminiJSONL(path string) ([]model.Session, error) {
 			}
 			// Newer Gemini CLI builds write the message state inside $set
 			// snapshots (sometimes the only message-bearing lines in the
-			// file). A $set replaces the state collected so far.
+			// file). A snapshot is merged by id rather than taken whole:
+			// on --resume Gemini writes back its rebuilt history, which
+			// leaves out every user turn starting with <hook_context> —
+			// the prompts deja's own recall was attached to — and they
+			// left the index with it (#4214). $rewindTo is the record that
+			// takes turns out.
 			if list, ok := patch["messages"].([]any); ok {
 				var snap []geminiMessage
 				for _, item := range list {
@@ -176,9 +190,8 @@ func parseGeminiJSONL(path string) ([]model.Session, error) {
 						snap = append(snap, gm)
 					}
 				}
-				if len(snap) > 0 || len(list) == 0 {
-					msgs = snap
-				}
+				msgs = mergeGeminiSnapshot(msgs, snap)
+				reindex()
 			}
 			return
 		}
@@ -186,6 +199,7 @@ func parseGeminiJSONL(path string) ([]model.Session, error) {
 			for i := len(msgs) - 1; i >= 0; i-- {
 				if msgs[i].ID == rid {
 					msgs = msgs[:i]
+					reindex()
 					break
 				}
 			}
@@ -194,7 +208,15 @@ func parseGeminiJSONL(path string) ([]model.Session, error) {
 		raw, _ := json.Marshal(m)
 		var gm geminiMessage
 		if json.Unmarshal(raw, &gm) == nil && gm.Type != "" {
-			msgs = append(msgs, gm)
+			// A turn written again under its id — a gemini turn once its
+			// toolCalls arrive — replaces the earlier line, as Gemini's own
+			// loader does.
+			if i, ok := msgAt[gm.ID]; ok && gm.ID != "" && i < len(msgs) && msgs[i].ID == gm.ID {
+				msgs[i] = gm
+			} else {
+				msgAt[gm.ID] = len(msgs)
+				msgs = append(msgs, gm)
+			}
 		}
 	})
 	if !started {
@@ -205,6 +227,58 @@ func parseGeminiJSONL(path string) ([]model.Session, error) {
 		return nil, err
 	}
 	return []model.Session{s}, err
+}
+
+// mergeGeminiSnapshot applies a $set snapshot to the turns read so far. The
+// snapshot is Gemini's own history and is taken in its order — compression,
+// rollback and masking all rewrite it that way — with one exception: on
+// --resume Gemini rebuilds history without the user turns its loader ignores
+// (isIgnoredUserContent: empty, or starting with <hook_context>,
+// <session_context>, / or ?), and a prompt deja's recall was prepended to is
+// one of them (#4214). Those turns go back in, before the next turn read
+// earlier that the snapshot kept.
+func mergeGeminiSnapshot(msgs, snap []geminiMessage) []geminiMessage {
+	if len(msgs) == 0 {
+		return snap
+	}
+	inSnap := map[string]bool{}
+	for _, m := range snap {
+		if m.ID != "" {
+			inSnap[m.ID] = true
+		}
+	}
+	// Each dropped turn waits for the next old turn the snapshot still holds.
+	before := map[string][]geminiMessage{}
+	var tail, pending []geminiMessage
+	for _, m := range msgs {
+		switch {
+		case m.ID != "" && inSnap[m.ID]:
+			if len(pending) > 0 {
+				before[m.ID] = append(before[m.ID], pending...)
+				pending = nil
+			}
+		case geminiResumeDrops(m):
+			pending = append(pending, m)
+		}
+	}
+	tail = pending
+	out := make([]geminiMessage, 0, len(snap)+len(tail))
+	for _, m := range snap {
+		out = append(out, before[m.ID]...)
+		out = append(out, m)
+	}
+	return append(out, tail...)
+}
+
+// geminiResumeDrops mirrors Gemini's isIgnoredUserContent: the user turns its
+// resume leaves out of the history it writes back.
+func geminiResumeDrops(m geminiMessage) bool {
+	if m.Type != "user" || m.ID == "" {
+		return false
+	}
+	t := strings.TrimSpace(geminiContentText(m.Content))
+	return t == "" || strings.HasPrefix(t, "/") || strings.HasPrefix(t, "?") ||
+		strings.HasPrefix(t, "<session_context>") || strings.HasPrefix(t, "<hook_context>")
 }
 
 func geminiSessionShell(path, id, startTime, lastUpdated string) model.Session {
@@ -268,21 +342,103 @@ var geminiExit = regexp.MustCompile(`^Exit Code: (\d+)$`)
 // output — Exit Code (only when non-zero), then Signal, Background PIDs and
 // the process group — so a line the command printed itself is not taken for
 // it. 0 when the footer carries none.
+//
+// Qwen writes the same footer, Exit Code always, at the end of a block that
+// starts "Command: ", and may then add notes after a blank line: a hint once a
+// foreground command has run for half its timeout, an attribution warning on
+// git commit (#4255). A timeout or a cancel has no footer at all, so a footer
+// further up is the command's own output, unless what follows it is a note.
 func geminiExitCode(out string) int {
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	lines := strings.Split(out, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	qwenBlock := false
+	for _, l := range lines {
+		if l == "" || l == "<untrusted_context>" {
+			continue
+		}
+		qwenBlock = strings.HasPrefix(l, "Command: ")
+		break
+	}
 	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
-		if m := geminiExit.FindStringSubmatch(l); m != nil {
-			code, _ := strconv.Atoi(m[1])
-			return code
+		l := lines[i]
+		if l == "" || l == "</untrusted_context>" || l == qwenSaveFailedNote {
+			continue
 		}
-		footer := l == "" || l == "</untrusted_context>"
-		for _, label := range []string{"Signal: ", "Background PIDs: ", "Process Group PGID: "} {
-			footer = footer || strings.HasPrefix(l, label)
+		if geminiFooterRank(l) >= 0 {
+			return geminiFooterExit(lines[:i+1])
 		}
-		if !footer {
+		// A paragraph after a blank line that is a note Qwen appends, or
+		// anything after Qwen's own block, is skipped; anything else means
+		// the result ends in output, not in a footer.
+		p := i
+		for p > 0 && lines[p-1] != "" {
+			p--
+		}
+		above := p - 1
+		for above >= 0 && lines[above] == "" {
+			above--
+		}
+		if p == 0 || above < 0 {
 			return 0
 		}
+		afterQwenFooter := qwenBlock && strings.HasPrefix(lines[above], "Process Group PGID: ")
+		if !afterQwenFooter && !qwenNote(lines[p]) {
+			return 0
+		}
+		i = p
+	}
+	return 0
+}
+
+// qwenSaveFailedNote is the line Qwen puts straight under a truncated result
+// when it could not save the whole output to a file.
+const qwenSaveFailedNote = "[Note: Could not save full output to file]"
+
+// qwenNote reports whether a paragraph starting with l is one of the notes
+// Qwen 0.20 appends after the shell footer.
+func qwenNote(l string) bool {
+	return strings.HasPrefix(l, "Note: this foreground command ran for ") ||
+		strings.HasPrefix(l, "AI attribution note skipped: ")
+}
+
+// geminiFooterOrder is the order the footer's lines are written in.
+var geminiFooterOrder = []string{"Exit Code: ", "Signal: ", "Background PIDs: ", "Process Group PGID: "}
+
+// geminiFooterRank is a line's place in geminiFooterOrder, -1 when it is not
+// a footer line.
+func geminiFooterRank(l string) int {
+	if geminiExit.MatchString(l) {
+		return 0
+	}
+	for r, label := range geminiFooterOrder[1:] {
+		if strings.HasPrefix(l, label) {
+			return r + 1
+		}
+	}
+	return -1
+}
+
+// geminiFooterExit reads the footer that ends lines: walking up, each line
+// must come earlier in the written order than the one below it, so a line of
+// output that happens to look like a footer line is not taken into it.
+func geminiFooterExit(lines []string) int {
+	below := len(geminiFooterOrder)
+	for i := len(lines) - 1; i >= 0; i-- {
+		r := geminiFooterRank(lines[i])
+		if r < 0 || r >= below {
+			return 0
+		}
+		if r == 0 {
+			m := geminiExit.FindStringSubmatch(lines[i])
+			code, err := strconv.Atoi(m[1])
+			if err != nil {
+				return 0
+			}
+			return code
+		}
+		below = r
 	}
 	return 0
 }
@@ -430,23 +586,40 @@ func geminiContentText(raw json.RawMessage) string {
 // projects.json reverse mapping first, then a .project_root marker, then the
 // raw id (slug or hash).
 func geminiProjectName(path string) string {
+	if dir := GeminiProjectDir(path); dir != "" {
+		return projectName(dir)
+	}
+	return filepath.Base(geminiIDDir(path))
+}
+
+// GeminiProjectDir is the directory a Gemini CLI session ran in, from the
+// store's own records: the project folder keeps it in .project_root, and
+// projects.json maps it to the folder. "" when neither names one — older stores
+// key the folder by a hash of the path and keep nothing to invert.
+func GeminiProjectDir(path string) string {
+	idDir := geminiIDDir(path)
+	// .project_root first: Gemini treats it as the authority and deletes a
+	// projects.json entry that disagrees with it.
+	if b, err := os.ReadFile(filepath.Join(idDir, ".project_root")); err == nil {
+		if dir := strings.TrimSpace(string(b)); dir != "" {
+			return dir
+		}
+	}
+	return geminiProjectFromRegistry(filepath.Base(idDir))
+}
+
+// geminiIDDir is .../tmp/<id> for a chat file under it.
+func geminiIDDir(path string) string {
 	idDir := filepath.Dir(filepath.Dir(path)) // .../tmp/<id>
 	// subagent files nest one deeper: chats/<parent>/<sid>.jsonl
 	if filepath.Base(filepath.Dir(path)) != "chats" && filepath.Base(idDir) == "chats" {
 		idDir = filepath.Dir(idDir)
 	}
-	id := filepath.Base(idDir)
-	if mapped := geminiProjectFromRegistry(id); mapped != "" {
-		return mapped
-	}
-	if b, err := os.ReadFile(filepath.Join(idDir, ".project_root")); err == nil {
-		if p := strings.TrimSpace(string(b)); p != "" {
-			return projectName(p)
-		}
-	}
-	return id
+	return idDir
 }
 
+// geminiProjectFromRegistry is the directory projects.json maps to this
+// project id.
 func geminiProjectFromRegistry(id string) string {
 	b, err := os.ReadFile(filepath.Join(GeminiRoot(), "projects.json"))
 	if err != nil {
@@ -460,7 +633,7 @@ func geminiProjectFromRegistry(id string) string {
 	}
 	for path, pid := range doc.Projects {
 		if pid == id {
-			return projectName(path)
+			return path
 		}
 	}
 	return ""

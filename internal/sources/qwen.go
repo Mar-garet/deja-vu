@@ -1,6 +1,8 @@
 package sources
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -54,6 +56,43 @@ func QwenProjectDirBase(path string) string {
 	return base
 }
 
+// Qwen Code names a project folder the way Claude Code does — sanitizeCwd,
+// every character outside [A-Za-z0-9] as "-", the path lowercased first on
+// Windows — so a directory named in Cyrillic, CJK or with accents cannot be
+// read back from the folder name (#4258). Every record carries the real
+// directory as cwd; it is trusted when it encodes to the folder it was found
+// in.
+func qwenFolderIs(cwd, base string) bool {
+	enc := claudeEncodePath(cwd)
+	return enc == base || strings.ToLower(enc) == base
+}
+
+// qwenTranscriptCWD is the directory the transcript at path records, when its
+// folder was named for it; "" otherwise.
+func qwenTranscriptCWD(path string) string {
+	base := QwenProjectDirBase(path)
+	if base == "" {
+		return ""
+	}
+	return transcriptCWD(path, func(cwd string) bool { return qwenFolderIs(cwd, base) })
+}
+
+// QwenSessionDir is the directory a Qwen Code session ran in, for the cd in
+// front of `qwen -r`: the recorded one while it still exists, the folder name
+// resolved on disk otherwise.
+func QwenSessionDir(path string) string {
+	if cwd := qwenTranscriptCWD(path); cwd != "" {
+		if fi, err := os.Stat(cwd); err == nil && fi.IsDir() {
+			return cwd
+		}
+	}
+	base := QwenProjectDirBase(path)
+	if base == "" {
+		return ""
+	}
+	return ResolveEncodedPath(base)
+}
+
 func ParseQwenFile(path string) ([]model.Session, error) {
 	return parseQwenFileFromOffset(path, 0)
 }
@@ -63,13 +102,19 @@ func ParseQwenFileFromOffset(path string, offset int64) ([]model.Session, error)
 }
 
 func parseQwenFileFromOffset(path string, offset int64) ([]model.Session, error) {
-	project := projectDir(filepath.Join(QwenRoot(), "projects"), path)
+	project := cwdProjectName(qwenTranscriptCWD(path))
+	if project == "" {
+		project = claudeProjectName(projectDir(filepath.Join(QwenRoot(), "projects"), path))
+	}
 	s := model.Session{
 		Harness: "qwen",
 		ID:      strings.TrimSuffix(filepath.Base(path), ".jsonl"),
-		Project: claudeProjectName(project),
+		Project: project,
 		Path:    path,
 	}
+	// A shell call and its result are separate records; the call id carries
+	// the command over to the result its exit status is read from (#4255).
+	shellAt := map[string]int{}
 	err := scanJSONLFromOffset(path, offset, func(m map[string]any) {
 		typ, _ := m["type"].(string)
 		if typ == "tool_result" {
@@ -82,6 +127,7 @@ func parseQwenFileFromOffset(path string, offset int64) ([]model.Session, error)
 			s.Touch(t)
 			if msg, ok := m["message"].(map[string]any); ok {
 				s.Messages = append(s.Messages, qwenWorkRecords(msg["parts"], t)...)
+				qwenNoteExits(&s, msg["parts"], shellAt)
 			}
 			return
 		}
@@ -115,7 +161,10 @@ func parseQwenFileFromOffset(path string, offset int64) ([]model.Session, error)
 		// functionResponse rather than text, so qwenText walked past it and
 		// the commands a session ran were reachable from nothing.
 		if msg, ok := m["message"].(map[string]any); ok {
+			start := len(s.Messages)
 			s.Messages = append(s.Messages, qwenWorkRecords(msg["parts"], t)...)
+			qwenNoteShellCalls(&s, msg["parts"], start, shellAt)
+			qwenNoteExits(&s, msg["parts"], shellAt)
 		}
 	})
 	if len(s.Messages) == 0 {
@@ -126,13 +175,78 @@ func parseQwenFileFromOffset(path string, offset int64) ([]model.Session, error)
 
 // qwenDialect is Qwen Code's tool vocabulary. The names follow Gemini's — Qwen
 // Code is built in that shape — with `file_path` for the file tools and
-// `command` for the shell.
+// `command` for the shell. Qwen 0.20 renamed `replace` to `edit` and still
+// maps the old name to it, so both are read; write_file is an edit too, the
+// whole file its written side (#4254). Gemini CLI reads through this dialect
+// and still says `replace`.
 var qwenDialect = toolDialect{
 	pathKey:   "file_path",
-	pathTools: map[string]bool{"read_file": true, "write_file": true, "replace": true, "read_many_files": true},
+	pathTools: map[string]bool{"read_file": true, "write_file": true, "replace": true, "edit": true, "read_many_files": true},
 	shellTool: "run_shell_command",
-	editTools: map[string]bool{"replace": true},
+	editTools: map[string]bool{"replace": true, "edit": true, "write_file": true},
 	oldKey:    "old_string",
+}
+
+// qwenNoteShellCalls maps the id of each shell call among parts to the
+// command record it produced in s.Messages[start:].
+func qwenNoteShellCalls(s *model.Session, parts any, start int, shellAt map[string]int) {
+	items, _ := parts.([]any)
+	used := map[int]bool{}
+	for _, part := range items {
+		p, _ := part.(map[string]any)
+		call, ok := p["functionCall"].(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := call["id"].(string)
+		if id == "" {
+			continue
+		}
+		// An id seen again belongs to this call now, recorded or not.
+		delete(shellAt, id)
+		name, _ := call["name"].(string)
+		args, _ := call["args"].(map[string]any)
+		cmd, _ := args["command"].(string)
+		if !qwenDialect.isShellTool(name) || cmd == "" {
+			continue
+		}
+		for i := start; i < len(s.Messages); i++ {
+			if !used[i] && s.Messages[i].Role == RoleCommand && s.Messages[i].Text == "$ "+cmd {
+				shellAt[id], used[i] = i, true
+				break
+			}
+		}
+	}
+}
+
+// qwenNoteExits appends a non-zero exit to the command a functionResponse
+// among parts answers. Qwen writes Gemini's footer: "Exit Code: 128" after
+// the output, under `error` when the call failed.
+func qwenNoteExits(s *model.Session, parts any, shellAt map[string]int) {
+	items, _ := parts.([]any)
+	for _, part := range items {
+		p, _ := part.(map[string]any)
+		resp, ok := p["functionResponse"].(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := resp["id"].(string)
+		i, ok := shellAt[id]
+		if !ok {
+			continue
+		}
+		r, _ := resp["response"].(map[string]any)
+		out, _ := r["output"].(string)
+		code := geminiExitCode(out)
+		if code == 0 {
+			errOut, _ := r["error"].(string)
+			code = geminiExitCode(errOut)
+		}
+		if code > 0 {
+			s.Messages[i].Text += fmt.Sprintf("  → exit %d", code)
+		}
+		delete(shellAt, id)
+	}
 }
 
 // qwenWorkRecords turns the functionCall and functionResponse parts of one

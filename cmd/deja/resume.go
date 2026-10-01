@@ -206,12 +206,12 @@ func resumeCommand(s model.Session) (string, string, error) {
 		dir := filepath.Dir(s.Path)
 		return "", "", fmt.Errorf("aider has no session resume — run aider in %s and it continues the same history", dir)
 	case "gemini":
-		// No cd: gemini scopes its session list by a hash of the working
-		// directory, and the store keeps only that hash — there is nothing to
-		// invert back into a path. Run from the wrong directory it says "No
-		// previous sessions found for this project" rather than opening the
-		// wrong one.
-		return "", "gemini --resume " + s.ID, nil
+		// gemini finds a session only from the directory it ran in: anywhere
+		// else it says "No previous sessions found for this project" (#4211).
+		// Current stores record that directory in projects.json and
+		// .project_root; an older one keyed by a hash of it has nothing to
+		// invert, and gets no cd.
+		return existingDir(sources.GeminiProjectDir(s.Path)), "gemini --resume " + s.ID, nil
 	case "cursor":
 		if strings.HasSuffix(s.Path, ".jsonl") {
 			// A CLI transcript is named after the chat id `--resume` takes.
@@ -383,18 +383,14 @@ func claudeProjectDirFor(s model.Session) string {
 	return sources.ClaudeSessionDir(s.Path)
 }
 
-// qwenProjectDirFor recovers the original working directory from the
-// transcript location. qwen scopes its session list to the current project,
-// so `qwen -r <id>` finds nothing when run from anywhere else.
+// qwenProjectDirFor recovers the original working directory of a session.
+// qwen scopes its session list to the current project, so `qwen -r <id>`
+// finds nothing when run from anywhere else.
 func qwenProjectDirFor(s model.Session) string {
 	if s.Path == "" {
 		return ""
 	}
-	base := sources.QwenProjectDirBase(s.Path)
-	if base == "" {
-		return ""
-	}
-	return sources.ResolveEncodedPath(base)
+	return sources.QwenSessionDir(s.Path)
 }
 
 // cursorProjectDirFor recovers the working directory a CLI transcript belongs
