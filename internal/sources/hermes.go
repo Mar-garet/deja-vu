@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -360,4 +361,124 @@ func hermesProfile(db string) string {
 		return "hermes"
 	}
 	return name
+}
+
+// HermesResumeProfile is the profile `hermes -p` has to name for a session
+// read from this store to be found, or "" when the plain command finds it.
+// `hermes --resume` looks only in the active profile's store, so a session
+// recorded under `hermes -p work` came back "Session not found" (#4248). A
+// profile's session is always named, so the command does not depend on which
+// one is active; a sticky `hermes profile use work` makes the root store need
+// naming too, as `default`. dir says the name is a directory under profiles/,
+// for the caller to check it is one Hermes takes.
+//
+// The root is worked out the way Hermes' get_default_hermes_root does: a
+// HERMES_HOME under `profiles/` is a profile, which `hermes -p work` exports
+// to everything it runs, deja included, and the root is two levels up. In that
+// mode the root's store is always named. Like Hermes, the profile and its name
+// are read off the path as written, absolute and cleaned, so a profile that is
+// a symlink to another disk is still that profile; symlinks are resolved only
+// to tell whether two directories are the same one, so a symlinked or relative
+// home still matches. A store that is neither the root's nor a profile's, or a
+// Postgres one, keeps the plain command.
+func HermesResumeProfile(db string) (name string, dir bool) {
+	if IsHermesPGStore(db) {
+		return "", false
+	}
+	root, inProfile := hermesAbs(HermesHome()), false
+	if filepath.Base(filepath.Dir(root)) == "profiles" {
+		root, inProfile = filepath.Dir(filepath.Dir(root)), true
+	}
+	profiles := filepath.Join(root, "profiles")
+	if p := os.Getenv("DEJA_HERMES_PROFILES_ROOT"); p != "" {
+		profiles = hermesAbs(p)
+	}
+	store := hermesAbs(filepath.Dir(db))
+	if sameDir(filepath.Dir(store), profiles) {
+		return filepath.Base(store), true
+	}
+	if !sameDir(store, root) {
+		return "", false
+	}
+	if inProfile {
+		return "default", false
+	}
+	b, err := os.ReadFile(filepath.Join(root, "active_profile"))
+	if err != nil {
+		return "", false
+	}
+	if active := strings.TrimSpace(strings.TrimPrefix(string(b), "\ufeff")); active != "" && active != "default" {
+		return "default", false
+	}
+	return "", false
+}
+
+// hermesAbs is p absolute and cleaned, symlinks left as written.
+func hermesAbs(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
+}
+
+// sameDir reports whether two directories are the same one: as written, or
+// once their symlinks are followed.
+func sameDir(a, b string) bool {
+	return samePath(a, b) || samePath(hermesResolved(a), hermesResolved(b))
+}
+
+// hermesResolved is p absolute, cleaned and with its symlinks followed: those
+// of the deepest part that exists, with the rest joined back on, so a store
+// whose directory is gone resolves the same way as the home it sat in.
+func hermesResolved(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	rest := ""
+	for dir := p; ; dir = filepath.Dir(dir) {
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(real, rest)
+		}
+		if filepath.Dir(dir) == dir {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
+	}
+}
+
+// samePath compares two cleaned paths the way the filesystem does: Windows
+// ignores case.
+func samePath(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// HermesStoreLacks reports whether the Hermes store a session was read from no
+// longer has it — taken out with `hermes sessions delete`, which leaves
+// `hermes --resume` answering "Session not found" (#4250). False whenever that
+// cannot be told: a Postgres store, no file, or a read that fails. The sessions
+// table is what resume looks the id up in; a store from before it is asked
+// through its messages.
+func HermesStoreLacks(db, id string) bool {
+	if IsHermesPGStore(db) || !nonEmptyFile(db) {
+		return false
+	}
+	query := func(q string) (string, bool) {
+		cmd, stop := sqliteReadCmd(db, q)
+		defer stop()
+		b, err := cmd.Output()
+		return strings.TrimSpace(string(b)), err == nil
+	}
+	names, ok := query(`select name from sqlite_master where type='table' and name in ('sessions','messages')`)
+	if !ok || names == "" {
+		return false
+	}
+	q := fmt.Sprintf(`select count(*) from messages where session_id='%s'`, sqlEscape(id))
+	if strings.Contains(" "+strings.Join(strings.Fields(names), " ")+" ", " sessions ") {
+		q = fmt.Sprintf(`select count(*) from sessions where id='%s'`, sqlEscape(id))
+	}
+	n, ok := query(q)
+	return ok && n == "0"
 }
