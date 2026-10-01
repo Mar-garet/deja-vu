@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `deja resume` on a Hermes session recorded under a profile prints `hermes -p <profile> --resume <id>`; without the flag Hermes looked in the active profile and said "Session not found". A session deleted with `hermes sessions delete` is refused with a pointer to `deja show`, as opencode's are (#4248, #4250).
+- `deja resume` on a Hermes session recorded under a profile prints `hermes -p <profile> --resume <id>`; without the flag Hermes looked in the active profile and said "Session not found". A root-store session gets `-p default` when another profile is active or deja runs inside a profile's `HERMES_HOME`, a profile directory Hermes would not take by that name (`default`, `tmp`, uppercase) is refused with a pointer to `deja show`, and so is a session deleted with `hermes sessions delete`, as opencode's are (#4248, #4250).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).
 - `deja resume` on a Gemini CLI session runs `gemini --resume` in the directory the session ran in, read from `projects.json` / `.project_root`; from anywhere else Gemini answered "No previous sessions found for this project" (#4211).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).

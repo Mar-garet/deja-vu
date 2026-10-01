@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -276,43 +277,79 @@ func hermesProfile(db string) string {
 }
 
 // HermesResumeProfile is the profile `hermes -p` has to name for a session
-// read from this store to be found, or "" for the root store while no other
-// profile is active. `hermes --resume` looks only in the active profile's
-// store, so a session recorded under `hermes -p work` came back "Session not
-// found" (#4248). A profile's session is always named, so the command does not
-// depend on which one is active; a sticky `hermes profile use work` makes the
-// root store need naming too, as `default`.
+// read from this store to be found, or "" when the plain command finds it.
+// `hermes --resume` looks only in the active profile's store, so a session
+// recorded under `hermes -p work` came back "Session not found" (#4248). A
+// profile's session is always named, so the command does not depend on which
+// one is active; a sticky `hermes profile use work` makes the root store need
+// naming too, as `default`. dir says the name is a directory under profiles/,
+// for the caller to check it is one Hermes takes.
 //
 // The root is worked out the way Hermes' get_default_hermes_root does: a
 // HERMES_HOME under `profiles/` is a profile, which `hermes -p work` exports
 // to everything it runs, deja included, and the root is two levels up. In that
-// mode the profile is always named. A Postgres session keeps the plain command.
-func HermesResumeProfile(db string) string {
+// mode the root's store is always named. Paths are compared resolved — a
+// trailing slash, a symlink or a relative HERMES_HOME is the same home — and a
+// store that is neither the root's nor a profile's, or a Postgres one, keeps
+// the plain command.
+func HermesResumeProfile(db string) (name string, dir bool) {
 	if IsHermesPGStore(db) {
-		return ""
+		return "", false
 	}
-	root, inProfile := HermesHome(), false
+	root, inProfile := hermesResolved(HermesHome()), false
 	if filepath.Base(filepath.Dir(root)) == "profiles" {
 		root, inProfile = filepath.Dir(filepath.Dir(root)), true
 	}
 	profiles := filepath.Join(root, "profiles")
 	if p := os.Getenv("DEJA_HERMES_PROFILES_ROOT"); p != "" {
-		profiles = p
+		profiles = hermesResolved(p)
 	}
-	if filepath.Dir(filepath.Dir(db)) == filepath.Clean(profiles) {
-		return filepath.Base(filepath.Dir(db))
+	store := hermesResolved(filepath.Dir(db))
+	if samePath(filepath.Dir(store), profiles) {
+		return filepath.Base(store), true
+	}
+	if !samePath(store, root) {
+		return "", false
 	}
 	if inProfile {
-		return "default"
+		return "default", false
 	}
 	b, err := os.ReadFile(filepath.Join(root, "active_profile"))
 	if err != nil {
-		return ""
+		return "", false
 	}
-	if name := strings.TrimSpace(strings.TrimPrefix(string(b), "\ufeff")); name != "" && name != "default" {
-		return "default"
+	if active := strings.TrimSpace(strings.TrimPrefix(string(b), "\ufeff")); active != "" && active != "default" {
+		return "default", false
 	}
-	return ""
+	return "", false
+}
+
+// hermesResolved is p absolute, cleaned and with its symlinks followed: those
+// of the deepest part that exists, with the rest joined back on, so a store
+// whose directory is gone resolves the same way as the home it sat in.
+func hermesResolved(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	rest := ""
+	for dir := p; ; dir = filepath.Dir(dir) {
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(real, rest)
+		}
+		if filepath.Dir(dir) == dir {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
+	}
+}
+
+// samePath compares two cleaned paths the way the filesystem does: Windows
+// ignores case.
+func samePath(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 // HermesStoreLacks reports whether the Hermes store a session was read from no

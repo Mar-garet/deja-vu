@@ -109,9 +109,14 @@ func formatResumeCommand(dir, cmdline string) string {
 // from a session store cannot alter the command deja builds or prints.
 var resumeIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
-// hermesProfilePattern is Hermes' own PROFILE_ID_RE (hermes_constants.py): a
-// name outside it is not a profile `hermes -p` will open.
-var hermesProfilePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+// hermesProfilePattern and hermesReservedProfiles are Hermes' own
+// _PROFILE_ID_RE and _RESERVED_NAMES (hermes_cli/profiles.py): a directory
+// outside them is not a profile `hermes -p` will open, and `-p default` opens
+// the root rather than profiles/default.
+var (
+	hermesProfilePattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	hermesReservedProfiles = map[string]bool{"hermes": true, "default": true, "test": true, "tmp": true, "root": true, "sudo": true}
+)
 
 // openclawKeyPattern matches a session key (agent:<id>:<name>). Colons are
 // what separates a key's parts, so the id pattern is too strict here — and
@@ -206,9 +211,9 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// Hermes takes the same session ID deja indexes, so this resumes the
 		// exact conversation rather than the most recent one — from the
 		// profile whose store holds it (#4248).
-		if p := sources.HermesResumeProfile(s.Path); p != "" {
-			if !hermesProfilePattern.MatchString(p) {
-				return "", "", fmt.Errorf("session %s is in %q, a directory Hermes does not take as a profile name, so `hermes -p` cannot reopen it — `deja show %s` has the conversation", digest.Short(s.ID), p, digest.Short(s.ID))
+		if p, dir := sources.HermesResumeProfile(s.Path); p != "" {
+			if dir && (!hermesProfilePattern.MatchString(p) || hermesReservedProfiles[p]) {
+				return "", "", fmt.Errorf("session %s is in profiles/%s, a name Hermes does not take as a profile (`-p default` is the root), so `hermes -p` cannot reopen it — `deja show %s` has the conversation", digest.Short(s.ID), p, digest.Short(s.ID))
 			}
 			return "", "hermes -p " + p + " --resume " + s.ID, nil
 		}

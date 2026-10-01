@@ -122,3 +122,63 @@ insert into messages values(1,'20261001_181726_aaaaaa','user','hello',1);`
 		t.Fatalf("refused with no store to ask: %v", err)
 	}
 }
+
+// The profile home Hermes exports may come with a trailing slash, through a
+// symlink, or relative to where deja runs; each read as the root before, and a
+// store outside the root fell through to `-p default`. Only the root's own
+// store is `default`, and what is in neither place keeps the plain command.
+func TestResumeHermesProfileHomeAsHermesWritesIt(t *testing.T) {
+	tmp := hermeticEnv(t)
+	root := filepath.Join(tmp, "hermes")
+	if err := os.MkdirAll(filepath.Join(root, "profiles", "work"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link")
+	if err := os.Symlink(root, link); err != nil {
+		t.Skip("no symlinks here")
+	}
+	t.Setenv("DEJA_HERMES_PROFILES_ROOT", "")
+	const id = "20261001_182638_264fd2"
+	cmdFor := func(path string) string {
+		t.Helper()
+		_, cmd, err := resumeCommand(model.Session{ID: id, Harness: "hermes", Project: "p", Path: path})
+		if err != nil {
+			t.Fatalf("resume %s: %v", path, err)
+		}
+		return cmd
+	}
+	rootDB := filepath.Join(root, "state.db")
+	workDB := filepath.Join(root, "profiles", "work", "state.db")
+	for _, home := range []string{
+		filepath.Join(root, "profiles", "work") + string(filepath.Separator),
+		filepath.Join(link, "profiles", "work"),
+	} {
+		t.Setenv("DEJA_HERMES_HOME", home)
+		if got, want := cmdFor(rootDB), "hermes -p default --resume "+id; got != want {
+			t.Errorf("HERMES_HOME=%s, root store: %q, want %q", home, got, want)
+		}
+		if got, want := cmdFor(workDB), "hermes -p work --resume "+id; got != want {
+			t.Errorf("HERMES_HOME=%s, work store: %q, want %q", home, got, want)
+		}
+	}
+	t.Setenv("DEJA_HERMES_HOME", filepath.Join(root, "profiles", "work"))
+	if got, want := cmdFor(filepath.Join(tmp, "elsewhere", "state.db")), "hermes --resume "+id; got != want {
+		t.Errorf("a store outside the root: %q, want %q", got, want)
+	}
+}
+
+// Hermes takes no profile by a reserved name, and `-p default` is the root:
+// a directory with one of those names under profiles/ is refused.
+func TestResumeHermesRefusesAReservedProfileDirectory(t *testing.T) {
+	tmp := hermeticEnv(t)
+	root := filepath.Join(tmp, "hermes")
+	t.Setenv("DEJA_HERMES_HOME", root)
+	t.Setenv("DEJA_HERMES_PROFILES_ROOT", "")
+	for _, name := range []string{"default", "hermes", "test", "tmp", "root", "sudo"} {
+		path := filepath.Join(root, "profiles", name, "state.db")
+		_, cmd, err := resumeCommand(model.Session{ID: "20261001_182638_264fd2", Harness: "hermes", Project: "p", Path: path})
+		if err == nil || !strings.Contains(err.Error(), "deja show") {
+			t.Errorf("profiles/%s: %q, %v; want a refusal", name, cmd, err)
+		}
+	}
+}
