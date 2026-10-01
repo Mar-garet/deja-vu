@@ -69,3 +69,23 @@ func TestAntigravityToolCallAndStepHeaderAreOneCommand(t *testing.T) {
 		t.Errorf("files = %q, want the edit once", f)
 	}
 }
+
+// On disk every arg is itself JSON: CommandLine is `"go test ./..."`, quotes
+// and all, and so are Cwd, AbsolutePath and TargetFile. Read as they stand,
+// the command was indexed with its quotes and a second time from the step
+// header without them, and no path was absolute (#4358).
+func TestAntigravityToolCallArgsAreJSONEncoded(t *testing.T) {
+	got := parseAntigravityLines(t, `{"step_index":1,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-09-30T10:00:05Z","content":"Running the tests first.","tool_calls":[{"name":"run_command","args":{"CommandLine":"\"go test ./...\"","Cwd":"\"/tmp/proj\"","WaitMsBeforeAsync":500}}]}
+{"step_index":2,"source":"MODEL","type":"RUN_COMMAND","status":"DONE","created_at":"2026-09-30T10:00:09Z","content":"Task Description: go test ./...\n--- FAIL: TestRetry (0.00s)"}
+{"step_index":3,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-09-30T10:00:12Z","content":"","tool_calls":[{"name":"view_file","args":{"AbsolutePath":"\"/tmp/proj/client.go\""}},{"name":"write_to_file","args":{"TargetFile":"\"/tmp/proj/retry_test.go\""}}]}
+`)
+	if c := got[RoleCommand]; len(c) != 1 || c[0] != "$ go test ./..." {
+		t.Errorf("commands = %q, want the one run, unquoted", c)
+	}
+	if f := got[RoleFiles]; len(f) != 2 || f[0] != "/tmp/proj/client.go" || f[1] != "/tmp/proj/retry_test.go" {
+		t.Errorf("files = %q, want the paths unquoted", f)
+	}
+	if p := got["project"]; p[0] != "proj" {
+		t.Errorf("project = %q, want proj", p)
+	}
+}

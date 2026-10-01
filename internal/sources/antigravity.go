@@ -267,17 +267,17 @@ func antigravityToolCalls(v any, t time.Time) ([]model.Message, string) {
 		}
 		switch str(call["name"]) {
 		case "run_command":
-			cmd := strings.TrimSpace(str(args["CommandLine"]))
+			cmd := strings.TrimSpace(antigravityArg(args, "CommandLine"))
 			if cwd == "" {
-				cwd = str(args["Cwd"])
+				cwd = antigravityArg(args, "Cwd")
 			}
 			if cmd != "" && IndexCommands() && worthIndexing(cmd) {
 				out = append(out, model.Message{Role: RoleCommand, Text: "$ " + cmd, Time: t})
 			}
 		case "view_file", "replace_file_content", "multi_replace_file_content", "write_to_file":
-			p := str(args["AbsolutePath"])
+			p := antigravityArg(args, "AbsolutePath")
 			if p == "" {
-				p = str(args["TargetFile"])
+				p = antigravityArg(args, "TargetFile")
 			}
 			p = decodeURIPath(strings.TrimPrefix(p, "file://"))
 			if p != "" && IndexToolPaths() {
@@ -286,6 +286,18 @@ func antigravityToolCalls(v any, t time.Time) ([]model.Message, string) {
 		}
 	}
 	return out, cwd
+}
+
+// antigravityArg reads one call argument. On disk each value is JSON in its
+// own right — CommandLine is `"go test ./..."` with the quotes — so a value
+// that decodes as a JSON string is that string; a bare one is taken as it is.
+func antigravityArg(args map[string]any, key string) string {
+	v := str(args[key])
+	var decoded string
+	if strings.HasPrefix(v, `"`) && json.Unmarshal([]byte(v), &decoded) == nil {
+		return decoded
+	}
+	return v
 }
 
 // antigravityTakeCalls keeps the records from a row's calls and notes each,
