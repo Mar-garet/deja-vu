@@ -134,3 +134,24 @@ func TestCherryStudioAndClaudeDoNotClaimEachOther(t *testing.T) {
 		t.Errorf("a stock Claude transcript is claimed by cherrystudio: %q", kinds[stockFile])
 	}
 }
+
+// A tail that carries more snapshots of the call the stored part ended on
+// rewrites a stored reply and cannot be appended; a tail that starts a new
+// call can (#4346).
+func TestCherryStudioResumesOnlyOnANewCall(t *testing.T) {
+	lines := strings.SplitAfter(cherrySnapshotTranscript, "\n")
+	p := filepath.Join(t.TempDir(), "cs-1.jsonl")
+	if err := os.WriteFile(p, []byte(cherrySnapshotTranscript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	at := func(n int) int64 { return int64(len(strings.Join(lines[:n], ""))) }
+	if CherryStudioResumes(p, at(2)) {
+		t.Error("a tail continuing req-1 was allowed to append to its half reply")
+	}
+	if !CherryStudioResumes(p, at(4)) {
+		t.Error("a tail starting req-2 was refused")
+	}
+	if !CherryStudioResumes(p, at(1)) {
+		t.Error("a tail after the user line was refused")
+	}
+}
