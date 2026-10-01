@@ -953,7 +953,8 @@ func doctorHarnesses(w io.Writer, dir string) {
 	senpiRoot := sources.SenpiRoot()
 	printFiles("senpi", senpiRoot, doctorExists(senpiRoot), sources.SenpiSessionFiles())
 	kimchiRoot := sources.KimchiRoot()
-	printFiles("kimchi", kimchiRoot, doctorExists(kimchiRoot), sources.KimchiSessionFiles())
+	// Its sub-agent runs are skipped on purpose and named as such (#4401).
+	printFilesSkipping("kimchi", kimchiRoot, doctorExists(kimchiRoot), sources.KimchiSessionFiles(), sources.KimchiSubagentFile)
 	commandRoot := sources.CommandCodeRoot()
 	// The checkpoint stream beside each transcript is named rather than left to
 	// the unread count: it is not a conversation, and "1 not recognised here"

@@ -23,6 +23,11 @@ too, and then the header's `cwd` is what names the project.
   command rather than handing over a paste. It runs in the directory the
   header's `cwd` names: Kimchi 1.5 finds a session from anywhere, but outside
   its project asks to fork it instead of reopening it (#4400).
+- **Sub-agent runs** of the `Agent` tool are transcripts of their own beside
+  the parent, marked by `parentSession` on the header and a
+  `kimchi:subagent-session` entry after it. They are skipped, as Claude Code's,
+  Cursor's and gjc's sub-agents are; `DEJA_INCLUDE_SUBAGENTS=1` takes them. A
+  fork carries `parentSession` alone and stays a session (#4401).
 - A session file directly under the root has no encoded project directory to
   read a name from, so the header line's `cwd` names the project there — the
   same choice omp and prime-agent make (#3678).

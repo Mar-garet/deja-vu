@@ -68,3 +68,39 @@ func TestDoctorGjcRowKnowsItsScopeFilesAndPasses(t *testing.T) {
 		t.Errorf("row = %q, want the unknown file counted", got)
 	}
 }
+
+// A Kimchi sub-agent run is skipped the same way, and the row says so rather
+// than counting it as a file deja could not read (#4401).
+func TestDoctorKimchiRowNamesSkippedSubagentRuns(t *testing.T) {
+	tmp := hermeticEnv(t)
+	root := filepath.Join(tmp, "kimchi-sessions")
+	t.Setenv("DEJA_KIMCHI_ROOT", root)
+	dir := filepath.Join(root, "--private-tmp-proj--")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	msg := `{"type":"message","id":"m1","timestamp":"2026-10-01T21:57:05.000Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}` + "\n"
+	parent := filepath.Join(dir, "a_01a0f978-9334.jsonl")
+	files := map[string]string{
+		parent: `{"type":"session","version":3,"id":"01a0f978-9334","cwd":"/private/tmp/proj"}` + "\n" + msg,
+		filepath.Join(dir, "b_01a0f978-95b2.jsonl"): `{"type":"session","version":3,"id":"01a0f978-95b2","cwd":"/private/tmp/proj","parentSession":"` + parent + `"}` + "\n" +
+			`{"type":"custom","customType":"kimchi:subagent-session","data":{"type":"General-Purpose"}}` + "\n" + msg,
+	}
+	for p, body := range files {
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var buf bytes.Buffer
+	doctorHarnesses(&buf, t.TempDir())
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "kimchi ") {
+			continue
+		}
+		if !strings.Contains(l, "1 file") || !strings.Contains(l, "1 subagent transcripts skipped") || strings.Contains(l, "not recognised") {
+			t.Errorf("row = %q, want one file and the run named as a skip", l)
+		}
+		return
+	}
+	t.Fatalf("no kimchi row:\n%s", buf.String())
+}

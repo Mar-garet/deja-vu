@@ -356,6 +356,8 @@ import (
 // 60 also: a Kilo CLI or ZCode session doubled in the index on each pass after
 // a write to its database (#4396); the copies already held go only on a
 // rebuild.
+// 60 also: a Kimchi sub-agent run is skipped rather than indexed as a session
+// of its own (#4401); runs already held go only on a rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
