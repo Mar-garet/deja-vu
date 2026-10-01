@@ -3275,7 +3275,7 @@ func rereadsWholeSessions(p string) bool {
 		return true
 	}
 	switch storeHarness(p) {
-	case "grok", "zed", "hermes", "openclaw":
+	case "grok", "zed", "hermes", "openclaw", "crush":
 		// The same shape: each asks for the sessions touched since the stamp
 		// and hands them back whole, so what comes back replaces what the
 		// index holds for that key rather than adding to it (#2075). The
@@ -3342,6 +3342,10 @@ func resolveStorePaths() map[string]string {
 	out := map[string]string{sources.GrokDB(): "grok", sources.ZedDB(): "zed"}
 	for _, db := range sources.HermesDBs() {
 		out[db] = "hermes"
+	}
+	// One store per Crush project, each read from its own watermark (#4381).
+	for _, db := range sources.CrushDBs() {
+		out[db] = "crush"
 	}
 	return out
 }
@@ -4440,6 +4444,12 @@ func setDatabaseStoreWatermarks(files map[string]FileState, sessions map[string]
 	}
 	for _, db := range sources.OpenClawAgentDBs() {
 		setStoreLastUpdated(files, sessions, "openclaw", db)
+	}
+	// crush keeps one store per project and was never stamped, so one new
+	// turn re-read every session in it: 3000 replaced, 8 s (#4381). Its
+	// cursor selects sessions, so it is in rereadsWholeSessions too.
+	for _, db := range sources.CrushDBs() {
+		setStoreLastUpdated(files, sessions, "crush", db)
 	}
 }
 
