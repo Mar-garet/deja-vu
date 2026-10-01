@@ -37,8 +37,14 @@
 <aside><a href="../">&larr; deja-vu</a><div class="grp">Guide</div><a href="../guide/getting-started.html">Getting started</a><a href="../guide/harnesses.html">Harnesses</a><div class="grp">Session formats</div><a href="README.html">All formats</a><a href="aider.html">aider</a><a href="amp.html" aria-current="page">Amp</a><a href="antigravity.html">Antigravity</a><a href="cherrystudio.html">Cherry Studio</a><a href="claude-code.html">Claude Code</a><a href="cline.html">Cline</a><a href="codewhale.html">CodeWhale</a><a href="codex.html">Codex CLI</a><a href="commandcode.html">Command Code</a><a href="continue.html">Continue</a><a href="copilot.html">Copilot CLI</a><a href="crush.html">Crush</a><a href="cursor.html">Cursor</a><a href="deepseek.html">DeepSeek Harness</a><a href="gjc.html">gajae-code</a><a href="gemini.html">Gemini CLI</a><a href="goose.html">Goose</a><a href="grok.html">Grok Build</a><a href="hermes.html">Hermes</a><a href="kilocode.html">Kilo Code</a><a href="kimchi.html">Kimchi Coding</a><a href="kimi.html">Kimi Code</a><a href="kiro.html">Kiro</a><a href="omp.html">omp (Oh My Pi)</a><a href="openclaw.html">OpenClaw</a><a href="opencode.html">opencode</a><a href="pi.html">pi</a><a href="prime.html">prime-agent (PrimeIntellect)</a><a href="qwen.html">Qwen Code</a><a href="reasonix.html">Reasonix</a><a href="roo.html">Roo Code</a><a href="senpi.html">Senpi</a><a href="copilot-chat.html">VS Code Copilot Chat</a><a href="zcode.html">ZCode</a><a href="zed.html">Zed</a></aside>
 <article>
 <h1>Amp</h1>
-<p>Amp (Sourcegraph) stores one JSON object per thread under its local data</p>
-<p>directory:</p>
+<p>Amp builds from 0.0.1774963753 (2026-03-31) on keep threads on ampcode.com</p>
+<p>and write no thread files; the data directory holds only <code>bin</code>, <code>logs</code> and</p>
+<p><code>pids</code>. Reading those threads needs <code>amp threads export</code> and a login, which</p>
+<p>deja does not do, so current Amp sessions are not indexed. When the data</p>
+<p>directory is there and <code>threads/</code> holds nothing, <code>deja doctor</code> says so on the</p>
+<p>amp row and in the store&#39;s <code>note</code> in <code>--json</code> (#4355).</p>
+<p>Earlier builds stored one JSON object per thread under the local data</p>
+<p>directory, and deja reads those:</p>
 <ul>
 <li><code>${XDG_DATA_HOME:-~/.local/share}/amp/threads/</code>, on every OS: macOS and</li>
 </ul>
@@ -67,7 +73,7 @@
 <p><a href="../../fixtures/registry/amp/thread.json"><code>fixtures/registry/amp/thread.json</code></a></p>
 <p>is a minimal conformance sample with deterministic IDs, paths, and timestamps.</p>
 <p>It contains no personal data or credentials.</p>
-<p><strong>Last verified:</strong> 2026-09-02</p>
+<p><strong>Last verified:</strong> 2026-10-01</p>
 
 <hr>
 <p>deja reads this format and thirty-four others, and turns what it finds into memory your

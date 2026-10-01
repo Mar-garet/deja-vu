@@ -51,7 +51,10 @@ type doctorStore struct {
 	// the files-against-sessions pair, and a reader of --json could see
 	// neither: a store's session count of zero reads as "nothing written yet"
 	// rather than "five files never opened" (#3747).
+	// Note is why a missing store may hold no files on a machine that runs
+	// the harness: current Amp keeps its threads on ampcode.com (#4355).
 	NeverRead int    `json:"never_read,omitempty"`
+	Note      string `json:"note,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Denied    string `json:"denied,omitempty"`
 	Skipped   string `json:"skipped,omitempty"`
@@ -494,6 +497,10 @@ func collectDoctorEmbed(dir string) *doctorEmbedReport {
 	return r
 }
 
+// ampServerSideNote is what the amp row says when Amp is installed and wrote no
+// thread file (#4355).
+const ampServerSideNote = "Amp since 2026-03-31 keeps threads on ampcode.com, not on disk"
+
 func doctorStoreChecks() []doctorStoreCheck {
 	aiderPaths := []string{sources.Home()}
 	aiderPaths = append(aiderPaths, filepath.SplitList(os.Getenv("DEJA_AIDER_ROOTS"))...)
@@ -725,6 +732,9 @@ func inspectDoctorStore(check doctorStoreCheck) (doctorStore, time.Time) {
 	// order of magnitude up (#1025).
 	store.Unchecked = !whole
 	if len(check.files) == 0 {
+		if check.name == "amp" && sources.AmpThreadsServerSide() {
+			store.Note = ampServerSideNote
+		}
 		// The text rows have separated a store whose disk went away from one
 		// that was deleted since #933; a script reading this could not (#999).
 		for _, p := range check.paths {
