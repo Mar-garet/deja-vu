@@ -490,3 +490,21 @@ func TestDoctorMarksTheReasonixMCPRowSwitchedOff(t *testing.T) {
 		t.Errorf("disabled package: text row says nothing:\n%s", out)
 	}
 }
+
+// The switched-off line names the way back for the install the user made: an
+// MCP-only `deja install reasonix` told to run reasonix-auto would get
+// auto-recall it never asked for (#4409).
+func TestDoctorSwitchedOffLineKeepsAPlainInstallPlain(t *testing.T) {
+	home := reasonixTestHome(t, false)
+	installReasonixTarget(t, "reasonix", false)
+	statePath := filepath.Join(home, "plugin-packages.json")
+	b := mustRead(t, statePath)
+	writeTestFile(t, statePath, strings.Replace(string(b), `"enabled": true`, `"enabled": false`, 1))
+	note := doctorMCPSwitchedOff("reasonix")
+	if note == "" || strings.Contains(note, "reasonix-auto") {
+		t.Errorf("plain install, disabled: %q, want a line that does not point at reasonix-auto", note)
+	}
+	if !strings.Contains(note, "reasonix plugin enable deja") {
+		t.Errorf("plain install, disabled: %q, want the enable command that undoes the disable", note)
+	}
+}
