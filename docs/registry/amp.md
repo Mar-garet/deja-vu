@@ -1,7 +1,14 @@
 # Amp
 
-Amp (Sourcegraph) stores one JSON object per thread under its local data
- directory:
+Amp builds from 0.0.1774963753 (2026-03-31) on keep threads on ampcode.com
+and write no thread files; the data directory holds only `bin`, `logs` and
+`pids`. Reading those threads needs `amp threads export` and a login, which
+deja does not do, so current Amp sessions are not indexed. When the data
+directory is there and `threads/` holds nothing, `deja doctor` says so on the
+amp row and in the store's `note` in `--json` (#4355).
+
+Earlier builds stored one JSON object per thread under the local data
+directory, and deja reads those:
 
 - `${XDG_DATA_HOME:-~/.local/share}/amp/threads/`, on every OS: macOS and
   Windows use the same `~/.local/share` default, and a set `XDG_DATA_HOME` is

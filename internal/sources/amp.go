@@ -39,11 +39,27 @@ func AmpSettingsFile() string {
 // AmpRoot returns Amp's thread store root, overridable by deja without
 // changing Amp's own environment.
 func AmpRoot() string {
-	dataHome := filepath.Join(Home(), ".local", "share", "amp")
+	return filepath.Clean(EnvPath("DEJA_AMP_ROOT", filepath.Join(ampDataHome(), "threads")))
+}
+
+func ampDataHome() string {
 	if p := os.Getenv("XDG_DATA_HOME"); p != "" {
-		dataHome = filepath.Join(p, "amp")
+		return filepath.Join(p, "amp")
 	}
-	return filepath.Clean(EnvPath("DEJA_AMP_ROOT", filepath.Join(dataHome, "threads")))
+	return filepath.Join(Home(), ".local", "share", "amp")
+}
+
+// AmpThreadsServerSide reports a machine that runs Amp and has no thread file
+// to read. Amp builds from 0.0.1774963753 (2026-03-31) on keep threads on
+// ampcode.com and use the data directory only for bin, logs and pids, so the
+// directory without threads is the current client, not an unused one. Reading
+// them needs `amp threads export` and a login, which deja does not do (#4355).
+func AmpThreadsServerSide() bool {
+	if os.Getenv("DEJA_AMP_ROOT") != "" || len(AmpThreadFiles()) > 0 {
+		return false
+	}
+	fi, err := os.Stat(ampDataHome())
+	return err == nil && fi.IsDir()
 }
 
 // AmpThreadFiles lists Amp's one-thread-per-JSON files.

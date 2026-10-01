@@ -507,7 +507,8 @@ and, when it holds peer-synced work, `indexed_from_elsewhere`; a store whose
 permission walk was cut short or blocked carries `partial` or `unchecked`. A
 store holding transcripts the index has no state for at all carries `never_read`
 with how many — the count is absent when there are none, and goes away after an
-indexing pass.
+indexing pass. A store with no files can carry `note`, a sentence on why: the
+amp store says current Amp keeps its threads on ampcode.com.
 `sqlite3` and `git` are the two tools deja shells out to, each `ok` or
 `missing`, and sqlite3 can also be `broken` (with `path` and `error`) when the
 binary on PATH does not answer `select json_object('deja',1);`. sqlite3 reads every database-backed store (opencode and the schemas

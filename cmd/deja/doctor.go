@@ -1037,7 +1037,11 @@ func doctorHarnesses(w io.Writer, dir string) {
 	primeRoot := sources.PrimeRoot()
 	printFiles("prime", primeRoot, doctorExists(primeRoot), sources.PrimeSessionFiles())
 	ampRoot := sources.AmpRoot()
-	printFiles("amp", ampRoot, doctorExists(ampRoot), sources.AmpThreadFiles())
+	if sources.AmpThreadsServerSide() {
+		printRow("amp", ampRoot, doctorExists(ampRoot), doctorCount(0, "file")+", "+ampServerSideNote)
+	} else {
+		printFiles("amp", ampRoot, doctorExists(ampRoot), sources.AmpThreadFiles())
+	}
 	// CodeWhale keeps its transcripts beside its own bookkeeping — the offline
 	// queue, the ownership ledger, the checkpoint slot — so those are placed
 	// rather than counted as transcripts deja could not read.
