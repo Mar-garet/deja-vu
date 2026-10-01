@@ -37,8 +37,10 @@ the wrong root.
 - **Skill**: the shared `~/.agents/skills/deja-history/SKILL.md`.
 - **Command**: `~/.roo/commands/deja.md`, invoked as `/deja`.
 - **Auto-recall**: none; Roo has no released lifecycle hooks.
-- **Resume**: `roo --session-id <uuid>`, run in the task's workspace, for tasks
-  the CLI created. Editor tasks reopen from the extension's history UI.
+- **Resume**: `roo -w <workspace> --session-id <uuid>`, run in the task's
+  workspace, for tasks the CLI created. The `-w` matters: without it the CLI
+  looks under the real path of its cwd, and a task created with `-w /tmp/...`
+  on macOS recorded the symlinked path. Editor tasks reopen from the extension's history UI.
 - **Handoff**: paste.
 
 **Last verified:** 2026-09-07

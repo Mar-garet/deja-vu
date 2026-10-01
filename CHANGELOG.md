@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja resume` on a Roo CLI task prints `roo -w <workspace> --session-id <id>`. Without `-w` the CLI looks under the real path of its directory, so a task created with `-w /tmp/...` on macOS answered "Session not found" (#4422).
 - Roo Code, Kilo Code and Cline tasks no longer index the client's "[ERROR] You did not use a tool in your previous response!" retry prompt as something you typed; on one Roo task it was 36 of 37 user turns. The index rebuilds once (#4421).
 - Roo Code and Kilo Code task turns carry their own time. Every turn was stamped a second apart from when the task was last touched, so a long task showed up as a few seconds at its end, sometimes after the clock. The index rebuilds once (#4420).
 - Roo Code and Kilo Code tasks edited with `apply_patch`, `search_replace`, `edit_file` or `edit` leave files, edit and written-line records, so `deja blame` and `files` see those changes; only `apply_diff` and `write_to_file` did. The index rebuilds once (#4419).

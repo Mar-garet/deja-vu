@@ -46,13 +46,21 @@ func TestResumeRooSplitsTheCLIFromTheEditor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("roo CLI resume: %v", err)
 	}
-	if cmd != "roo --session-id "+id {
+	// The CLI looks a task up by the workspace it is given, and with no -w
+	// that is the real path of its cwd: a task created with -w through a
+	// symlink (/tmp on macOS) is "not found" from a plain cd (#4422).
+	if cmd != "roo -w "+work+" --session-id "+id {
 		t.Fatalf("cmd = %q", cmd)
 	}
-	// The CLI lists only tasks whose workspace it is standing in, so the
-	// command has to carry the directory the task was in.
 	if runtime.GOOS != "windows" && dir != work {
 		t.Fatalf("dir = %q, want the workspace %q", dir, work)
+	}
+	// A workspace that cannot go on the command line as one word keeps the
+	// cd alone rather than a -w that --exec would split.
+	spaced := filepath.Join(tmp, "my app")
+	sid := "01a07bf9-8882-7703-a3fa-245deb8ea753"
+	if _, cmd, err := resumeCommand(model.Session{Harness: "roo", ID: "roo-task-" + sid, Path: rooCLITask(t, cli, sid, spaced)}); err != nil || cmd != "roo --session-id "+sid {
+		t.Fatalf("spaced workspace: cmd = %q, err = %v", cmd, err)
 	}
 
 	// An editor task lives under the host's globalStorage, and the CLI never

@@ -75,9 +75,11 @@
 <li><strong>Skill</strong>: the shared <code>~/.agents/skills/deja-history/SKILL.md</code>.</li>
 <li><strong>Command</strong>: <code>~/.roo/commands/deja.md</code>, invoked as <code>/deja</code>.</li>
 <li><strong>Auto-recall</strong>: none; Roo has no released lifecycle hooks.</li>
-<li><strong>Resume</strong>: <code>roo --session-id &lt;uuid&gt;</code>, run in the task&#39;s workspace, for tasks</li>
+<li><strong>Resume</strong>: <code>roo -w &lt;workspace&gt; --session-id &lt;uuid&gt;</code>, run in the task&#39;s</li>
 </ul>
-<p>the CLI created. Editor tasks reopen from the extension&#39;s history UI.</p>
+<p>workspace, for tasks the CLI created. The <code>-w</code> matters: without it the CLI</p>
+<p>looks under the real path of its cwd, and a task created with <code>-w /tmp/...</code></p>
+<p>on macOS recorded the symlinked path. Editor tasks reopen from the extension&#39;s history UI.</p>
 <ul>
 <li><strong>Handoff</strong>: paste.</li>
 </ul>
