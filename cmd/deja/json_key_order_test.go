@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,5 +80,57 @@ func TestMarshalConfigLikeKeepsNestedOrder(t *testing.T) {
 	want := "{\n  \"b\": {\n    \"z\": 1,\n    \"a\": [\n      {\n        \"y\": 1,\n        \"x\": 2\n      },\n      {\n        \"y\": 4,\n        \"x\": 3\n      }\n    ],\n    \"m\": \"new\"\n  },\n  \"a\": 1\n}"
 	if string(got) != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Entries of one array need not list their keys alike: a hand-written hook can
+// put command before type beside one that does not. Each entry deja did not
+// touch comes back in its own order, wherever deja's own entry went in.
+func TestMarshalConfigLikeKeepsEachArrayEntrysOrder(t *testing.T) {
+	old := []byte("{\n  \"hooks\": [\n    {\n      \"type\": \"command\",\n      \"command\": \"a\"\n    },\n    {\n      \"command\": \"b\",\n      \"type\": \"command\"\n    }\n  ]\n}")
+	var root map[string]any
+	if err := json.Unmarshal(old, &root); err != nil {
+		t.Fatal(err)
+	}
+	got, err := marshalConfigLike(old, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(old) {
+		t.Errorf("round trip changed the file:\n%s", got)
+	}
+
+	hooks := root["hooks"].([]any)
+	root["hooks"] = append([]any{map[string]any{"type": "command", "command": "deja hook"}}, hooks...)
+	got, err = marshalConfigLike(old, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "{\n      \"command\": \"b\",\n      \"type\": \"command\"\n    }") {
+		t.Errorf("an entry added in front moved the order of the ones after it:\n%s", got)
+	}
+}
+
+// An entry deja edits inside, a matcher group it adds its hook to, keeps the
+// reader's order for the group and for the hooks already in it.
+func TestMarshalConfigLikeKeepsAnEditedEntrysOrder(t *testing.T) {
+	old := []byte(`{"PreToolUse":[{"matcher":"A","hooks":[{"type":"command","command":"x"}]},{"hooks":[{"command":"y","type":"command"}],"matcher":"B"}]}`)
+	var root map[string]any
+	if err := json.Unmarshal(old, &root); err != nil {
+		t.Fatal(err)
+	}
+	group := root["PreToolUse"].([]any)[1].(map[string]any)
+	group["hooks"] = append(group["hooks"].([]any), map[string]any{"type": "command", "command": "deja hook"})
+	got, err := marshalConfigLike(old, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"PreToolUse":[{"matcher":"A","hooks":[{"type":"command","command":"x"}]},{"hooks":[{"command":"y","type":"command"},{"command":"deja hook","type":"command"}],"matcher":"B"}]}`
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, got); err != nil {
+		t.Fatal(err)
+	}
+	if compact.String() != want {
+		t.Errorf("got\n%s\nwant\n%s", compact.String(), want)
 	}
 }

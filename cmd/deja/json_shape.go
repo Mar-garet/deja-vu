@@ -37,14 +37,22 @@ func marshalConfigLike(old []byte, root map[string]any) ([]byte, error) {
 	return keepInlineBlocks(old, next.Bytes()), nil
 }
 
-// keyOrder is the order a document's objects list their keys in, by path. The
-// entries of one array share a shape, so they share one order, merged first
-// seen first: an entry deja added or removed shifts positions, and a position
-// is no evidence of which entry is which.
+// keyOrder is the order a document's objects list their keys in, by path.
+// Entries of one array need not list their keys alike, and deja adding or
+// removing one shifts positions, so a position is no evidence of which entry
+// is which. An entry is matched to the reader's by its value, then by its set
+// of keys (one deja edited inside), and takes that entry's order; any other
+// takes the order of all of them, merged first seen first.
 type keyOrder struct {
-	keys []string
-	sub  map[string]*keyOrder
-	elem *keyOrder
+	keys    []string
+	sub     map[string]*keyOrder
+	elem    *keyOrder
+	entries []entryOrder
+}
+
+type entryOrder struct {
+	id    string
+	order *keyOrder
 }
 
 func (o *keyOrder) child(k string) *keyOrder {
@@ -77,11 +85,19 @@ func decodeKeyOrder(dec *json.Decoder) (*keyOrder, error) {
 	o := &keyOrder{sub: map[string]*keyOrder{}}
 	for dec.More() {
 		if d == '[' {
-			e, err := decodeKeyOrder(dec)
+			var raw json.RawMessage
+			if err := dec.Decode(&raw); err != nil {
+				return nil, err
+			}
+			e, err := decodeKeyOrder(json.NewDecoder(bytes.NewReader(raw)))
 			if err != nil {
 				return nil, err
 			}
-			o.elem = mergeKeyOrder(o.elem, e)
+			if id, ok := canonicalJSON(raw); ok && e != nil {
+				o.entries = append(o.entries, entryOrder{id, e})
+			}
+			// The merge writes into its first argument, so it gets a copy.
+			o.elem = mergeKeyOrder(o.elem, cloneKeyOrder(e))
 			continue
 		}
 		k, err := dec.Token()
@@ -102,6 +118,17 @@ func decodeKeyOrder(dec *json.Decoder) (*keyOrder, error) {
 		return nil, err
 	}
 	return o, nil
+}
+
+func cloneKeyOrder(o *keyOrder) *keyOrder {
+	if o == nil {
+		return nil
+	}
+	c := &keyOrder{keys: append([]string(nil), o.keys...), sub: make(map[string]*keyOrder, len(o.sub)), elem: cloneKeyOrder(o.elem), entries: o.entries}
+	for k, v := range o.sub {
+		c.sub[k] = cloneKeyOrder(v)
+	}
+	return c
 }
 
 func mergeKeyOrder(a, b *keyOrder) *keyOrder {
@@ -173,17 +200,14 @@ func marshalInOrder(v reflect.Value, o *keyOrder) ([]byte, error) {
 		b.WriteByte('}')
 		return b.Bytes(), nil
 	case (v.Kind() == reflect.Slice && !v.IsNil() || v.Kind() == reflect.Array) && v.Type().Elem().Kind() != reflect.Uint8:
-		var elem *keyOrder
-		if o != nil {
-			elem = o.elem
-		}
+		orders := entryOrders(v, o)
 		var b bytes.Buffer
 		b.WriteByte('[')
 		for i := 0; i < v.Len(); i++ {
 			if i > 0 {
 				b.WriteByte(',')
 			}
-			eb, err := marshalInOrder(v.Index(i), elem)
+			eb, err := marshalInOrder(v.Index(i), orders[i])
 			if err != nil {
 				return nil, err
 			}
@@ -196,6 +220,72 @@ func marshalInOrder(v reflect.Value, o *keyOrder) ([]byte, error) {
 		return []byte("null"), nil
 	}
 	return json.Marshal(v.Interface())
+}
+
+// entryOrders picks each array entry's order: the reader's entry with the same
+// value first, so one deja did not touch comes back as it was wherever deja's
+// own went in, then one with the same keys, then the merged order.
+func entryOrders(v reflect.Value, o *keyOrder) []*keyOrder {
+	out := make([]*keyOrder, v.Len())
+	if o == nil {
+		return out
+	}
+	taken := make([]bool, len(o.entries))
+	ids := make([]string, v.Len())
+	for i := range out {
+		if plain, err := json.Marshal(v.Index(i).Interface()); err == nil {
+			ids[i], _ = canonicalJSON(plain)
+		}
+		for j, e := range o.entries {
+			if !taken[j] && ids[i] != "" && e.id == ids[i] {
+				taken[j], out[i] = true, e.order
+				break
+			}
+		}
+	}
+	for i := range out {
+		if out[i] != nil {
+			continue
+		}
+		out[i] = o.elem
+		keys := mapKeySet(v.Index(i))
+		if keys == nil {
+			continue
+		}
+		for j, e := range o.entries {
+			if !taken[j] && sameKeySet(e.order.keys, keys) {
+				taken[j], out[i] = true, e.order
+				break
+			}
+		}
+	}
+	return out
+}
+
+func mapKeySet(v reflect.Value) map[string]bool {
+	for v.Kind() == reflect.Interface && !v.IsNil() {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Map || v.Type().Key().Kind() != reflect.String || v.IsNil() {
+		return nil
+	}
+	keys := make(map[string]bool, v.Len())
+	for _, k := range v.MapKeys() {
+		keys[k.String()] = true
+	}
+	return keys
+}
+
+func sameKeySet(a []string, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, k := range a {
+		if !b[k] {
+			return false
+		}
+	}
+	return true
 }
 
 // jsonIndentOf is the indent unit the file already used. Two spaces for a file
