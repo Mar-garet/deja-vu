@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- DeepSeek Harness (dsh) sessions keep the work their tools did: `bash` calls are indexed as commands, and `read`, `write`, `edit` and `str_replace_editor` as files, edits and written lines, so `deja how`, `deja blame` and `deja last --role command|files|edit` see dsh sessions. The index rebuilds once (#4291).
+- DeepSeek Harness (dsh) sessions keep the work their tools did: `bash` calls are indexed as commands with their exit status, and `read`, `read_image`, `write`, `edit` and `str_replace_editor` as files, edits and written lines, so `deja how`, `deja blame` and `deja last --role command|files|edit` see dsh sessions. An edit counts only when dsh reported it done, and a relative path is resolved against the session directory. The index rebuilds once (#4291).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).
 - `deja resume` on a Gemini CLI session runs `gemini --resume` in the directory the session ran in, read from `projects.json` / `.project_root`; from anywhere else Gemini answered "No previous sessions found for this project" (#4211).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).

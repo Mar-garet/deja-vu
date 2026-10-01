@@ -43,7 +43,11 @@ import (
 //
 // A tool call is written twice too: as a tool-call block in that
 // assistant/message and as its own `tool/call` event. Only the event is read,
-// so a call is counted once (#4291).
+// so a call is counted once (#4291). What the call is credited with waits for
+// its `tool/result`: an edit or write counts only when the result came back
+// and is not an error (a denied or aborted call comes back as one), and a bash
+// result carries its exit status as a trailing `[exit code: N]` marker rather
+// than as an error.
 //
 // Tool output is its own event, `tool/result`, whose content nests a
 // tool-result block around the text.
@@ -106,6 +110,8 @@ func ParseDeepSeekFile(path string) ([]model.Session, error) {
 	// the deltas are all there is.
 	var pending []string
 	var pendingAt time.Time
+	cwd := ""
+	calls := map[string]*deepSeekCall{}
 	flush := func() {
 		text := strings.TrimSpace(strings.Join(pending, ""))
 		pending = nil
@@ -134,8 +140,9 @@ func ParseDeepSeekFile(path string) ([]model.Session, error) {
 			if id, _ := e["id"].(string); id != "" {
 				s.ID = strings.TrimPrefix(id, "session-")
 			}
-			if cwd, _ := e["cwd"].(string); cwd != "" {
-				s.Project = projectName(cwd)
+			if dir, _ := e["cwd"].(string); dir != "" {
+				cwd = dir
+				s.Project = projectName(dir)
 			}
 			s.Touch(parseTimeAny(e["createdAt"]))
 		case "session/title":
@@ -187,11 +194,24 @@ func ParseDeepSeekFile(path string) ([]model.Session, error) {
 			flush()
 		case "tool/call":
 			flush()
-			s.Messages = append(s.Messages, deepSeekWorkRecords(data, at)...)
+			now, call := deepSeekWorkRecords(data, cwd, at)
+			if id, _ := data["callId"].(string); id != "" && call != nil {
+				// The commands are the last of what the call stands for now.
+				call.commandAt = len(s.Messages) + len(now) - call.commands
+				calls[id] = call
+			}
+			s.Messages = append(s.Messages, now...)
 		case "tool/result":
 			flush()
 			msg, _ := data["message"].(map[string]any)
-			if text := deepSeekToolText(msg["content"]); text != "" {
+			text := deepSeekToolText(msg["content"])
+			source, _ := msg["source"].(map[string]any)
+			id, _ := source["callId"].(string)
+			if call := calls[id]; call != nil && !deepSeekResultFailed(msg["content"]) {
+				delete(calls, id)
+				s.Messages = append(s.Messages, call.settle(s.Messages, text)...)
+			}
+			if text != "" {
 				s.Messages = append(s.Messages, model.Message{Role: "tool-output", Text: text, Time: at})
 				s.Touch(at)
 			}
@@ -205,30 +225,92 @@ func ParseDeepSeekFile(path string) ([]model.Session, error) {
 }
 
 // deepSeekDialect is dsh's tool vocabulary, read off its bundled tools: bash
-// (pwsh on Windows) takes `command`, and read, write and edit take `file_path`
-// with Claude's old_string/new_string/content.
+// (pwsh on Windows) takes `command`, and read, read_image, write and edit take
+// `file_path` with Claude's old_string/new_string/content.
 var deepSeekDialect = toolDialect{
 	pathKey:    "file_path",
-	pathTools:  map[string]bool{"read": true, "write": true, "edit": true, "str_replace_editor": true},
+	pathTools:  map[string]bool{"read": true, "read_image": true, "write": true, "edit": true, "str_replace_editor": true},
 	shellTools: map[string]bool{"bash": true, "pwsh": true},
 	editTools:  map[string]bool{"write": true, "edit": true, "str_replace_editor": true},
 }
 
-// deepSeekWorkRecords turns one tool/call event into command, files, edit and
-// wrote records. The call is rewritten into the tool_use shape the shared
-// extractors read, as qwen's is.
-func deepSeekWorkRecords(data map[string]any, t time.Time) []model.Message {
+// deepSeekCall is one tool call waiting for its result: the records that only
+// a clean result confirms, and where its command records sit.
+type deepSeekCall struct {
+	held []model.Message
+	// commands records sit at commandAt and after.
+	commands, commandAt int
+	background          bool
+	// view is a str_replace_editor view, whose path may be a directory; only
+	// the result says which.
+	view bool
+}
+
+// settle is what a clean result releases. The commands get the exit status the
+// result's marker names, written the way every other harness's are; a result
+// that was killed or timed out names none, and nothing is invented for it.
+func (c *deepSeekCall) settle(msgs []model.Message, text string) []model.Message {
+	if code, ok := deepSeekExitCode(text); ok && !c.background {
+		for i := c.commandAt; i < c.commandAt+c.commands && i < len(msgs); i++ {
+			if msgs[i].Role == RoleCommand && !strings.Contains(msgs[i].Text, "  → exit ") {
+				msgs[i].Text += "  → exit " + code
+			}
+		}
+	}
+	// A view of a directory answers with a listing; a file it read answers
+	// with its numbered content.
+	if c.view && !strings.HasPrefix(text, "Here's the content of ") {
+		return nil
+	}
+	return c.held
+}
+
+// deepSeekExitCode reads the status off a bash result: the last line is
+// `[exit code: N]` for a nonzero exit, and a clean exit has no marker at all.
+// A result ending in any other marker — killed, timed out, sandbox — is not
+// stamped.
+func deepSeekExitCode(text string) (string, bool) {
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	last := lines[len(lines)-1]
+	if code, ok := strings.CutPrefix(last, "[exit code: "); ok {
+		return strings.TrimSuffix(code, "]"), strings.HasSuffix(code, "]")
+	}
+	if strings.HasPrefix(last, "[") && strings.HasSuffix(last, "]") {
+		return "", false
+	}
+	return "0", true
+}
+
+// deepSeekResultFailed reports whether a tool result is marked an error.
+func deepSeekResultFailed(v any) bool {
+	blocks, _ := v.([]any)
+	for _, b := range blocks {
+		block, _ := b.(map[string]any)
+		if bad, _ := block["isError"].(bool); bad {
+			return true
+		}
+	}
+	return false
+}
+
+// deepSeekWorkRecords turns one tool/call event into work records: the files
+// and command records it stands for now, and the edit and wrote records its
+// result has to confirm. The call is rewritten into the tool_use shape the
+// shared extractors read, as qwen's is.
+func deepSeekWorkRecords(data map[string]any, cwd string, t time.Time) ([]model.Message, *deepSeekCall) {
 	name, _ := data["name"].(string)
 	args, _ := data["arguments"].(map[string]any)
 	if raw, ok := data["arguments"].(string); ok {
 		_ = json.Unmarshal([]byte(raw), &args)
 	}
 	if name == "" || args == nil {
-		return nil
+		return nil, nil
 	}
+	call := &deepSeekCall{}
 	if name == "str_replace_editor" {
 		// The editor names its file `path` and its spans old_str, new_str and
 		// file_text, and its `command` is view/create/str_replace, not a shell.
+		call.view = args["command"] == "view"
 		args = map[string]any{
 			"file_path":  args["path"],
 			"old_string": args["old_str"],
@@ -236,29 +318,43 @@ func deepSeekWorkRecords(data map[string]any, t time.Time) []model.Message {
 			"content":    args["file_text"],
 		}
 	}
+	// dsh resolves a relative path against the session's directory, and so
+	// does this: "retry.go" alone is out of reach of restore and blame.
+	if p, _ := args["file_path"].(string); p != "" && cwd != "" && !filepath.IsAbs(p) {
+		args["file_path"] = filepath.Join(cwd, p)
+	}
 	calls := []any{map[string]any{"type": "tool_use", "name": name, "input": args}}
-	var recs []model.Message
+	var now []model.Message
 	if IndexToolPaths() {
 		if p := toolPathsIn(calls, deepSeekDialect); p != "" {
-			recs = append(recs, model.Message{Role: RoleFiles, Text: p, Time: t})
+			rec := model.Message{Role: RoleFiles, Text: p, Time: t}
+			if call.view {
+				call.held = append(call.held, rec)
+			} else {
+				now = append(now, rec)
+			}
 		}
 	}
 	if IndexWrites() {
 		for _, w := range wroteRecordsIn(calls, deepSeekDialect) {
-			recs = append(recs, model.Message{Role: RoleWrote, Text: w, Time: t})
+			call.held = append(call.held, model.Message{Role: RoleWrote, Text: w, Time: t})
 		}
 	}
 	if IndexEdits() {
 		for _, span := range editSpansIn(calls, deepSeekDialect) {
-			recs = append(recs, model.Message{Role: RoleEdit, Text: span, Time: t})
+			call.held = append(call.held, model.Message{Role: RoleEdit, Text: span, Time: t})
 		}
 	}
 	if IndexCommands() {
-		for _, cmd := range commandsIn(calls, deepSeekDialect) {
-			recs = append(recs, model.Message{Role: RoleCommand, Text: cmd, Time: t})
+		cmds := commandsIn(calls, deepSeekDialect)
+		call.commands = len(cmds)
+		// A background run answers with an acknowledgement, not an exit.
+		call.background, _ = args["run_in_background"].(bool)
+		for _, cmd := range cmds {
+			now = append(now, model.Message{Role: RoleCommand, Text: cmd, Time: t})
 		}
 	}
-	return recs
+	return now, call
 }
 
 // deepSeekSpokenByUser separates what a person typed from what a plugin spliced
