@@ -94,6 +94,16 @@ func codexHookWiringState() hookWiringState {
 		var root map[string]any
 		if json.Unmarshal(b, &root) == nil {
 			st.hooks, _ = root["hooks"].(map[string]any)
+			// Codex users keep their own hooks here, so the file being there
+			// says nothing about deja: with none of deja's events in it, the
+			// trust store below is about someone else's hook (#4297).
+			if !codexHooksHoldDejas(st.hooks) {
+				st.state, st.hooks = "missing", nil
+				if codexPluginInstalled() {
+					st.state = "plugin"
+				}
+				return st
+			}
 		}
 	}
 	// Whatever codex thinks of the entry, it can still name a binary that is
@@ -171,4 +181,15 @@ func codexEventKey(event string) string {
 		out = append(out, r)
 	}
 	return string(out)
+}
+
+// codexHooksHoldDejas reports whether any event deja wires for codex is in
+// hooks.json.
+func codexHooksHoldDejas(hooks map[string]any) bool {
+	for _, h := range codexHookWiring {
+		if hookEventWired(hooks, h.Event, h.Sub) {
+			return true
+		}
+	}
+	return false
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -73,5 +74,53 @@ func TestDoctorIsQuietWhenCodexHasEveryEvent(t *testing.T) {
 	doctorCodexHook(&out)
 	if got := out.String(); strings.Contains(got, "out of date") {
 		t.Errorf("a complete wiring was reported as stale:\n%s", got)
+	}
+}
+
+// Codex users keep their own hooks in hooks.json. One that holds no entry of
+// deja's is a machine deja never wired, whatever codex's trust store says
+// about the user's hooks: the row reads missing (#4297).
+func TestDoctorCodexHookWithOnlyTheUsersHooksIsMissing(t *testing.T) {
+	for _, trust := range []string{"no config.toml", "untrusted", "trusted"} {
+		t.Run(trust, func(t *testing.T) {
+			hermeticEnv(t)
+			home := sources.CodexHome()
+			if err := os.MkdirAll(home, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			hooks := filepath.Join(home, "hooks.json")
+			own := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"/usr/local/bin/my-notes --start"}]}]}}`
+			if err := os.WriteFile(hooks, []byte(own), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg := ""
+			switch trust {
+			case "untrusted":
+				cfg = "model = \"gpt-5\"\n"
+			case "trusted":
+				cfg = "[hooks.state." + strconv.Quote(hooks+":session_start:0:0") + "]\ntrusted_hash = \"sha256:abc\"\n"
+			}
+			if cfg != "" {
+				if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if st := codexHookWiringState(); st.state != "missing" {
+				t.Errorf("state = %q, want missing", st.state)
+			}
+			var buf bytes.Buffer
+			doctorCodexHook(&buf)
+			if out := buf.String(); !strings.HasPrefix(strings.TrimSpace(out), "codex-hook   missing") || strings.Contains(out, "approve") {
+				t.Errorf("row = %q, want missing and no advice to approve someone else's hook", out)
+			}
+
+			// Control: deja's own hook beside the user's is read as before.
+			if _, err := installCodexHooks("/usr/local/bin/deja", false); err != nil {
+				t.Fatalf("install codex-auto: %v", err)
+			}
+			if st := codexHookWiringState(); st.state == "missing" {
+				t.Errorf("deja's hooks beside the user's: state %q", st.state)
+			}
+		})
 	}
 }

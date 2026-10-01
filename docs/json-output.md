@@ -523,7 +523,8 @@ events this release writes are there and some are not — the file keeps working
 and lacks everything added since) and `unreadable` for a settings file that will
 not parse. `codex-hook` also reports what codex's trust store says about the
 entry: `untrusted` (codex has never been shown it and runs no hook at all) or
-`disabled`.
+`disabled`. Either row reads `missing` when the file holds none of deja's
+events, since both files also carry the user's own hooks.
 
 `mcp` rows are `wired`, `not-wired` (the config file is there without a deja
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
