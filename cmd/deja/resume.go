@@ -185,12 +185,20 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "kiro":
 		// `kiro-cli chat --resume-id <sessionId>`, which Kiro's own docs give
 		// and two orchestrators drive — one of them noting it needs Kiro CLI
-		// 2.2.0 or newer. The IDE's sessions reopen from the app instead, and
-		// those carry a `sess_` id, so only the CLI's get a command.
+		// 2.2.0 or newer. kiro-cli finds the session from anywhere but runs it
+		// in the current directory and rewrites the session's cwd to it, so
+		// the command runs where the session did (#4305).
+		dir := existingDir(sources.KiroSessionDir(s.Path))
+		// A `sess_` id is the <workspace>/sess_<uuid> layout, which the IDE
+		// and `kiro-cli --v3` both write. V3 lists its own in session-index
+		// and takes the id back; the IDE's reopen from the app (#4307).
 		if strings.HasPrefix(s.ID, "sess_") {
-			return "", "", fmt.Errorf("session %s belongs to the Kiro IDE, which reopens it from its own history", digest.Short(s.ID))
+			if sources.KiroV3Session(s.Path) {
+				return dir, "kiro-cli --v3 chat --resume-id " + s.ID, nil
+			}
+			return "", "", fmt.Errorf("session %s belongs to the Kiro IDE, which reopens it from its own history; kiro-cli --v3 lists only its own sessions", digest.Short(s.ID))
 		}
-		return "", "kiro-cli chat --resume-id " + s.ID, nil
+		return dir, "kiro-cli chat --resume-id " + s.ID, nil
 	case "senpi":
 		// `--session <path|id>` takes a partial uuid, from senpi's own help, and
 		// `--fork` is beside it for the copy-instead-of-continue case. Measured
