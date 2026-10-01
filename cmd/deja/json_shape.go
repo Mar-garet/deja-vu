@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -10,21 +12,190 @@ import (
 //
 // The goose writer explains why it edits text rather than round-tripping: a
 // config holds settings someone wrote by hand, and re-serialising drops the
-// ordering they left there. The JSON writers do round-trip — fourteen of them
-// unmarshal into map[string]any and MarshalIndent with two spaces — so an
-// install that touched one block rewrote the whole document: a four-space file
-// came back at two, and the top-level keys came back alphabetised, because Go
-// sorts map keys (#2640).
+// ordering they left there. The JSON writers do round-trip — they unmarshal
+// into map[string]any and marshal it back — so an install that touched one
+// block rewrote the whole document: a four-space file came back at two, and
+// the keys came back alphabetised, because Go sorts map keys (#2640).
 //
-// Two of those are cheap to give back and this is the one place all fourteen
-// pass through. What it does not give back is an inline object or array staying
-// inline: that needs the writer to stop round-tripping at all.
+// The indent and the key order are cheap to give back and this is the one
+// place the writers pass through. The order is the reader's at every depth:
+// giving it back only at the top left `kiro-cli mcp add`'s command-first
+// servers with args first after an install and an uninstall (#4306). What it
+// does not give back is an inline object or array staying inline: that is
+// keepInlineBlocks.
 func marshalConfigLike(old []byte, root map[string]any) ([]byte, error) {
-	next, err := json.MarshalIndent(root, "", jsonIndentOf(old))
+	compact, err := marshalInOrder(reflect.ValueOf(root), readKeyOrder(old))
 	if err != nil {
 		return nil, err
 	}
-	return keepInlineBlocks(old, reorderTopLevel(old, next, jsonIndentOf(old))), nil
+	// MarshalIndent is Marshal and then Indent, so this is its output with
+	// the reader's order.
+	var next bytes.Buffer
+	if err := json.Indent(&next, compact, "", jsonIndentOf(old)); err != nil {
+		return nil, err
+	}
+	return keepInlineBlocks(old, next.Bytes()), nil
+}
+
+// keyOrder is the order a document's objects list their keys in, by path. The
+// entries of one array share a shape, so they share one order, merged first
+// seen first: an entry deja added or removed shifts positions, and a position
+// is no evidence of which entry is which.
+type keyOrder struct {
+	keys []string
+	sub  map[string]*keyOrder
+	elem *keyOrder
+}
+
+func (o *keyOrder) child(k string) *keyOrder {
+	if o == nil {
+		return nil
+	}
+	return o.sub[k]
+}
+
+// readKeyOrder reads the order out of the reader's file; nil, and Go's sorted
+// order, for one that does not parse even as JSONC.
+func readKeyOrder(old []byte) *keyOrder {
+	for _, b := range [][]byte{old, []byte(jsoncToJSON(string(old)))} {
+		if o, err := decodeKeyOrder(json.NewDecoder(bytes.NewReader(b))); err == nil {
+			return o
+		}
+	}
+	return nil
+}
+
+func decodeKeyOrder(dec *json.Decoder) (*keyOrder, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	d, ok := tok.(json.Delim)
+	if !ok {
+		return nil, nil
+	}
+	o := &keyOrder{sub: map[string]*keyOrder{}}
+	for dec.More() {
+		if d == '[' {
+			e, err := decodeKeyOrder(dec)
+			if err != nil {
+				return nil, err
+			}
+			o.elem = mergeKeyOrder(o.elem, e)
+			continue
+		}
+		k, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		name, _ := k.(string)
+		c, err := decodeKeyOrder(dec)
+		if err != nil {
+			return nil, err
+		}
+		if _, dup := o.sub[name]; !dup {
+			o.keys = append(o.keys, name)
+		}
+		o.sub[name] = mergeKeyOrder(o.sub[name], c)
+	}
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
+func mergeKeyOrder(a, b *keyOrder) *keyOrder {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	for _, k := range b.keys {
+		if _, ok := a.sub[k]; !ok {
+			a.keys = append(a.keys, k)
+		}
+		a.sub[k] = mergeKeyOrder(a.sub[k], b.sub[k])
+	}
+	a.elem = mergeKeyOrder(a.elem, b.elem)
+	return a
+}
+
+// marshalInOrder is json.Marshal with each object's keys in the reader's
+// order, and any key they did not have after theirs, sorted the way Marshal
+// sorts. Everything that is not a map or a list is Marshal's own.
+func marshalInOrder(v reflect.Value, o *keyOrder) ([]byte, error) {
+	for v.Kind() == reflect.Interface && !v.IsNil() {
+		v = v.Elem()
+	}
+	if v.IsValid() && v.Type().Implements(reflect.TypeOf((*json.Marshaler)(nil)).Elem()) {
+		return json.Marshal(v.Interface())
+	}
+	switch {
+	case v.Kind() == reflect.Map && v.Type().Key().Kind() == reflect.String && !v.IsNil():
+		keys := make([]string, 0, v.Len())
+		for _, k := range v.MapKeys() {
+			keys = append(keys, k.String())
+		}
+		sort.Strings(keys)
+		if o != nil {
+			rank := make(map[string]int, len(o.keys))
+			for i, k := range o.keys {
+				rank[k] = i
+			}
+			sort.SliceStable(keys, func(i, j int) bool {
+				ri, iok := rank[keys[i]]
+				rj, jok := rank[keys[j]]
+				if iok && jok {
+					return ri < rj
+				}
+				return iok && !jok
+			})
+		}
+		var b bytes.Buffer
+		b.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			kb, err := json.Marshal(k)
+			if err != nil {
+				return nil, err
+			}
+			b.Write(kb)
+			b.WriteByte(':')
+			vb, err := marshalInOrder(v.MapIndex(reflect.ValueOf(k).Convert(v.Type().Key())), o.child(k))
+			if err != nil {
+				return nil, err
+			}
+			b.Write(vb)
+		}
+		b.WriteByte('}')
+		return b.Bytes(), nil
+	case (v.Kind() == reflect.Slice && !v.IsNil() || v.Kind() == reflect.Array) && v.Type().Elem().Kind() != reflect.Uint8:
+		var elem *keyOrder
+		if o != nil {
+			elem = o.elem
+		}
+		var b bytes.Buffer
+		b.WriteByte('[')
+		for i := 0; i < v.Len(); i++ {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			eb, err := marshalInOrder(v.Index(i), elem)
+			if err != nil {
+				return nil, err
+			}
+			b.Write(eb)
+		}
+		b.WriteByte(']')
+		return b.Bytes(), nil
+	}
+	if !v.IsValid() {
+		return []byte("null"), nil
+	}
+	return json.Marshal(v.Interface())
 }
 
 // jsonIndentOf is the indent unit the file already used. Two spaces for a file
@@ -39,52 +210,6 @@ func jsonIndentOf(old []byte) string {
 		return line[:len(line)-len(trimmed)]
 	}
 	return "  "
-}
-
-// reorderTopLevel puts the keys back in the order the reader had them.
-//
-// Keys deja added are left where marshalling put them: they were not in the
-// reader's file, so there is no order of theirs to restore, and appending them
-// at the end would be a choice rather than a restoration.
-func reorderTopLevel(old, next []byte, indent string) []byte {
-	order := topLevelKeyOrder(old)
-	if len(order) < 2 {
-		return next
-	}
-	blocks, head, tail, ok := topLevelBlocks(next, indent)
-	if !ok {
-		return next
-	}
-	seen := map[string]bool{}
-	var out [][]byte
-	for _, k := range order {
-		if b, present := blocks[k]; present && !seen[k] {
-			seen[k] = true
-			out = append(out, b)
-		}
-	}
-	// Whatever marshalling produced that the reader did not have, in the order
-	// it came out.
-	for _, k := range marshalledKeyOrder(next, indent) {
-		if !seen[k] {
-			seen[k] = true
-			out = append(out, blocks[k])
-		}
-	}
-	if len(out) != len(blocks) {
-		return next
-	}
-	var b bytes.Buffer
-	b.Write(head)
-	for i, block := range out {
-		b.Write(block)
-		if i < len(out)-1 {
-			b.WriteByte(',')
-		}
-		b.WriteByte('\n')
-	}
-	b.Write(tail)
-	return b.Bytes()
 }
 
 // topLevelKeyOrder reads the keys of a JSON object in the order they appear.
@@ -111,73 +236,6 @@ func topLevelKeyOrder(b []byte) []string {
 		var skip json.RawMessage
 		if err := dec.Decode(&skip); err != nil {
 			return nil
-		}
-	}
-	return keys
-}
-
-// topLevelBlocks cuts MarshalIndent's output into one text block per key, with
-// the opening and closing braces kept aside. It relies on the shape
-// MarshalIndent produces — every top-level key starts a line at exactly one
-// indent — and gives up rather than guess on anything else.
-func topLevelBlocks(next []byte, indent string) (blocks map[string][]byte, head, tail []byte, ok bool) {
-	lines := strings.Split(strings.TrimRight(string(next), "\n"), "\n")
-	if len(lines) < 2 || lines[0] != "{" || lines[len(lines)-1] != "}" {
-		return nil, nil, nil, false
-	}
-	blocks = map[string][]byte{}
-	var cur string
-	var buf []string
-	flush := func() {
-		if cur != "" {
-			joined := strings.Join(buf, "\n")
-			blocks[cur] = []byte(strings.TrimSuffix(joined, ","))
-		}
-	}
-	for _, line := range lines[1 : len(lines)-1] {
-		if strings.HasPrefix(line, indent) && !strings.HasPrefix(line, indent+" ") && !strings.HasPrefix(line, indent+"\t") {
-			if name, isKey := topLevelKeyOf(line, indent); isKey {
-				flush()
-				cur, buf = name, []string{line}
-				continue
-			}
-		}
-		if cur == "" {
-			return nil, nil, nil, false
-		}
-		buf = append(buf, line)
-	}
-	flush()
-	return blocks, []byte("{\n"), []byte("}"), true
-}
-
-// topLevelKeyOf reads the key a MarshalIndent line opens, if it opens one.
-func topLevelKeyOf(line, indent string) (string, bool) {
-	rest := strings.TrimPrefix(line, indent)
-	if !strings.HasPrefix(rest, `"`) {
-		return "", false
-	}
-	var name string
-	end := strings.Index(rest[1:], `":`)
-	if end < 0 {
-		return "", false
-	}
-	if err := json.Unmarshal([]byte(rest[:end+2]), &name); err != nil {
-		return "", false
-	}
-	return name, true
-}
-
-// marshalledKeyOrder is topLevelKeyOrder for what marshalling produced.
-func marshalledKeyOrder(next []byte, indent string) []string {
-	var keys []string
-	lines := strings.Split(string(next), "\n")
-	for _, line := range lines {
-		if !strings.HasPrefix(line, indent) || strings.HasPrefix(line, indent+" ") || strings.HasPrefix(line, indent+"\t") {
-			continue
-		}
-		if name, ok := topLevelKeyOf(line, indent); ok {
-			keys = append(keys, name)
 		}
 	}
 	return keys
