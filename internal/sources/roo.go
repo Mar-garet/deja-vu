@@ -335,18 +335,20 @@ func parseRooShapedTask(path, harness string) ([]model.Session, error) {
 		if m.TS > 0 {
 			ts = time.UnixMilli(int64(m.TS))
 		}
+		text := clineContentText(m.Content)
 		if m.Role == "user" {
-			if tool := clineTurnToolOutput(m.Content, ts); len(tool) > 0 {
+			// A result of the XML era is a text block, not a tool_result
+			// (#4424), so the person's words are what is left beside it.
+			results, words := rooUserTurn(m.Content)
+			tool := append(clineTurnToolOutput(m.Content, ts), rooLegacyToolOutput(results, ts)...)
+			if len(tool) > 0 {
 				s.Touch(ts)
 				s.Messages = append(s.Messages, tool...)
 			}
+			text = unwrapClineTask(words)
 		} else if work := rooWorkRecords(m.Content, ts, item.Workspace); len(work) > 0 {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, work...)
-		}
-		text := clineContentText(m.Content)
-		if m.Role == "user" {
-			text = unwrapClineTask(text)
 		}
 		if text == "" {
 			continue

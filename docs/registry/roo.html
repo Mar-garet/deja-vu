@@ -61,6 +61,15 @@
 <p><code>search_replace</code>, <code>edit_file</code> and <code>edit</code>, which take <code>old_string</code> and</p>
 <p><code>new_string</code> under <code>file_path</code>, and <code>apply_patch</code>, whose paths and <code>-</code>/<code>+</code> lines</p>
 <p>are read out of the patch body.</p>
+<p>Tasks from before native tool calling (Roo 3.20, and the legacy Cline</p>
+<p>extension) keep each call as XML inside the assistant&#39;s text block —</p>
+<p><code>&lt;execute_command&gt;&lt;command&gt;…&lt;/command&gt;&lt;/execute_command&gt;</code> — and its result as</p>
+<p>user text blocks headed <code>[execute_command for &#39;…&#39;] Result:</code>. Those calls give</p>
+<p>the same records a <code>tool_use</code> block does, and the result is indexed as tool</p>
+<p>output, not as the person&#39;s words. The answer to <code>ask_followup_question</code> and</p>
+<p>the feedback on <code>attempt_completion</code> stay the person&#39;s. The retry prompt the</p>
+<p>client sends when the model used no tool (&#34;[ERROR] You did not use a tool…&#34;) is</p>
+<p>not indexed as a user turn.</p>
 <p>A call names its file relative to the workspace, so the path is resolved against</p>
 <p>the <code>workspace</code> in <code>history_item.json</code> before it is recorded — a one-segment</p>
 <p>path like <code>loop.go</code> matches no file on any machine otherwise. A task without</p>

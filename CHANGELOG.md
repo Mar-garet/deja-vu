@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Roo Code, Kilo Code and legacy Cline tasks from before native tool calling, which keep each call as XML in the assistant's text, leave command, files and edit records, and the `[execute_command for '…'] Result:` block is indexed as tool output instead of as your words. The index rebuilds once (#4424).
 - `deja uninstall` gives a JSON config back byte for byte when what is left matches the snapshot deja took before installing, so Roo's default `mcp_settings.json` keeps its empty multi-line `mcpServers` object instead of coming back as `{}` (#4423).
 - `deja resume` on a Roo CLI task prints `roo -w <workspace> --session-id <id>`. Without `-w` the CLI looks under the real path of its directory, so a task created with `-w /tmp/...` on macOS answered "Session not found" (#4422).
 - Roo Code, Kilo Code and Cline tasks no longer index the client's "[ERROR] You did not use a tool in your previous response!" retry prompt as something you typed; on one Roo task it was 36 of 37 user turns. The index rebuilds once (#4421).

@@ -25,6 +25,16 @@ nothing rather than guessing where it ended. Current Roo also offers
 `new_string` under `file_path`, and `apply_patch`, whose paths and `-`/`+` lines
 are read out of the patch body.
 
+Tasks from before native tool calling (Roo 3.20, and the legacy Cline
+extension) keep each call as XML inside the assistant's text block —
+`<execute_command><command>…</command></execute_command>` — and its result as
+user text blocks headed `[execute_command for '…'] Result:`. Those calls give
+the same records a `tool_use` block does, and the result is indexed as tool
+output, not as the person's words. The answer to `ask_followup_question` and
+the feedback on `attempt_completion` stay the person's. The retry prompt the
+client sends when the model used no tool ("[ERROR] You did not use a tool…") is
+not indexed as a user turn.
+
 A call names its file relative to the workspace, so the path is resolved against
 the `workspace` in `history_item.json` before it is recorded — a one-segment
 path like `loop.go` matches no file on any machine otherwise. A task without

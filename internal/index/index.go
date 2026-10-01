@@ -362,6 +362,10 @@ import (
 //
 // 60 also: the Roo and Cline "You did not use a tool" retry prompt is not
 // indexed as a user turn (#4421).
+//
+// 60 also: Roo, Kilo and legacy Cline tasks from the XML tool era read their
+// calls into command, files and edit records and their results as tool
+// output (#4424).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

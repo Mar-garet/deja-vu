@@ -315,18 +315,20 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 			continue
 		}
 		ts := base.Add(time.Duration(ti) * time.Second)
+		text := clineContentText(m.Content)
 		if m.Role == "user" {
-			if tool := clineTurnToolOutput(m.Content, ts); len(tool) > 0 {
+			// A result of the XML era is a text block, not a tool_result
+			// (#4424), so the person's words are what is left beside it.
+			results, words := rooUserTurn(m.Content)
+			tool := append(clineTurnToolOutput(m.Content, ts), rooLegacyToolOutput(results, ts)...)
+			if len(tool) > 0 {
 				s.Touch(ts)
 				s.Messages = append(s.Messages, tool...)
 			}
+			text = unwrapClineTask(words)
 		} else if work := rooWorkRecords(m.Content, ts, workspace); len(work) > 0 {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, work...)
-		}
-		text := clineContentText(m.Content)
-		if m.Role == "user" {
-			text = unwrapClineTask(text)
 		}
 		if text == "" {
 			continue
@@ -379,8 +381,13 @@ var rooDialect = toolDialect{
 func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string) []model.Message {
 	var blocks []any
 	if json.Unmarshal(raw, &blocks) != nil {
-		return nil
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			return nil
+		}
+		blocks = []any{map[string]any{"type": "text", "text": s}}
 	}
+	blocks = rooWithXMLCalls(blocks)
 	var out []model.Message
 	if IndexToolPaths() {
 		if p := rooResolvePaths(rooPatchPaths(blocks, toolPathsIn(blocks, rooDialect)), workspace); p != "" {
