@@ -532,7 +532,9 @@ reads `missing`, since both files also carry the user's own hooks; for
 `mcp` rows are `wired`, `not-wired` (the config file is there without a deja
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
-start the server.
+start the server, and `switched_off` when the harness has turned the server
+off: for Reasonix, deja's plugin package has no enabled record in
+`plugin-packages.json`, which is what `reasonix plugin disable deja` leaves.
 
 `commands` is the third thing an install writes: the `/deja` a user types, one
 row per harness. `state` is `written`, `missing`, `someone else's` for a file

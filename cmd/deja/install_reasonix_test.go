@@ -453,3 +453,40 @@ func TestInstallReasonixPlainKeepsAnInstalledRuntime(t *testing.T) {
 		}
 	}
 }
+
+// The MCP server rides in the same plugin package, so `reasonix plugin
+// disable deja` stops it too. The auto-recall row turned stale and the MCP
+// row kept reading wired (#4409).
+func TestDoctorMarksTheReasonixMCPRowSwitchedOff(t *testing.T) {
+	home := reasonixTestHome(t, false)
+	installReasonixTarget(t, "reasonix-auto", false)
+	row := func() doctorMCPStatus {
+		for _, r := range collectDoctorMCP() {
+			if r.Name == "reasonix" {
+				return r
+			}
+		}
+		t.Fatal("doctor has no reasonix MCP row")
+		return doctorMCPStatus{}
+	}
+	text := func() string {
+		var b strings.Builder
+		doctorMCP(&b)
+		return b.String()
+	}
+	if r := row(); r.State != "wired" || r.SwitchedOff {
+		t.Fatalf("enabled package: %+v, want wired and on", r)
+	}
+	if strings.Contains(text(), "switched off") {
+		t.Fatalf("enabled package reads switched off:\n%s", text())
+	}
+	statePath := filepath.Join(home, "plugin-packages.json")
+	b := mustRead(t, statePath)
+	writeTestFile(t, statePath, strings.Replace(string(b), `"enabled": true`, `"enabled": false`, 1))
+	if r := row(); !r.SwitchedOff {
+		t.Errorf("disabled package: %+v, want switched_off", r)
+	}
+	if out := text(); !strings.Contains(out, "switched off") {
+		t.Errorf("disabled package: text row says nothing:\n%s", out)
+	}
+}

@@ -329,6 +329,9 @@ type doctorMCPStatus struct {
 	// BinaryMissing is the auto_recall field of the same name: the entry is
 	// wired and names a deja binary that is no longer there (#4177).
 	BinaryMissing bool `json:"binary_missing,omitempty"`
+	// SwitchedOff marks a wired entry the harness has turned off, so it will
+	// not start the server.
+	SwitchedOff bool `json:"switched_off,omitempty"`
 }
 
 type doctorCommandStatus struct {
@@ -936,6 +939,9 @@ func collectDoctorMCP() []doctorMCPStatus {
 		// same as able to start.
 		if state == "wired" && dejaCommandMissing(config.path) != "" {
 			row.BinaryMissing = true
+		}
+		if state == "wired" && doctorMCPSwitchedOff(config.name) != "" {
+			row.SwitchedOff = true
 		}
 		out = append(out, row)
 	}

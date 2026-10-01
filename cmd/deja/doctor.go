@@ -1375,6 +1375,9 @@ func doctorMCP(w io.Writer) {
 				fmt.Fprintf(w, "  %-12s %s\n", "", note)
 			}
 		}
+		if note := doctorMCPSwitchedOff(c.name); note != "" && status == "wired" {
+			fmt.Fprintf(w, "  %-12s %s\n", "", note)
+		}
 		if note := doctorWiringNote(c.name); note != "" && status == "wired" {
 			fmt.Fprintf(w, "  %-12s %s\n", "", note)
 		}

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja doctor` no longer calls Reasonix's MCP server wired after `reasonix plugin disable deja`. The server rides in deja's plugin package, so Reasonix stops starting it too; the row now carries a line saying it is switched off and `"switched_off": true` in `--json`, as the auto-recall row already went stale (#4409).
 - `deja resume` on a prime-agent session `cd`s into the directory it ran in. prime-agent resumes a session only from its own project, so the bare `prime-agent --resume <id>` failed anywhere else with "belongs to a different project" (#4408).
 - prime-agent `rlm.spawn` children are indexed as subagents of the session that spawned them. prime writes them under `session-artifacts/<parent>/sub-<n>/`, beside `sessions/`, and deja read only `sessions/`, so whatever a child ran and read was missing from search and `show` (#4407).
 - An omp session indexed while it was still running stays one session. omp writes a title line before the session header, so the turns appended after an index pass went to a second session named after the file, and `deja resume` printed that name. The index rebuilds once (#4406).
