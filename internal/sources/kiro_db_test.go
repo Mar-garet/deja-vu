@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -119,5 +120,41 @@ func TestKiroClaimsItsDB(t *testing.T) {
 	}
 	if ss := LoadKiro(); len(ss) != 1 {
 		t.Errorf("LoadKiro = %d sessions, want the store's one", len(ss))
+	}
+}
+
+// kiro-cli creates data.sqlite3 on first launch and conversations_v2 only once
+// a headless chat is saved, so a fresh install has a store without the table.
+// That is an empty store, not a schema change to report.
+func TestKiroDBWithoutTheTableIsEmpty(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not installed")
+	}
+	db := filepath.Join(t.TempDir(), "data.sqlite3")
+	cmd := exec.Command("sqlite3", db, "CREATE TABLE state (key TEXT PRIMARY KEY, value BLOB);")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("seed: %v: %s", err, out)
+	}
+	ss, err := ParseKiroDB(db)
+	if err != nil || len(ss) != 0 {
+		t.Fatalf("ParseKiroDB = %d sessions, %v; want none and no error", len(ss), err)
+	}
+}
+
+// Without the sqlite3 CLI the store is there and unread, which is the missing
+// tool to name, not a format to report.
+func TestKiroDBNamesTheMissingSQLite3(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "data.sqlite3")
+	if err := os.WriteFile(db, []byte("SQLite format 3\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEJA_KIRO_DB", db)
+	t.Setenv("PATH", dir)
+	if SQLite3Available() {
+		t.Skip("sqlite3 still resolvable")
+	}
+	if got := SkipReason("kiro"); got != SQLite3NotFound {
+		t.Errorf("SkipReason(kiro) = %q, want %q", got, SQLite3NotFound)
 	}
 }

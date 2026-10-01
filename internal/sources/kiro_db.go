@@ -122,6 +122,12 @@ func parseKiroDBWhere(db, where string) ([]model.Session, error) {
 	}
 	if err := cmd.Wait(); err != nil {
 		if rows == 0 {
+			// kiro-cli creates the file on first launch and the table only
+			// when a headless chat is saved: a fresh install is an empty
+			// store, not a schema change to report.
+			if !kiroDBHasTable(db) {
+				return nil, nil
+			}
 			// No rows can be an empty table or a schema sqlite3 refused, and
 			// only the second is worth saying.
 			return nil, fmt.Errorf("kiro: query failed, the store schema may have changed: %w", err)
@@ -129,6 +135,13 @@ func parseKiroDBWhere(db, where string) ([]model.Session, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// kiroDBHasTable reports whether the store has conversations_v2 yet. A query
+// that cannot run says true, so a store sqlite3 refuses is still reported.
+func kiroDBHasTable(db string) bool {
+	out, err := sqliteOutput(db, "select count(*) from sqlite_master where type='table' and name='conversations_v2'")
+	return err != nil || strings.TrimSpace(string(out)) != "0"
 }
 
 // kiroDBHistory appends a conversation's turns. A turn without its own stamp
