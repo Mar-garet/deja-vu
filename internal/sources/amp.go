@@ -72,11 +72,13 @@ type ampThread struct {
 	Messages []struct {
 		Role    string          `json:"role"`
 		Content json.RawMessage `json:"content"`
-		Meta    struct {
-			SentAt json.Number `json:"sentAt"`
+		// Either shape, epoch or ISO: a type the struct did not expect failed
+		// the whole thread, and these times are optional.
+		Meta struct {
+			SentAt any `json:"sentAt"`
 		} `json:"meta"`
 		Usage struct {
-			Timestamp string `json:"timestamp"`
+			Timestamp any `json:"timestamp"`
 		} `json:"usage"`
 	} `json:"messages"`
 }

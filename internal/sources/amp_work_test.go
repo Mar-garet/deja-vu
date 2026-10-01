@@ -67,3 +67,27 @@ func TestParseAmpKeepsToolCallsAndMessageTimes(t *testing.T) {
 		t.Errorf("session updated %v, want the last turn %v", s.Updated, last.Time)
 	}
 }
+
+// The per-turn times are optional: a thread whose usage.timestamp is an epoch
+// number, or whose sentAt is a string, failed to decode whole and lost every
+// turn, where before #4356 the reader never looked at either field.
+func TestParseAmpKeepsAThreadWhoseTurnTimesDrift(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "T-drift.json")
+	data := `{"v":7,"id":"T-drift","created":1774950000000,"title":"drift",
+"messages":[
+{"role":"user","content":[{"type":"text","text":"why does the retry loop spin"}],"meta":{"sentAt":"2026-03-31T09:40:01Z"}},
+{"role":"assistant","content":[{"type":"text","text":"It never stops."}],"usage":{"timestamp":1774950005000}}]}`
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseAmpFile(path)
+	if err != nil || len(ss) != 1 || len(ss[0].Messages) != 2 {
+		t.Fatalf("ParseAmpFile = %v, %v", ss, err)
+	}
+	if got := ss[0].Messages[0].Time; !got.Equal(time.Date(2026, 3, 31, 9, 40, 1, 0, time.UTC)) {
+		t.Errorf("user turn at %v, want its string sentAt", got)
+	}
+	if got := ss[0].Messages[1].Time; !got.Equal(time.UnixMilli(1774950005000)) {
+		t.Errorf("assistant turn at %v, want its numeric usage.timestamp", got)
+	}
+}
