@@ -347,8 +347,8 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 			// record the JSONL harnesses write for the same thing (#4324).
 			flush()
 			afterOutput = true
-			out := strings.TrimSpace(strings.TrimPrefix(line, ">"))
-			if f := aiderOutputFile(out); f != "" && IndexToolPaths() && !strings.ContainsAny(f, "\n\r") {
+			said := strings.TrimSpace(strings.TrimPrefix(line, ">"))
+			if f := aiderOutputFile(said); f != "" && IndexToolPaths() && !strings.ContainsAny(f, "\n\r") {
 				if fileRoot != "" && !filepath.IsAbs(f) {
 					f = filepath.Join(fileRoot, f)
 				}
@@ -356,7 +356,7 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 					seenFiles[f] = true
 					cur.Messages = append(cur.Messages, model.Message{Role: RoleFiles, Text: f, Time: cur.Started})
 				}
-			} else if cmd, ok := strings.CutPrefix(out, "Running "); ok && IndexCommands() && worthIndexing(cmd) {
+			} else if cmd, ok := strings.CutPrefix(said, "Running "); ok && IndexCommands() && worthIndexing(cmd) {
 				cur.Messages = append(cur.Messages, model.Message{Role: RoleCommand, Text: cmd, Time: cur.Started})
 			}
 		case strings.TrimSpace(line) == "":
