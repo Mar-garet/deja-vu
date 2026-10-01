@@ -14,23 +14,31 @@ import (
 	"github.com/vshulcz/deja-vu/internal/model"
 )
 
-// GooseDataDir is where goose keeps its data on this platform — the first of
-// GooseDataDirs, which is the one goose itself would write to.
-func GooseDataDir() string { return GooseDataDirs()[0] }
+// GooseDataDir is where goose keeps its data on this platform: the first of
+// GooseDataDirs that exists, or the one goose itself would write to when none
+// does. install --auto and doctor key on it, so naming a candidate that is not
+// on disk skipped goose on a mac that had used it (#4267).
+func GooseDataDir() string {
+	dirs := GooseDataDirs()
+	for _, dir := range dirs {
+		if dirExists(dir) {
+			return dir
+		}
+	}
+	return dirs[0]
+}
 
 // GooseDataDirs are the data roots a goose install can have, the current one
 // first. goose resolves its own directories through etcetera's
 // choose_app_strategy with author and top-level domain "Block"
-// (crates/goose/src/config/paths.rs): the Apple strategy on macOS, XDG on
-// Linux, the Windows strategy on Windows. So on a mac the sessions are under
-// `~/Library/Application Support/Block/goose`, which goose's own comment
-// names, and reading only `~/.local/share/goose` there reported `goose
-// missing` to every mac user who had used it (#3642).
+// (crates/goose/src/config/paths.rs). That is the Windows strategy on Windows
+// and XDG everywhere else, macOS included: the Apple layout is
+// choose_native_strategy, which goose does not call. goose 1.46 on a mac keeps
+// its sessions in `~/.local/share/goose` (#4267); #3642 read it the other way.
 //
-// The older locations stay as candidates rather than as the answer: an install
-// that predates the change still has its sessions there — this machine is one
-// of them, which is why a single-root reader looked correct from inside it.
-// Every directory that exists is read.
+// The other locations stay as candidates rather than as the answer: an install
+// with a store under one of them keeps being read. Every directory that exists
+// is read.
 func GooseDataDirs() []string {
 	// GOOSE_PATH_ROOT relocates config, data and state together; a user who
 	// sets it has every session under it and none where we would look.
@@ -60,6 +68,7 @@ func GooseDataDirs() []string {
 			}
 		}
 	}
+	xdgRoots := []string{filepath.Join(xdg, "goose"), filepath.Join(xdg, "Block", "goose")}
 	switch runtime.GOOS {
 	case "windows":
 		appdata := os.Getenv("APPDATA")
@@ -67,13 +76,14 @@ func GooseDataDirs() []string {
 			appdata = filepath.Join(Home(), "AppData", "Roaming")
 		}
 		add(filepath.Join(appdata, "Block", "goose", "data"))
+		// An older goose wrote XDG whatever the platform.
+		add(xdgRoots...)
 	case "darwin":
 		support := filepath.Join(Home(), "Library", "Application Support")
-		add(filepath.Join(support, "Block", "goose"), filepath.Join(support, "goose"))
+		add(xdgRoots[0], filepath.Join(support, "Block", "goose"), filepath.Join(support, "goose"), xdgRoots[1])
+	default:
+		add(xdgRoots...)
 	}
-	// XDG is the current answer on Linux and a real fallback everywhere else:
-	// an older goose wrote here whatever the platform.
-	add(filepath.Join(xdg, "goose"), filepath.Join(xdg, "Block", "goose"))
 	return out
 }
 
