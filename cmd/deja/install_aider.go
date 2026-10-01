@@ -29,12 +29,15 @@ func aiderContextPath() string {
 	return filepath.Join(base, "deja", "aider-context.md")
 }
 
+func aiderConfPath() string {
+	return filepath.Join(homeDir(), ".aider.conf.yml")
+}
+
 func installAider(_ string, uninstall bool) (installResult, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	if _, err := os.UserHomeDir(); err != nil {
 		return installResult{}, err
 	}
-	path := filepath.Join(home, ".aider.conf.yml")
+	path := aiderConfPath()
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -155,6 +158,32 @@ func yamlFlowItems(v string) ([]string, bool) {
 		}
 	}
 	return items, true
+}
+
+// aiderConfReadsContext reports whether the top-level read: key of an aider
+// config names deja's context file, as a block-list item, a scalar or inside a
+// flow list.
+func aiderConfReadsContext(s string) bool {
+	inRead := false
+	for _, l := range strings.Split(s, "\n") {
+		l = strings.TrimRight(l, " \t\r")
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		if l[0] != ' ' && l[0] != '\t' && !strings.HasPrefix(t, "- ") {
+			v, ok := strings.CutPrefix(l, "read:")
+			inRead = ok
+			if ok && strings.Contains(v, "aider-context.md") {
+				return true
+			}
+			continue
+		}
+		if inRead && strings.HasPrefix(t, "- ") && strings.Contains(t, "aider-context.md") {
+			return true
+		}
+	}
+	return false
 }
 
 func removeAiderReadEntry(s string) string {

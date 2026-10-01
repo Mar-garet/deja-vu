@@ -514,6 +514,9 @@ signal. Both degrade quietly, which is why the report names them.
 without anyone asking, one row per harness deja can wire. `state` is `wired`,
 `stale` (the file is there and nothing in it calls deja, which is how a dead
 integration looks), `missing`, or `plugin` (the harness carries its own).
+The `aider` row is `stale` when the context file is there and `~/.aider.conf.yml`
+has no `read:` entry for it, and `broken` when the entry is there and the file
+is not, which makes aider print an error on every start.
 `binary_missing` marks a row whose entries name a deja binary that is no longer
 there — what an upgrade leaves behind, with every hook exiting 127.
 
