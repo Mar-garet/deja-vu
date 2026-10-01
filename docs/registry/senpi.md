@@ -34,6 +34,13 @@ of `@code-yeongyu/senpi` every surface answered on senpi's own screen.
 
 ## Known quirks and drift
 
+- **Commands run inside `eval` cells.** With codemode loaded, Senpi's
+  default, `bash`, `grep` and `powershell` leave the model's tool list and run
+  only as `tool.bash(...)` in a cell. The transcript's call is then `eval`
+  with JS, and what ran is on the result, under
+  `details.toolCalls[].args`; deja reads the commands, files and edits from
+  there. The cell's text is a JSON string, `{"text":"…"}`, and is read as the
+  text it wraps (#4425).
 - **Senpi's first run moves `~/.pi/agent` to `~/.senpi/agent`** — the whole
   directory, sessions and config and extensions, and it prints one line about
   it. So installing senpi on a machine that has pi leaves pi's own directory

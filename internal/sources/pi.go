@@ -92,6 +92,9 @@ func (r *piReader) line(m map[string]any) {
 		t := parseTimeAny(m["timestamp"])
 		s.Touch(t)
 		txt := textFromContent(msg["content"])
+		if name, _ := msg["toolName"].(string); role == "toolResult" && name == "eval" {
+			txt = evalText(txt)
+		}
 		if txt != "" {
 			s.Messages = append(s.Messages, model.Message{Role: outRole, Text: txt, Time: t})
 		}

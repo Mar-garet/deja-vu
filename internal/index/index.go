@@ -361,6 +361,8 @@ import (
 // 60 also: pi, omp, OpenClaw, gjc, prime, senpi and Kimchi sessions carry
 // their tool calls as files, commands and edits (#4113); a finished
 // transcript is not re-read, so a rebuild.
+// 60 also: a Senpi eval cell's commands, reads and edits are indexed, and its
+// result text is unwrapped (#4425).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
