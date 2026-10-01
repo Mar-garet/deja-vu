@@ -277,6 +277,17 @@ func doctorContinueWired(path string) bool {
 // itself follows the block (#2614, #2727). "Anywhere below the top level" was
 // the other end of the same mistake: `deja:` in another server's env, or in a
 // comment-shaped example under `notes:`, then read as a wired server (#2730).
+// yamlKeyLine reports whether line is the mapping key `key` (with its colon)
+// and nothing else — a trailing comment or blanks allowed, as YAML allows
+// them. An exact match missed `mcp_servers:  # mine` (#4289).
+func yamlKeyLine(line, key string) bool {
+	line = strings.TrimRight(line, "\r\n")
+	if i := strings.Index(line, "#"); i > 0 && (line[i-1] == ' ' || line[i-1] == '\t') {
+		line = line[:i]
+	}
+	return strings.TrimSpace(line) == key
+}
+
 func yamlHasChildKey(path, parent, key string) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -290,7 +301,7 @@ func yamlHasChildKey(path, parent, key string) bool {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		if strings.TrimSpace(line) == parent && yamlIndentWidth(line) == 0 {
+		if yamlKeyLine(line, parent) && yamlIndentWidth(line) == 0 {
 			inBlock, child = true, -1
 			continue
 		}

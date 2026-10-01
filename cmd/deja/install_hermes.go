@@ -220,8 +220,7 @@ func installHermesMCP(exe string, uninstall bool) (installResult, error) {
 		}
 		entry := pad + "deja:\n" + pad + pad + "command: " + yamlQuote(exe) + "\n" +
 			pad + pad + "args:\n" + pad + pad + pad + "- mcp\n" + pad + pad + "enabled: true\n"
-		if i := strings.Index(next, "\nmcp_servers:\n"); i >= 0 {
-			at := i + len("\nmcp_servers:\n")
+		if at := hermesMCPKeyEnd(next); at >= 0 {
 			next = next[:at] + entry + next[at:]
 		} else {
 			if next != "" && !strings.HasSuffix(next, "\n") {
@@ -260,7 +259,7 @@ func removeHermesMCPBlock(s string) string {
 	child := -1
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-		if strings.TrimSpace(line) == "mcp_servers:" && yamlIndentWidth(line) == 0 {
+		if yamlKeyLine(line, "mcp_servers:") && yamlIndentWidth(line) == 0 {
 			inBlock, child = true, -1
 			out = append(out, line)
 			continue
@@ -303,6 +302,25 @@ func removeHermesMCPBlock(s string) string {
 	return strings.Join(out, "\n")
 }
 
+// hermesMCPKeyEnd is where the first entry under a top-level `mcp_servers:`
+// goes — just past the key's line — or -1 when the file has none. The key may
+// open the file, carry a comment or trailing blanks; searching for
+// "\nmcp_servers:\n" missed all three and a second key was appended, which
+// YAML resolves to the last one: the reader's servers vanished (#4289).
+func hermesMCPKeyEnd(s string) int {
+	at := 0
+	for _, line := range strings.SplitAfter(s, "\n") {
+		if yamlIndentWidth(line) == 0 && yamlKeyLine(line, "mcp_servers:") {
+			if !strings.HasSuffix(line, "\n") {
+				return -1
+			}
+			return at + len(line)
+		}
+		at += len(line)
+	}
+	return -1
+}
+
 // hermesBlockIndent is the indent the servers under `mcp_servers:` are written
 // at, and whether there is a block to read one from. deja wrote its own entry
 // at two whatever the file used, so on a config indented at three or four the
@@ -311,7 +329,7 @@ func removeHermesMCPBlock(s string) string {
 func hermesBlockIndent(s string) (string, bool) {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		if strings.TrimSpace(line) != "mcp_servers:" || yamlIndentWidth(line) != 0 {
+		if !yamlKeyLine(line, "mcp_servers:") || yamlIndentWidth(line) != 0 {
 			continue
 		}
 		for _, next := range lines[i+1:] {
