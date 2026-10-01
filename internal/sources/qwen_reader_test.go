@@ -155,11 +155,34 @@ func TestShellExitCodeIsOnlyTheResultsOwnFooter(t *testing.T) {
 		"Command: make\nDirectory: (root)\nOutput: x\nError: (none)\nExit Code: 99999999999999999999\nSignal: (none)\nProcess Group PGID: 5":                                                                                                0,
 		"Output: x\nExit Code: 3\nExit Code: 1\nProcess Group PGID: 9":              1,
 		"Output: x\nExit Code: 3\nSignal: 9\nSignal: (none)\nProcess Group PGID: 9": 0,
-		// Unknown text after a blank line counts as a note only on a result
-		// that is Qwen's own block.
+		// Text after a blank line is skipped only on Qwen's own block.
 		"Command: make\nDirectory: (root)\nOutput: x\nError: (none)\nExit Code: 6\nSignal: (none)\nProcess Group PGID: 5\n\nSome later note.": 6,
 		"Output: x\nExit Code: 6\nProcess Group PGID: 5\n\nSome later output.":                                                                0,
-		"Output: x\nExit Code: 6\nProcess Group PGID: 5\n\nAI attribution note skipped: payload exceeded the 30 KB size cap.":                 6,
+		"Output: x\nExit Code: 6\nProcess Group PGID: 5\n\nAI attribution note skipped: payload exceeded the 30 KB size cap.":                 0,
+	}
+	for out, want := range cases {
+		if got := geminiExitCode(out); got != want {
+			t.Errorf("geminiExitCode(%q) = %d, want %d", out, got, want)
+		}
+	}
+}
+
+// deja's own PostToolUseFailure context lands under Qwen's notes, after a
+// blank line, in as many paragraphs as it has. On Qwen's block — and on a
+// truncated one, which keeps the tail — every paragraph under the footer is
+// skipped; anywhere else the footer is the tail or there is none (#4255).
+func TestQwenExitCodeSurvivesHookContextUnderTheNotes(t *testing.T) {
+	q := func(out, code string) string {
+		return "Command: make test\nDirectory: (root)\nOutput: " + out + "\nError: (none)\nExit Code: " + code + "\nSignal: (none)\nProcess Group PGID: 4242"
+	}
+	recall := "\n\n<deja-recall>\nRecalled history from prior sessions.\ndeja: this error came up before\n</deja-recall>"
+	cases := map[string]int{
+		q("x", "3") + "\n\nNote: this foreground command ran for 75s. Next time pass `is_background: true`." + recall:                        3,
+		q("x", "3") + "\n\nAI attribution note skipped: payload exceeded the 30 KB size cap. Co-authored-by trailer is unaffected." + recall: 3,
+		q("x", "3") + "\n\nctx one\n\nctx two": 3,
+		"Tool output was too large and has been truncated.\nThe full output has been saved to: /tmp/x.output\n\nTruncated part of the output:\n" + q("first", "1")[:40] + "\n\n---\n... [CONTENT TRUNCATED] ...\n---\n\nlast\nError: (none)\nExit Code: 2\nSignal: (none)\nProcess Group PGID: 7" + recall: 2,
+		"Command timed out after 120000ms before it could complete. Below is the output before it timed out:\nstep\nExit Code: 7\nSignal: (none)\nProcess Group PGID: 1\n\nNote: this foreground command ran for 75s.":                                                                                     0,
+		"Command was cancelled by user before it could complete. Below is the output before it was cancelled:\nstep\nExit Code: 7\nSignal: (none)\nProcess Group PGID: 1\n\nAI attribution note skipped: x.":                                                                                               0,
 	}
 	for out, want := range cases {
 		if got := geminiExitCode(out); got != want {

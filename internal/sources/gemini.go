@@ -343,11 +343,15 @@ var geminiExit = regexp.MustCompile(`^Exit Code: (\d+)$`)
 // the process group — so a line the command printed itself is not taken for
 // it. 0 when the footer carries none.
 //
-// Qwen writes the same footer, Exit Code always, at the end of a block that
-// starts "Command: ", and may then add notes after a blank line: a hint once a
-// foreground command has run for half its timeout, an attribution warning on
-// git commit (#4255). A timeout or a cancel has no footer at all, so a footer
-// further up is the command's own output, unless what follows it is a note.
+// Qwen writes the same footer, Exit Code and process group always, at the end
+// of a block that starts "Command: " (or "Tool output was too large…" when it
+// truncated the block, keeping its tail). After it, past a blank line, come
+// notes — a hint for a long foreground run, an attribution warning on git
+// commit — and the context deja's own failure hook adds, in any number of
+// paragraphs (#4255). So on Qwen's block every paragraph under the footer is
+// skipped. Anywhere else — Gemini, or a Qwen timeout or cancel, which have no
+// footer — the footer is the tail or there is none, and one the command
+// printed further up is its output.
 func geminiExitCode(out string) int {
 	lines := strings.Split(out, "\n")
 	for i := range lines {
@@ -358,7 +362,7 @@ func geminiExitCode(out string) int {
 		if l == "" || l == "<untrusted_context>" {
 			continue
 		}
-		qwenBlock = strings.HasPrefix(l, "Command: ")
+		qwenBlock = strings.HasPrefix(l, "Command: ") || strings.HasPrefix(l, qwenTruncatedPrefix)
 		break
 	}
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -366,42 +370,29 @@ func geminiExitCode(out string) int {
 		if l == "" || l == "</untrusted_context>" || l == qwenSaveFailedNote {
 			continue
 		}
-		if geminiFooterRank(l) >= 0 {
+		if !qwenBlock {
+			if geminiFooterRank(l) < 0 {
+				return 0
+			}
 			return geminiFooterExit(lines[:i+1])
 		}
-		// A paragraph after a blank line that is a note Qwen appends, or
-		// anything after Qwen's own block, is skipped; anything else means
-		// the result ends in output, not in a footer.
-		p := i
-		for p > 0 && lines[p-1] != "" {
-			p--
+		if strings.HasPrefix(l, "Process Group PGID: ") {
+			return geminiFooterExit(lines[:i+1])
 		}
-		above := p - 1
-		for above >= 0 && lines[above] == "" {
-			above--
+		// Not the footer's last line: skip this paragraph.
+		for i > 0 && lines[i-1] != "" {
+			i--
 		}
-		if p == 0 || above < 0 {
-			return 0
-		}
-		afterQwenFooter := qwenBlock && strings.HasPrefix(lines[above], "Process Group PGID: ")
-		if !afterQwenFooter && !qwenNote(lines[p]) {
-			return 0
-		}
-		i = p
 	}
 	return 0
 }
 
+// qwenTruncatedPrefix opens a shell result Qwen cut down to its head and tail.
+const qwenTruncatedPrefix = "Tool output was too large and has been truncated"
+
 // qwenSaveFailedNote is the line Qwen puts straight under a truncated result
 // when it could not save the whole output to a file.
 const qwenSaveFailedNote = "[Note: Could not save full output to file]"
-
-// qwenNote reports whether a paragraph starting with l is one of the notes
-// Qwen 0.20 appends after the shell footer.
-func qwenNote(l string) bool {
-	return strings.HasPrefix(l, "Note: this foreground command ran for ") ||
-		strings.HasPrefix(l, "AI attribution note skipped: ")
-}
 
 // geminiFooterOrder is the order the footer's lines are written in.
 var geminiFooterOrder = []string{"Exit Code: ", "Signal: ", "Background PIDs: ", "Process Group PGID: "}
