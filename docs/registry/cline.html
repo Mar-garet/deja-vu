@@ -43,7 +43,7 @@
 <li>modern CLI/SDK: <code>${CLINE_SESSION_DATA_DIR:-${CLINE_DATA_DIR:-${CLINE_DIR:-~/.cline}/data}/sessions}/&lt;sessionId&gt;/&lt;sessionId&gt;.messages.json</code> with a <code>&lt;sessionId&gt;.json</code> manifest beside it</li>
 <li>legacy VS Code extension (<code>saoudrizwan.claude-dev</code>): <code>&lt;host globalStorage&gt;/tasks/&lt;taskId&gt;/api_conversation_history.json</code> with <code>state/taskHistory.json</code> supplying title, cwd and timestamp; Code, Code Insiders, VSCodium, Cursor and Windsurf host roots are probed</li>
 <li><strong>Read overrides</strong>: <code>DEJA_CLINE_ROOT</code> (modern sessions dir), <code>DEJA_CLINE_ROOTS</code> (path list of legacy extension roots)</li>
-<li><strong>Format</strong>: whole-file JSON rewritten on change (not append-only) — full re-parse after atomic replacement, no incremental offsets</li>
+<li><strong>Format</strong>: whole-file JSON rewritten on change (not append-only) — full re-parse after atomic replacement, no incremental offsets. A change to the manifest alone, as <code>cline history update --title</code> makes, re-reads the session too (#4319)</li>
 </ul>
 <p><code>user</code>/<code>assistant</code> turns are indexed for their text, from string content or</p>
 <p><code>type:&#34;text&#34;</code> blocks; thinking, images, compaction artifacts and non-lead agents</p>

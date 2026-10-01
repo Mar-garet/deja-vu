@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja install cline` writes a `package.json` beside the Cline plugin, so Cline loads the bundled `deja-history` skill and lists the plugin as `deja` instead of `index` (#4316).
 - `deja doctor` reports the Cline skill as guidance `written` (or `missing`) instead of `unsupported` (#4317).
 - `deja resume` on a Cline CLI session `cd`s into the directory it ran in; `cline --id` reopened the transcript but ran its tools wherever it was started. When that directory is gone it says so (#4318).
+- A Cline CLI session renamed with `cline history update --title` takes its new title on the next index; the rename rewrites only the manifest, and deja re-read a session only when its transcript changed (#4319).
 - `deja index` no longer says "no agent history was found" when the transcript it just reported deleted is still held and searchable (#4221).
 - `deja doctor` reports a Kimi, Qwen, Cursor, Crush, ZCode or Command Code hook row as `missing` when the client's own config holds no deja hook, instead of `stale`; those configs exist whether deja wrote to them or not, and `stale` is now kept for deja's own entry gone wrong. The brief's "no agent wired yet" line reads them the same way (#4275).
 - `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).
