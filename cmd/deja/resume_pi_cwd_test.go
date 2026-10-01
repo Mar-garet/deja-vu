@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,11 @@ func TestResumeGjcAndKimchiRunInTheSessionDirectory(t *testing.T) {
 		p := filepath.Join(tmp, name+".jsonl")
 		header := `{"type":"session","version":3,"id":"01a0f93c-7bdc-7074-a7dd-641dd530ce0c","timestamp":"2026-10-01T21:00:00.000Z"`
 		if cwd != "" {
-			header += `,"cwd":"` + cwd + `"`
+			// Encoded, as the clients write it: a Windows path spliced in
+			// raw is `C:\Users\…`, an invalid JSON escape, and the header
+			// did not decode at all.
+			enc, _ := json.Marshal(cwd)
+			header += `,"cwd":` + string(enc)
 		}
 		body := header + "}\n" + `{"type":"message","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}` + "\n"
 		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {

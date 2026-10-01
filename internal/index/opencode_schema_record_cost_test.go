@@ -19,7 +19,10 @@ func TestOpencodeSchemaRecordsAreJudgedWithoutTheRegistry(t *testing.T) {
 		if !fromDatabase(r) {
 			t.Fatalf("%s: a session naming its project directory is not the store's", h)
 		}
-		if allocs := testing.AllocsPerRun(200, func() { fromDatabase(r) }); allocs > 4 {
+		// A registry walk is ~860 allocations; the path checks are a handful,
+		// more on Windows, where filepath does more work. The bound tells the
+		// two apart, not one platform's count from another's.
+		if allocs := testing.AllocsPerRun(200, func() { fromDatabase(r) }); allocs > 100 {
 			t.Errorf("%s: fromDatabase allocates %.0f times a record; it walks the registry", h, allocs)
 		}
 	}
