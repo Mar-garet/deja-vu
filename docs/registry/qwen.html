@@ -56,7 +56,10 @@
 <p>the same one deja indexes. The command has to run in the project directory:</p>
 <p><code>qwen sessions list</code> shows only the current project&#39;s sessions, so from</p>
 <p>anywhere else the id resolves to nothing. deja recovers that directory from the</p>
-<p>encoded path and prints <code>cd &lt;project&gt; &amp;&amp; qwen -r &lt;id&gt;</code>.</p>
+<p>encoded path, or from the <code>cwd</code> the transcript records, and prints</p>
+<p><code>cd &lt;project&gt; &amp;&amp; qwen -r &lt;id&gt;</code>. When that directory is gone, resume refuses and</p>
+<p>points at <code>deja show &lt;id&gt;</code>: the bare command would only get &#34;No saved session</p>
+<p>found&#34;.</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li>JSONL can end in a partial line while Qwen is writing. Malformed lines are skipped.</li>

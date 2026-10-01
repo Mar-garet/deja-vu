@@ -30,7 +30,10 @@ The work sits in the same `parts` list as `functionCall` and `functionResponse`.
 the same one deja indexes. The command has to run in the project directory:
 `qwen sessions list` shows only the current project's sessions, so from
 anywhere else the id resolves to nothing. deja recovers that directory from the
-encoded path and prints `cd <project> && qwen -r <id>`.
+encoded path, or from the `cwd` the transcript records, and prints
+`cd <project> && qwen -r <id>`. When that directory is gone, resume refuses and
+points at `deja show <id>`: the bare command would only get "No saved session
+found".
 
 ## Known quirks and drift
 
