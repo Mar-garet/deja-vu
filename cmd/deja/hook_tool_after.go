@@ -172,7 +172,10 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 func isCommandTool(name string) bool {
 	switch name {
 	case "Bash", "bash", "shell", "Shell", "run_command", "execute_command", "terminal",
-		"run_shell_command", "run_terminal_command", "run_commands":
+		"run_shell_command", "run_terminal_command", "run_commands",
+		// Command Code's payload carries the internal name, not the SHELL its
+		// matcher sees (#4371).
+		"shell_command":
 		return true
 	}
 	return false

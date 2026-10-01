@@ -362,7 +362,7 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 
 // registryFixturesWithCalls are the registry fixtures whose tool calls are
 // read into work records.
-var registryFixturesWithCalls = map[string]bool{"deepseek": true}
+var registryFixturesWithCalls = map[string]bool{"deepseek": true, "continue": true}
 
 func validateRegistrySessions(t *testing.T, id string, sessions []model.Session) {
 	t.Helper()

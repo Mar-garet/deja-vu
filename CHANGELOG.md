@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name (#4402).
+- Command Code 1.73 sessions are indexed again: the client now writes a session header and one message envelope per line, which deja read as nothing. Commands, files, edits and tool output from `shell_command`, `read_file`, `edit_file` and `write_file` come along, and the project is the session's own directory (#4370).
+- Command Code's tool hooks speak again: `deja hook-tool` and `hook-tool-after` now know its `shell_command`, `edit_file` and `write_file`, which they used to answer with nothing on every call (#4371).
+- The pre-edit and pre-command lines no longer count the session they fire in or quote its own last reply back to it as the history of the file or command (#4380).
+- `deja resume` prints `cmd --resume <id>` for a Command Code session, in the directory it ran in, and runs `cn --fork` for a Continue session in its workspace instead of wherever you are (#4372, #4375).
+- Continue sessions keep their tool calls: the commands run, the files read and edited, the edit spans and written lines, and each tool's output, so `fix`, `how`, `files`, `restore` and `blame` see Continue work. A call Continue marked errored keeps its path and its error output but records no edit (#4373).
+- A Continue session indexed right after it ran, a `cn --fork` especially, is no longer "stamped later than this machine's clock": its turns are spread between the session's start and the file's last write instead of one second apart past it (#4376).
+- `deja doctor` has a Commands row for Continue and goose, read from the `/deja` item in their config.yaml, so a removed or replaced prompt no longer looks the same as a working one (#4374).
+- `deja doctor` prints Crush's session count once, on the registry row, instead of repeating it on every project database, where an empty crush.db read "1 indexed session" (#4379).
+- Crush `edit`, `multiedit` and `write` calls are indexed with the text they replaced and wrote, so `deja restore` and `deja blame` see Crush sessions; before, only the path was kept (#4377).
+- A new Crush message no longer re-reads the whole project store: deja asks crush.db only for the sessions that moved since the last pass. One turn in a 3000-session store replaced all 3000 and took 8 s (#4381).
+- Crush loads the deja-search skill instead of dropping it with a warning on every start: the copy deja installs no longer carries the nested OpenClaw `metadata` block, which the Agent Skills spec types as strings (#4378).
 - Resuming a recent session reads the session-start digest from the cache instead of rebuilding it, and keeps doing so after the cache refreshes; a resume took 24-41 ms against 0.1-0.2 ms for a new session (#4224).
 - `deja install codex-auto` that drops a second copy of deja's hook moves the Codex trust pins of your hooks after it along with them, so your hook keeps its approval instead of picking up the dropped copy's pin (#4227).
 - An Amp thread keeps its tool calls: the commands it ran, the files it read, edited or created, and what the commands printed, so `how`, `files`, `blame` and `restore` find them. Each turn also takes its own time instead of the thread's start. The index rebuilds once (#4356).

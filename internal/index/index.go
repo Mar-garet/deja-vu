@@ -364,6 +364,14 @@ import (
 // 60 also: an Amp thread keeps its tool calls and each turn's own time (#4356).
 // 60 also: Antigravity commands and files come from the planner's tool_calls (#4358).
 // 60 also: CodeWhale's 0.9.6 read, write and edit tools leave files and edits (#4360).
+// 60 also: Command Code's v3 transcripts are read, turns and tool calls both
+// (#4370).
+// 60 also: a Continue session gains its tool calls — commands, files, edit
+// spans, written lines and tool output from toolCallStates (#4373).
+// 60 also: a Continue turn is never dated after its file's mtime; a fork had
+// its last turns in the future (#4376).
+// 60 also: a Crush edit, multiedit or write carries the replaced span and the
+// written lines (#4377).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

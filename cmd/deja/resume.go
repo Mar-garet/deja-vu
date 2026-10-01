@@ -180,8 +180,20 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// store deja reads — `historyManager.load` opens
 		// `<sessions>/<id>.json` (core/util/history.ts) — and starts a new
 		// session from its history. So the history comes back and the id is
-		// not the one that continues; the caveat below says so.
-		return "", "cn --fork " + s.ID, nil
+		// not the one that continues; the caveat below says so. It runs its
+		// tools in the current directory, so the fork runs in the session's
+		// workspace (#4375).
+		return existingDir(sources.ContinueSessionDir(s.Path)), "cn --fork " + s.ID, nil
+	case "commandcode":
+		// `cmd --resume <id>` (1.73.4 --help) finds the id only under the
+		// project folder of the current directory, so it runs where the
+		// session did (#4372). On Windows the bin is cmdc, as the client
+		// prints on exit.
+		bin := "cmd"
+		if runtime.GOOS == "windows" {
+			bin = "cmdc"
+		}
+		return existingDir(sources.CommandCodeSessionDir(s.Path)), bin + " --resume " + s.ID, nil
 	case "kiro":
 		// `kiro-cli chat --resume-id <sessionId>`, which Kiro's own docs give
 		// and two orchestrators drive — one of them noting it needs Kiro CLI

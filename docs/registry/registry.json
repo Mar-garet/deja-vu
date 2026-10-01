@@ -786,22 +786,17 @@
       ],
       "parser_source": "internal/sources/commandcode.go",
       "display_name": "Command Code",
-      "last_verified": "2026-09-16",
+      "last_verified": "2026-10-01",
       "capabilities": {
         "mcp": true,
         "auto": true,
         "skill": true,
         "command": true,
-        "resume": false,
+        "resume": true,
         "handoff": "paste",
         "prereq": "none"
       },
-      "gaps": {
-        "resume": {
-          "state": "unknown",
-          "why": "No resume flag is described by either integration that documents the rest of Command Code's surfaces, and the CLI is closed, so there is nothing to read one out of. A live install answers it in one `--help` (#3651)."
-        }
-      }
+      "gaps": {}
     },
     {
       "id": "zcode",
