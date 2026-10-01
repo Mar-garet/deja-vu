@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Plain `aider` no longer reads the last `deja aider` project's sessions as its own. `deja aider` puts the placeholder back in the shared context file when aider exits, its lead names the directory the digest was built for, and `deja install aider` writes the placeholder instead of a digest of the directory it ran in (#4328).
 - `deja index` no longer says "no agent history was found" when the transcript it just reported deleted is still held and searchable (#4221).
 - `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).
 - A VS Code Copilot Chat session stays in the index while VS Code is writing its last line; a half-written tail used to drop the whole chat from search and `show` until the next pass (#4229).
