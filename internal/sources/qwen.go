@@ -2,7 +2,6 @@ package sources
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -78,19 +77,19 @@ func qwenTranscriptCWD(path string) string {
 }
 
 // QwenSessionDir is the directory a Qwen Code session ran in, for the cd in
-// front of `qwen -r`: the recorded one while it still exists, the folder name
-// resolved on disk otherwise.
-func QwenSessionDir(path string) string {
+// front of `qwen -r`, and whether the transcript recorded it. A recorded cwd
+// is returned whether or not it still exists: the folder name is ambiguous —
+// /w/my-app and /w/my/app encode the same — so it is resolved on disk only
+// for a transcript that records none (#4259).
+func QwenSessionDir(path string) (dir string, recorded bool) {
 	if cwd := qwenTranscriptCWD(path); cwd != "" {
-		if fi, err := os.Stat(cwd); err == nil && fi.IsDir() {
-			return cwd
-		}
+		return cwd, true
 	}
 	base := QwenProjectDirBase(path)
 	if base == "" {
-		return ""
+		return "", false
 	}
-	return ResolveEncodedPath(base)
+	return ResolveEncodedPath(base), false
 }
 
 func ParseQwenFile(path string) ([]model.Session, error) {

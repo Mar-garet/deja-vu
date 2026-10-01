@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -76,5 +77,49 @@ func TestResumeQwenRefusesWhenItsDirectoryIsUnknown(t *testing.T) {
 		t.Fatalf("printed %q with no directory to run it in", cmd)
 	} else if !strings.Contains(err.Error(), "deja show a2d5a292") {
 		t.Errorf("refusal %q does not point at deja show", err)
+	}
+}
+
+// The folder name is ambiguous: /w/my-app and /w/my/app encode the same. With
+// the recorded /w/my-app gone and /w/my/app on disk, reading the folder name
+// sent qwen to a directory that holds none of its sessions. A recorded cwd is
+// the answer whenever there is one (#4259).
+func TestResumeQwenTrustsTheRecordedDirectoryOverTheFolderName(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "qwen")
+	t.Setenv("DEJA_QWEN_ROOT", root)
+	gone := filepath.Join(tmp, "w", "my-app")
+	if err := os.MkdirAll(filepath.Join(tmp, "w", "my", "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := qwenTranscriptIn(t, root, gone, "555a7310", true)
+
+	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "555a7310", Path: path})
+	if err == nil {
+		t.Fatalf("printed %q for a session whose recorded directory is gone", formatResumeCommand(dir, cmd))
+	}
+	if !strings.Contains(err.Error(), gone) {
+		t.Errorf("refusal %q does not name the recorded directory %q", err, gone)
+	}
+}
+
+// A transcript from before qwen recorded cwd still resumes from the folder
+// name when that resolves on disk.
+func TestResumeQwenWithoutARecordedCWDUsesTheFolder(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "qwen")
+	t.Setenv("DEJA_QWEN_ROOT", root)
+	real := filepath.Join(tmp, "projects", "app")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := qwenTranscriptIn(t, root, real, "a2d5a292", false)
+
+	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "a2d5a292", Path: path})
+	if err != nil || cmd != "qwen -r a2d5a292" {
+		t.Fatalf("an old transcript no longer resumes: %q %v", cmd, err)
+	}
+	if runtime.GOOS != "windows" && dir != real {
+		t.Fatalf("dir = %q, want %q", dir, real)
 	}
 }
