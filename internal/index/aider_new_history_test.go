@@ -80,4 +80,13 @@ func TestANewAiderHistoryKeepsTheDeletedOnesSessions(t *testing.T) {
 			t.Fatalf("%q after an append: %#v", q, ss)
 		}
 	}
+	// A rebuild reads the file whole, and the kept session is in no file.
+	if err := Ensure(dir, "aider", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"jitter", "loadSettings"} {
+		if ss, _ := Search(dir, search.Options{Query: q}); len(ss) != 1 {
+			t.Fatalf("%q after a rebuild: %#v", q, ss)
+		}
+	}
 }

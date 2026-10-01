@@ -981,7 +981,10 @@ func vanishedFromStores(dir, harness string, files map[string]FileState, fresh [
 	}
 	stores := map[string]bool{}
 	for p, st := range m.Files {
-		if st.LastUpdated <= 0 {
+		// An aider history is a file and still one store of many sessions: a
+		// session that left it — the file deleted and started again — is kept
+		// by the incremental pass, and a rebuild has to keep it too (#4332).
+		if st.LastUpdated <= 0 && harnessForPath(p) != "aider" {
 			continue
 		}
 		if _, ok := files[p]; !ok {
@@ -1023,9 +1026,21 @@ func vanishedFromStores(dir, harness string, files map[string]FileState, fresh [
 		}
 		s.Messages = append(s.Messages, model.Message{Role: r.Role, Text: r.Text, Time: r.Time})
 	})
+	// An aider session the file still holds under another id — the ordinal
+	// ids before #4332 — has not left it, and carrying it would index it twice.
+	started := map[string]bool{}
+	for _, s := range fresh {
+		if s.Harness == "aider" {
+			started[s.Path+"\x00"+s.Started.UTC().String()] = true
+		}
+	}
 	out := make([]model.Session, 0, len(by))
 	for _, key := range sortedKeys(by) {
-		out = append(out, *by[key])
+		s := by[key]
+		if s.Harness == "aider" && started[s.Path+"\x00"+s.Started.UTC().String()] {
+			continue
+		}
+		out = append(out, *s)
 	}
 	return out
 }
