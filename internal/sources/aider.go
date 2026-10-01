@@ -178,6 +178,10 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 			ts, _ := time.ParseInLocation("2006-01-02 15:04:05", strings.TrimSpace(strings.TrimPrefix(line, aiderSessionMark)), time.Local)
 			id := aiderSessionID(path, ts, idx, starts)
 			cur = &model.Session{Harness: "aider", ID: id, Project: project, Path: path, Started: ts, Updated: ts}
+			// The ordinal id a `deja forget` before #4332 tombstoned.
+			if former := aiderSessionID(path, time.Time{}, idx, nil); former != id {
+				cur.FormerID = former
+			}
 			inFence = false
 			afterOutput, seenUser = false, false
 			continue
