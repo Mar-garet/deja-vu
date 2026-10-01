@@ -203,8 +203,15 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// exact conversation rather than the most recent one.
 		return "", "hermes --resume " + s.ID, nil
 	case "aider":
+		// aider appends to the history and loads none of it back unless told
+		// to, and what it loads then is the whole file, every launch in it —
+		// "run aider there and it continues" opened an empty chat (#4329).
 		dir := filepath.Dir(s.Path)
-		return "", "", fmt.Errorf("aider has no session resume — run aider in %s and it continues the same history", dir)
+		cmd := "aider --restore-chat-history"
+		if filepath.Base(s.Path) != ".aider.chat.history.md" {
+			cmd += " --chat-history-file " + s.Path
+		}
+		return "", "", fmt.Errorf("aider has no session resume — `%s` in %s loads the whole history file, every session in it, not only this one; `deja show %s` has this one alone", cmd, dir, s.ID)
 	case "gemini":
 		// gemini finds a session only from the directory it ran in: anywhere
 		// else it says "No previous sessions found for this project" (#4211).
