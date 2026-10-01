@@ -100,7 +100,7 @@ func TestAQwenSessionInANonASCIIDirectoryKeepsItsProject(t *testing.T) {
 	if want := "w/проект q"; ss[0].Project != want {
 		t.Errorf("project = %q, want %q", ss[0].Project, want)
 	}
-	if got := QwenSessionDir(path); got != work {
+	if got, recorded := QwenSessionDir(path); got != work || !recorded {
 		t.Errorf("session dir = %q, want %q", got, work)
 	}
 

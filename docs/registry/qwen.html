@@ -55,8 +55,12 @@
 <p><code>qwen -r &lt;id&gt;</code> reopens a session by id, and the id is the chat file&#39;s name —</p>
 <p>the same one deja indexes. The command has to run in the project directory:</p>
 <p><code>qwen sessions list</code> shows only the current project&#39;s sessions, so from</p>
-<p>anywhere else the id resolves to nothing. deja recovers that directory from the</p>
-<p>encoded path and prints <code>cd &lt;project&gt; &amp;&amp; qwen -r &lt;id&gt;</code>.</p>
+<p>anywhere else the id resolves to nothing. deja takes that directory from the</p>
+<p><code>cwd</code> the transcript records, or from the encoded folder name for a transcript</p>
+<p>that records none, and prints <code>cd &lt;project&gt; &amp;&amp; qwen -r &lt;id&gt;</code>. When the recorded</p>
+<p>directory is gone, or deja cannot tell which directory the session ran in,</p>
+<p>resume refuses and points at <code>deja show &lt;id&gt;</code>: the bare command would only get</p>
+<p>&#34;No saved session found&#34;.</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li>JSONL can end in a partial line while Qwen is writing. Malformed lines are skipped.</li>

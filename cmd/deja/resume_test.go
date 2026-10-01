@@ -142,8 +142,7 @@ func TestResumeQwenRunsInTheProjectDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DEJA_QWEN_ROOT", filepath.Join(tmp, "qwen"))
-	encoded := strings.ReplaceAll(real, string(filepath.Separator), "-")
-	path := filepath.Join(tmp, "qwen", "projects", encoded, "chats", "a2d5a292.jsonl")
+	path := qwenTranscriptIn(t, filepath.Join(tmp, "qwen"), real, "a2d5a292", true)
 
 	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "a2d5a292", Project: "my-app", Path: path})
 	if err != nil {

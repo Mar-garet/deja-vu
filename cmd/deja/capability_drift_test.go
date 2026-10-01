@@ -337,6 +337,17 @@ func plausibleSession(t *testing.T, harness string) model.Session {
 		t.Setenv("CURSOR_CONFIG_DIR", cli)
 		s.Path = filepath.Join(cli, "projects", "app", "agent-transcripts", s.ID, s.ID+".jsonl")
 	}
+	if harness == "qwen" {
+		// qwen finds a session only from the directory it ran in, so that
+		// directory has to be there (#4259).
+		tmp := t.TempDir()
+		cwd := filepath.Join(tmp, "app")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("DEJA_QWEN_ROOT", filepath.Join(tmp, "qwen"))
+		s.Path = qwenTranscriptIn(t, filepath.Join(tmp, "qwen"), cwd, s.ID, true)
+	}
 	if harness == "kilocode" {
 		// Only the CLI half of Kilo's store resumes, and the reader tells the
 		// two apart by the path: the database is the CLI's, a task file under

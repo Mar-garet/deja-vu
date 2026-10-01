@@ -303,7 +303,21 @@ func resumeCommand(s model.Session) (string, string, error) {
 		}
 		return "", "reasonix --resume " + s.Path, nil
 	case "qwen":
-		return qwenProjectDirFor(s), "qwen -r " + s.ID, nil
+		// qwen keys its sessions by the directory they ran in: run anywhere
+		// else, `qwen -r <id>` answers "No saved session found". Unlike
+		// opencode (#4201) there is no running it from elsewhere, so with the
+		// directory gone this refuses, as it does for a Cursor CLI chat (#4259).
+		short := digest.Short(s.ID)
+		dir, recorded := sources.QwenSessionDir(s.Path)
+		if recorded {
+			if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+				return "", "", fmt.Errorf("qwen session %s ran in %s, which is gone, and `qwen -r` finds a session only from there — `deja show %s` has the conversation", short, dir, short)
+			}
+		}
+		if dir == "" {
+			return "", "", fmt.Errorf("qwen session %s: deja cannot tell which directory it ran in, and `qwen -r` finds a session only from there — `deja show %s` has the conversation", short, short)
+		}
+		return dir, "qwen -r " + s.ID, nil
 	case "openclaw":
 		key, err := sources.OpenClawSessionKey(s.Path, s.ID)
 		if err != nil {
@@ -388,16 +402,6 @@ func claudeProjectDirFor(s model.Session) string {
 		return ""
 	}
 	return sources.ClaudeSessionDir(s.Path)
-}
-
-// qwenProjectDirFor recovers the original working directory of a session.
-// qwen scopes its session list to the current project, so `qwen -r <id>`
-// finds nothing when run from anywhere else.
-func qwenProjectDirFor(s model.Session) string {
-	if s.Path == "" {
-		return ""
-	}
-	return sources.QwenSessionDir(s.Path)
 }
 
 // cursorProjectDirFor recovers the working directory a CLI transcript belongs

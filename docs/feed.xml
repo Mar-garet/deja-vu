@@ -96,6 +96,11 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>如何让 Qwen Code 查到这台机器上每个编程智能体的会话：走 Gemini 扩展格式，也走 Claude 格式的插件市场。</summary>
+    <title>Where Qwen Code stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/qwen.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/qwen.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>Where Qwen Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>What compaction drops, and how to get it back — deja-vu</title>
