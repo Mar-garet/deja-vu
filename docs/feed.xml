@@ -82,6 +82,11 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/cline.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>Where Cline writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+    <title>Where CodeWhale stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/codewhale.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/codewhale.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>Where CodeWhale writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where VS Code Copilot Chat stores its history — session format</title>

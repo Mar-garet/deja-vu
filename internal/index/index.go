@@ -363,6 +363,7 @@ import (
 // its tool/call events (#4291); a finished log is not re-read, so a rebuild.
 // 60 also: an Amp thread keeps its tool calls and each turn's own time (#4356).
 // 60 also: Antigravity commands and files come from the planner's tool_calls (#4358).
+// 60 also: CodeWhale's 0.9.6 read, write and edit tools leave files and edits (#4360).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
