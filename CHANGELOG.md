@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja uninstall` gives a JSON config back byte for byte when what is left matches the snapshot deja took before installing, so Roo's default `mcp_settings.json` keeps its empty multi-line `mcpServers` object instead of coming back as `{}` (#4423).
 - `deja resume` on a Roo CLI task prints `roo -w <workspace> --session-id <id>`. Without `-w` the CLI looks under the real path of its directory, so a task created with `-w /tmp/...` on macOS answered "Session not found" (#4422).
 - Roo Code, Kilo Code and Cline tasks no longer index the client's "[ERROR] You did not use a tool in your previous response!" retry prompt as something you typed; on one Roo task it was 36 of 37 user turns. The index rebuilds once (#4421).
 - Roo Code and Kilo Code task turns carry their own time. Every turn was stamped a second apart from when the task was last touched, so a long task showed up as a few seconds at its end, sometimes after the clock. The index rebuilds once (#4420).

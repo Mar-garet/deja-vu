@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
@@ -1309,6 +1310,29 @@ func mcpBlock(root map[string]any, key, path string) (map[string]any, bool, erro
 	return m, true, nil
 }
 
+// snapshotIfSameJSON gives back the snapshot's bytes when the file deja is
+// about to write holds the same JSON. Marshalling cannot know how the reader
+// laid out what deja did not touch: Roo's default settings have an empty
+// mcpServers object over three lines, and an uninstall wrote it back as `{}`
+// though the .bak beside it had the original (#4423). Anything that decodes
+// differently — a server added since, a file that is not JSON — keeps next.
+func snapshotIfSameJSON(path string, next []byte) []byte {
+	bak := path + ".bak"
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		bak = resolved + ".bak"
+	}
+	b, err := os.ReadFile(bak)
+	if err != nil {
+		return next
+	}
+	b = bytes.TrimPrefix(b, utf8BOM)
+	var want, have any
+	if json.Unmarshal(b, &have) != nil || json.Unmarshal(next, &want) != nil || !reflect.DeepEqual(want, have) {
+		return next
+	}
+	return b
+}
+
 // dropOwnBackup removes the snapshot beside path when the snapshot is deja's
 // own wiring and nothing else. A snapshot of the reader's config stays even
 // when the live file has come back to exactly it: that copy is theirs, and
@@ -1541,6 +1565,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	// this is the one place that knows the file had one (#3696). The
 	// comparison is of the text, and the mark goes back on what is written.
 	bom := fileStartsWithBOM(path)
+	if removingWiring {
+		next = snapshotIfSameJSON(path, next)
+	}
 	if bytes.Equal(old, next) {
 		return "unchanged", nil
 	}
