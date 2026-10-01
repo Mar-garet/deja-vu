@@ -195,12 +195,17 @@ func ParseContinueFile(path string) ([]model.Session, error) {
 	// A second a turn, unless that runs past the file's mtime: a fork copies the
 	// whole history under a fresh dateCreated, and 17 items one second apart
 	// dated the last turn 16 s after the file was written. Then the turns are
-	// spread between the start and the mtime instead (#4376).
+	// spread between the start and the mtime instead (#4376). With no start
+	// before the mtime to spread from — no dateCreated, so the start is the
+	// mtime — the session ends at the mtime, a second a turn: one instant for
+	// every turn lost their order, and the same words said twice were deduped
+	// as one.
 	step := time.Second
 	if n := len(doc.History); n > 1 && !mtime.IsZero() && base.Add(time.Duration(n-1)*step).After(mtime) {
-		step = 0
 		if mtime.After(base) {
 			step = mtime.Sub(base) / time.Duration(n-1)
+		} else {
+			base = mtime.Add(-time.Duration(n-1) * step)
 		}
 	}
 	for i, it := range doc.History {
