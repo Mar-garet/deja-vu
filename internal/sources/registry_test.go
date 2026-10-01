@@ -85,6 +85,12 @@ func TestFormatRegistryConformance(t *testing.T) {
 	}
 }
 
+// registryFixtureRoles are the roles a registry fixture may produce.
+var registryFixtureRoles = map[string]bool{
+	"user": true, "assistant": true, RoleToolOutput: true,
+	RoleCommand: true, RoleFiles: true, RoleEdit: true, RoleWrote: true,
+}
+
 // registryHarnessIDs lists the real harnesses in the source registry (excluding
 // the notes pseudo-source) to compare against the published format registry.
 func registryHarnessIDs() []string {
@@ -375,9 +381,10 @@ func validateRegistrySessions(t *testing.T, id string, sessions []model.Session)
 		for _, message := range session.Messages {
 			// tool-output is a role the index stores and the search filters by
 			// (retrieval.go: roleToolOutput); a fixture whose harness records
-			// what a tool printed should be able to show it.
-			role := message.Role
-			if (role != "user" && role != "assistant" && role != "tool-output") ||
+			// what a tool printed should be able to show it. The same goes for
+			// the command, file, edit and wrote records a tool call leaves
+			// (#4373: Continue's fixture carries a Read).
+			if !registryFixtureRoles[message.Role] ||
 				strings.TrimSpace(message.Text) == "" || message.Time.IsZero() {
 				t.Fatalf("%s fixture produced invalid message: %#v", id, message)
 			}
