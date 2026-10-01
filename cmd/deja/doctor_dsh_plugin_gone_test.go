@@ -150,3 +150,35 @@ func TestDSHPluginsMissingNoteCountsWhatIsGone(t *testing.T) {
 		t.Errorf("two missing: %q", two)
 	}
 }
+
+// A hand edit can leave a YAML comment after the name, and two rows, or one
+// `../` row seen from every profile, can come to the same file. The comment is
+// not part of the path, and a file is named once (#4292).
+func TestDSHPluginsMissingReadsCommentsAndNamesAFileOnce(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DSH_HOME", home)
+	for _, p := range []string{"headless", "web"} {
+		if err := os.MkdirAll(filepath.Join(home, "profiles", p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	present := filepath.Join(home, "present.js")
+	if err := os.WriteFile(present, []byte("export default () => {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	layer := filepath.Join(home, "cordis.patch.yml")
+	body := dshBlockStart + "\n- insert:\n" +
+		"    - id: a\n      name: " + present + " # the command plugin\n" +
+		"    - id: b\n      name: '" + present + "'  # quoted, then a comment\n" +
+		"    - id: c\n      name: ../gone.js\n" +
+		"    - id: d\n      name: ../gone.js\n" +
+		dshBlockEnd + "\n"
+	if err := os.WriteFile(layer, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := dshPluginsMissing(layer)
+	want := []string{filepath.Join(home, "profiles", "gone.js")}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("missing = %q, want %q", got, want)
+	}
+}

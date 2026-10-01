@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1831,7 +1832,11 @@ func dshPluginsMissing(path string) []string {
 		if !inBlock || !ok {
 			continue
 		}
-		missing = append(missing, dshNameMissing(yamlScalar(strings.TrimSpace(name)))...)
+		for _, m := range dshNameMissing(yamlScalar(strings.TrimSpace(name))) {
+			if !slices.Contains(missing, m) {
+				missing = append(missing, m)
+			}
+		}
 	}
 	return missing
 }
@@ -1919,14 +1924,38 @@ func dshPluginsMissingNote(path string, missing []string) string {
 }
 
 // yamlScalar reads one plain, single- or double-quoted YAML scalar, the three
-// ways a hand edit or deja's own yamlQuote can spell a path.
+// ways a hand edit or deja's own yamlQuote can spell a path. A comment after
+// it is not part of it: a plain scalar ends at " #", a quoted one at its
+// closing quote.
 func yamlScalar(v string) string {
-	if len(v) >= 2 && v[0] == '\'' && v[len(v)-1] == '\'' {
-		return strings.ReplaceAll(v[1:len(v)-1], "''", "'")
+	if len(v) >= 2 && v[0] == '\'' {
+		for i := 1; i < len(v); i++ {
+			if v[i] != '\'' {
+				continue
+			}
+			if i+1 < len(v) && v[i+1] == '\'' {
+				i++
+				continue
+			}
+			return strings.ReplaceAll(v[1:i], "''", "'")
+		}
 	}
-	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
-		r := strings.NewReplacer(`\\`, `\`, `\"`, `"`)
-		return r.Replace(v[1 : len(v)-1])
+	if len(v) >= 2 && v[0] == '"' {
+		for i := 1; i < len(v); i++ {
+			if v[i] == '\\' {
+				i++
+				continue
+			}
+			if v[i] == '"' {
+				r := strings.NewReplacer(`\\`, `\`, `\"`, `"`)
+				return r.Replace(v[1:i])
+			}
+		}
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] == '#' && (v[i-1] == ' ' || v[i-1] == '\t') {
+			return strings.TrimSpace(v[:i])
+		}
 	}
 	return v
 }
