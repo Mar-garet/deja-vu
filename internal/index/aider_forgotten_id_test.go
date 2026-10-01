@@ -65,3 +65,48 @@ func TestAForgottenAiderSessionStaysForgottenUnderItsNewID(t *testing.T) {
 		_ = f.Close()
 	}
 }
+
+// A session the re-read file still holds under another id has not left it. Two
+// launches in one second are told apart by order, so taking the first out of
+// the file hands the second the first's id: the second's old record was kept
+// as one that had left the file, and the session was indexed twice.
+func TestAnAiderSessionWithANewIDIsNotKeptTwice(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "aider")
+	proj := filepath.Join(root, "proj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hist := filepath.Join(proj, ".aider.chat.history.md")
+	first := "# aider chat started at 2026-09-30 10:00:00\n\n#### the first launch  \n\nAnswered the alpha question.\n\n"
+	second := "# aider chat started at 2026-09-30 10:00:00\n\n#### the second launch  \n\nAnswered the bravo question.\n"
+	if err := os.WriteFile(hist, []byte(first+second), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(tmp, "home")
+	setHome(t, home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("DEJA_CLAUDE_ROOT", filepath.Join(tmp, "no-claude"))
+	t.Setenv("DEJA_CODEX_ROOT", filepath.Join(tmp, "no-codex"))
+	t.Setenv("DEJA_OPENCODE_DB", filepath.Join(tmp, "no-opencode.db"))
+	t.Setenv("DEJA_GEMINI_ROOT", filepath.Join(tmp, "no-gemini"))
+	t.Setenv("DEJA_CURSOR_ROOT", filepath.Join(tmp, "no-cursor"))
+	t.Setenv("DEJA_CURSOR_CLI_ROOT", filepath.Join(tmp, "no-cursor-cli"))
+	t.Setenv("DEJA_ANTIGRAVITY_ROOT", filepath.Join(tmp, "no-antigravity"))
+	t.Setenv("AIDER_CHAT_HISTORY_FILE", "")
+	t.Setenv("DEJA_AIDER_ROOTS", root)
+	dir := filepath.Join(tmp, "index.db")
+	if err := Ensure(dir, "aider", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hist, []byte(second), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Ensure(dir, "aider", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if ss, _ := Search(dir, search.Options{Query: "bravo"}); len(ss) != 1 {
+		t.Fatalf("the session the file still holds is indexed %d times: %#v", len(ss), ss)
+	}
+}
