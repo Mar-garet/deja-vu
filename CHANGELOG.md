@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja doctor` reads codex's trust for deja's own hook entries, by where they sit in `hooks.json`. With your own SessionStart hook ahead of deja's, the pin for yours read as deja's, and the row said `wired` (or `out of date`) while codex ran none of deja's hooks; it now reads `untrusted`, and `deja install codex-auto` says to approve the hook (#4313).
 - `deja doctor` reads the codex-hook row as `missing` when `~/.codex/hooks.json` holds only your own hooks; it said `wired`, `untrusted` or `out of date` from codex's trust store, and the untrusted case told you to approve a hook that is not deja's. A `hooks.json` that does not parse reads `unreadable` (#4297).
 - A VS Code Copilot Chat session stays in the index while VS Code is writing its last line; a half-written tail used to drop the whole chat from search and `show` until the next pass (#4229).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).

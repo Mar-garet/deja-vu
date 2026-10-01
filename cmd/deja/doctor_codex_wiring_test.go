@@ -37,7 +37,7 @@ func codexHome(t *testing.T, events ...string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(home, "config.toml"),
-		[]byte("[hooks.json:session_start]\ntrusted_hash = \"sha256:abc\"\n"), 0o600); err != nil {
+		[]byte("[hooks.state."+strconv.Quote(filepath.Join(home, "hooks.json")+":session_start:0:0")+"]\ntrusted_hash = \"sha256:abc\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -169,5 +169,63 @@ func TestDoctorCodexHookWithThePluginBesideTheUsersHooks(t *testing.T) {
 	}
 	if st := codexHookWiringState(); st.state != "plugin" {
 		t.Errorf("state = %q, want plugin", st.state)
+	}
+}
+
+// Codex pins trust per entry, by where it sits in hooks.json. With the user's
+// own SessionStart hook ahead of deja's, the pin at session_start:0:0 is
+// theirs: codex runs none of deja's hooks, and the row has to say so (#4313).
+func TestDoctorCodexTrustIsReadAtDejasOwnEntry(t *testing.T) {
+	hermeticEnv(t)
+	home := sources.CodexHome()
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hooks := filepath.Join(home, "hooks.json")
+	own := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"/usr/local/bin/my-notes --start"}]}]}}`
+	if err := os.WriteFile(hooks, []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(home, "config.toml")
+	if err := os.WriteFile(cfg, []byte("model = \"gpt-5\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installCodexHooks("/usr/local/bin/deja", false); err != nil {
+		t.Fatalf("install codex-auto: %v", err)
+	}
+	pin := func(pos string) string {
+		return "\n[hooks.state." + strconv.Quote(hooks+":"+pos) + "]\ntrusted_hash = \"sha256:00\"\n"
+	}
+	write := func(pins ...string) {
+		t.Helper()
+		if err := os.WriteFile(cfg, []byte("model = \"gpt-5\"\n"+strings.Join(pins, "")), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Only the user's hook approved.
+	write(pin("session_start:0:0"))
+	st := codexHookWiringState()
+	if st.state != "untrusted" {
+		t.Errorf("only the user's hook pinned: state %q, want untrusted", st.state)
+	}
+	if codexHasSeenItsHook() {
+		t.Error("only the user's hook pinned, and install would say codex has seen deja's")
+	}
+
+	// Control: deja's own entries approved, the user's not.
+	write(pin("session_start:1:0"), pin("user_prompt_submit:0:0"), pin("pre_tool_use:0:0"), pin("post_tool_use:0:0"), pin("pre_compact:0:0"))
+	st = codexHookWiringState()
+	if st.state != "wired" || st.approved != st.pinned {
+		t.Errorf("deja's entries pinned: state %q, %d of %d approved, want wired and all", st.state, st.approved, st.pinned)
+	}
+	if !codexHasSeenItsHook() {
+		t.Error("deja's hook pinned, and install would say codex has not seen it")
+	}
+
+	// deja's SessionStart approved and the rest not: one of five runs.
+	write(pin("session_start:0:0"), pin("session_start:1:0"))
+	if st = codexHookWiringState(); st.state != "wired" || st.approved != 1 {
+		t.Errorf("deja's SessionStart pinned: state %q, %d approved, want wired and 1", st.state, st.approved)
 	}
 }

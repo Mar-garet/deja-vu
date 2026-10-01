@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -311,48 +312,26 @@ func yamlHasChildKey(path, parent, key string) bool {
 	return false
 }
 
-// codexHasSeenItsHook reports whether codex has recorded any opinion about the
-// session-start hook. Until it has, codex runs nothing — and in `codex exec`
-// there is no interface in which to approve it, which is how scripted runs end
-// up with no memory while every file on disk looks correctly installed.
+// codexHasSeenItsHook reports whether codex has recorded any opinion about
+// deja's session-start hook. Until it has, codex runs nothing — and in `codex
+// exec` there is no interface in which to approve it, which is how scripted
+// runs end up with no memory while every file on disk looks correctly
+// installed.
 func codexHasSeenItsHook() bool {
 	cfg, err := os.ReadFile(filepath.Join(sources.CodexHome(), "config.toml"))
 	if err != nil {
 		return true // nothing to read: do not raise an alarm we cannot support
 	}
-	return codexHookTrustSection(string(cfg)) != ""
-}
-
-// codexHookTrustSection returns the block of codex's config that records what
-// it thinks of our session-start hook, or "" when there is none.
-//
-// Codex keys its trust store per hook rather than per file —
-// `[hooks.state."<path>/hooks.json:session_start:0:0"]` — and the block ends at
-// the next table header. Reading to the end of the file instead, which is what
-// this did, lets an `enabled = false` belonging to some unrelated table decide
-// what deja reports about ours.
-//
-// It deliberately does not check the recorded hash. deja cannot reproduce it:
-// on codex 0.142.4 the pin for a hook whose command is one line long is not the
-// sha256 of the hook file, of the command, of the handler object in any
-// serialisation, or of any combination of the two with the matcher, the event
-// or the key — checked. Comparing the file's own sha256 against it, which is
-// what this did, therefore called every working install untrusted. Presence of
-// a pin is what deja can honestly read: it means codex has been shown this hook
-// and kept an opinion about it.
-func codexHookTrustSection(cfg string) string {
-	i := strings.Index(cfg, "hooks.json:session_start")
-	if i < 0 {
-		return ""
+	b, err := os.ReadFile(filepath.Join(sources.CodexHome(), "hooks.json"))
+	if err != nil {
+		return true
 	}
-	rest := cfg[i:]
-	// Past the key's own line, so the header we stop at is the next one.
-	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-		if end := strings.Index(rest[nl:], "\n["); end >= 0 {
-			return rest[:nl+end]
-		}
+	var root map[string]any
+	if json.Unmarshal(b, &root) != nil {
+		return true
 	}
-	return rest
+	hooks, _ := root["hooks"].(map[string]any)
+	return codexPrimaryPin(codexDejaPins(string(cfg), hooks)) != ""
 }
 
 // opencodePluginShapeStale reports whether the installed plugin is written for
