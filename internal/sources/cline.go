@@ -516,7 +516,7 @@ func clineContentText(raw json.RawMessage) string {
 // user-input equivalent) so the tags themselves are not indexed, and the
 // host's <environment_details> block, which is not the person's words.
 func unwrapClineTask(text string) string {
-	t := stripClineHostBlocks(text)
+	t := stripNoToolsPrompt(stripClineHostBlocks(text))
 	for _, tag := range []string{"task", "user_message", "user_input"} {
 		open := "<" + tag
 		if !strings.HasPrefix(t, open) {
@@ -535,6 +535,39 @@ func unwrapClineTask(text string) string {
 		return strings.TrimSpace(rest)
 	}
 	return t
+}
+
+// The retry prompt Roo and Cline send as a user turn when the model answered
+// without a tool call (formatResponse.noToolsUsed). The client shows it as an
+// error row, not as something the person typed, and on one live Roo task it
+// was 36 of 37 user turns (#4421).
+const (
+	noToolsPromptHead = "[ERROR] You did not use a tool in your previous response!"
+	noToolsPromptTail = "(This is an automated message, so do not respond to it conversationally.)"
+)
+
+// stripNoToolsPrompt drops that prompt from a turn's text. It starts a line
+// when the client writes it, so a person quoting it in a sentence keeps it; a
+// prompt whose closing line is missing runs to the end of the text.
+func stripNoToolsPrompt(text string) string {
+	for {
+		i := strings.Index(text, noToolsPromptHead)
+		for i > 0 && text[i-1] != '\n' {
+			j := strings.Index(text[i+1:], noToolsPromptHead)
+			if j < 0 {
+				return text
+			}
+			i += 1 + j
+		}
+		if i < 0 {
+			return text
+		}
+		end := len(text)
+		if k := strings.Index(text[i:], noToolsPromptTail); k >= 0 {
+			end = i + k + len(noToolsPromptTail)
+		}
+		text = strings.TrimSpace(text[:i] + text[end:])
+	}
 }
 
 func firstNonEmpty(a, b string) string {

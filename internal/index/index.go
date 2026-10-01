@@ -359,6 +359,9 @@ import (
 //
 // 60 also: a Roo or Kilo extension turn is stamped at its own ts, not at the
 // task's last activity plus N seconds (#4420).
+//
+// 60 also: the Roo and Cline "You did not use a tool" retry prompt is not
+// indexed as a user turn (#4421).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
