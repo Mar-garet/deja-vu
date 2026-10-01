@@ -183,7 +183,7 @@ func parseGooseFileFromOffset(path string, offset int64) ([]model.Session, error
 		ID:      strings.TrimSuffix(filepath.Base(path), ".jsonl"),
 		Path:    path,
 	}
-	err := scanJSONLWithHeaderFromOffset(path, offset, isGooseHeader, func(m map[string]any) {
+	err := scanJSONLWithHeaderFromOffsetFunc(path, offset, headerLookahead, isGooseHeader, func(m map[string]any) {
 		role, hasRole := m["role"].(string)
 		if !hasRole {
 			applyGooseHeader(&s, m)

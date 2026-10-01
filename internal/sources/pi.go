@@ -48,7 +48,7 @@ func parsePiShaped(path string, offset int64, harness, project string, useHeader
 		Project: project,
 		Path:    path,
 	}
-	err := scanJSONLWithHeaderFromOffset(path, offset, isPiHeader, func(m map[string]any) { piShapedLine(&s, m, useHeaderCwd) })
+	err := scanJSONLWithHeaderFromOffsetFunc(path, offset, headerLookahead, isPiHeader, func(m map[string]any) { piShapedLine(&s, m, useHeaderCwd) })
 	if len(s.Messages) == 0 {
 		return nil, err
 	}

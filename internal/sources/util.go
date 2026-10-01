@@ -275,13 +275,17 @@ func scanJSONL(path string, fn func(map[string]any)) error {
 //
 // The header is handed over again on every resume. That is safe because it is
 // metadata: the parsers read it into fields they set rather than append to.
-//
-// isHeader picks the header out of the first few lines rather than taking line
-// 1: omp writes a title slot before its session record, and the record on line
-// 1 left an omp session split in two on every resume (#4406).
-func scanJSONLWithHeaderFromOffset(path string, offset int64, isHeader func(map[string]any) bool, fn func(map[string]any)) error {
+func scanJSONLWithHeaderFromOffset(path string, offset int64, fn func(map[string]any)) error {
+	return scanJSONLWithHeaderFromOffsetFunc(path, offset, 1, func(map[string]any) bool { return true }, fn)
+}
+
+// scanJSONLWithHeaderFromOffsetFunc is scanJSONLWithHeaderFromOffset for a
+// format whose header need not be line 1: isHeader picks it out of the first
+// lookahead lines. omp writes a title slot before its session record, and
+// taking line 1 left an omp session split in two on every resume (#4406).
+func scanJSONLWithHeaderFromOffsetFunc(path string, offset int64, lookahead int, isHeader func(map[string]any) bool, fn func(map[string]any)) error {
 	if offset > 0 {
-		if header := leadingJSONLHeader(path, offset, isHeader); header != nil {
+		if header := leadingJSONLHeader(path, offset, lookahead, isHeader); header != nil {
 			fn(header)
 		}
 	}
@@ -292,16 +296,16 @@ func scanJSONLWithHeaderFromOffset(path string, offset int64, isHeader func(map[
 const headerLookahead = 4
 
 // leadingJSONLHeader decodes the first of a JSONL file's leading lines that
-// isHeader accepts, looking no further than headerLookahead lines or the
-// offset, or nil when none is there.
-func leadingJSONLHeader(path string, offset int64, isHeader func(map[string]any) bool) map[string]any {
+// isHeader accepts, looking no further than lookahead lines or the offset, or
+// nil when none is there.
+func leadingJSONLHeader(path string, offset int64, lookahead int, isHeader func(map[string]any) bool) map[string]any {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
 	defer f.Close()
 	r := bufio.NewReaderSize(io.LimitReader(f, offset), 1024*1024)
-	for range headerLookahead {
+	for range lookahead {
 		line, err := r.ReadBytes('\n')
 		if line = trimJSONSpace(line); len(line) > 0 {
 			var m map[string]any

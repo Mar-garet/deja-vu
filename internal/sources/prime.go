@@ -118,7 +118,7 @@ func PrimeSessionDir(path string) string {
 	if path == "" {
 		return ""
 	}
-	header := leadingJSONLHeader(path, math.MaxInt64, isPiHeader)
+	header := leadingJSONLHeader(path, math.MaxInt64, headerLookahead, isPiHeader)
 	cwd, _ := header["cwd"].(string)
 	return cwd
 }
