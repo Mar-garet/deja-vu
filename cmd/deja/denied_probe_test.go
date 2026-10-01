@@ -99,9 +99,9 @@ func TestDeniedStoreCountStillSeesALockedFile(t *testing.T) {
 
 // An incremental pass leaves LastBuild unset, which the empty-index branch read
 // as "nothing was indexed": every one-message `deja index` ran the denied-store
-// probe, and with any store locked told a full index it had nothing to index
-// yet (#4272).
-func TestIncrementalIndexDoesNotProbeStoresOrCallTheIndexEmpty(t *testing.T) {
+// probe through each store's parser, and with any store locked told a full
+// index it had nothing to index yet (#4272).
+func TestIncrementalIndexParsesNoStoreOrCallsTheIndexEmpty(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("root reads everything")
 	}
