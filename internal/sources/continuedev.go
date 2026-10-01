@@ -87,11 +87,25 @@ type continueSession struct {
 }
 
 // A history item is a message plus, on the assistant side, the tool calls it
-// made. Those are model tools — read_file, edit_file — rather than commands
-// anyone ran, so they are not work records here; what a tool printed comes back
-// in the assistant turn that follows.
+// made: the call in message.toolCalls, and its arguments, status and output in
+// toolCallStates on the item itself (#4373).
 type continueHistoryIt struct {
-	Message continueMessage `json:"message"`
+	Message        continueMessage      `json:"message"`
+	ToolCallStates []continueToolCallSt `json:"toolCallStates"`
+}
+
+type continueToolCallSt struct {
+	Status     string         `json:"status"`
+	ParsedArgs map[string]any `json:"parsedArgs"`
+	ToolCall   struct {
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	} `json:"toolCall"`
+	Output []struct {
+		Content string `json:"content"`
+	} `json:"output"`
 }
 
 type continueMessage struct {
@@ -152,6 +166,10 @@ func ParseContinueFile(path string) ([]model.Session, error) {
 			s.Touch(at)
 			s.Messages = append(s.Messages, model.Message{Role: role, Text: text, Time: at})
 		}
+		if work := continueToolWork(it.ToolCallStates, at); len(work) > 0 {
+			s.Touch(at)
+			s.Messages = append(s.Messages, work...)
+		}
 	}
 	if len(s.Messages) == 0 {
 		return nil, nil
@@ -163,6 +181,76 @@ func ParseContinueFile(path string) ([]model.Session, error) {
 		s.Title = ""
 	}
 	return []model.Session{s}, nil
+}
+
+// continueToolWork turns an item's tool calls into work records. The names are
+// the CLI's (Bash, Read, Write, Edit, MultiEdit) and the IDE extension's
+// (run_terminal_command, read_file, create_new_file, single_find_and_replace,
+// multi_edit); the CLI's Edit takes file_path and the rest filepath. A call
+// Continue marked errored changed nothing, so it leaves its path and its
+// output — the failure — but no edit or written lines.
+func continueToolWork(states []continueToolCallSt, at time.Time) []model.Message {
+	var out, outputs []model.Message
+	var paths []string
+	for _, st := range states {
+		name := st.ToolCall.Function.Name
+		args := st.ParsedArgs
+		if args == nil {
+			_ = json.Unmarshal([]byte(st.ToolCall.Function.Arguments), &args)
+		}
+		path := strings.TrimSpace(str(args["filepath"]))
+		if path == "" {
+			path = strings.TrimSpace(str(args["file_path"]))
+		}
+		switch name {
+		case "Bash", "run_terminal_command":
+			if cmd := strings.TrimSpace(str(args["command"])); IndexCommands() && cmd != "" && worthIndexing(cmd) {
+				out = append(out, model.Message{Role: RoleCommand, Text: "$ " + cmd, Time: at})
+			}
+			path = ""
+		case "Edit", "MultiEdit", "Write", "single_find_and_replace", "multi_edit", "create_new_file":
+			if st.Status == "errored" || path == "" || strings.ContainsAny(path, "\n\r") {
+				break
+			}
+			olds := []string{str(args["old_string"])}
+			news := []string{str(args["new_string"]), str(args["content"]), str(args["contents"])}
+			if edits, ok := args["edits"].([]any); ok {
+				for _, e := range edits {
+					if m, ok := e.(map[string]any); ok {
+						olds = append(olds, str(m["old_string"]))
+						news = append(news, str(m["new_string"]))
+					}
+				}
+			}
+			for _, span := range olds {
+				if IndexEdits() && span != "" {
+					if len(span) > editSpanMax {
+						span = span[:editSpanMax]
+					}
+					out = append(out, model.Message{Role: RoleEdit, Text: path + "\n" + span, Time: at})
+				}
+			}
+			for _, w := range news {
+				if rec := WroteRecord(path, w); IndexWrites() && rec != "" {
+					out = append(out, model.Message{Role: RoleWrote, Text: rec, Time: at})
+				}
+			}
+		}
+		if path != "" {
+			paths = append(paths, path)
+		}
+		if IndexToolOutput() {
+			for _, o := range st.Output {
+				if t := strings.TrimSpace(o.Content); t != "" {
+					outputs = append(outputs, model.Message{Role: RoleToolOutput, Text: capParsedMessage(t), Time: at})
+				}
+			}
+		}
+	}
+	if len(paths) > 0 && IndexToolPaths() {
+		out = append(out, model.Message{Role: RoleFiles, Text: strings.Join(dedupeStrings(paths), "\n"), Time: at})
+	}
+	return append(out, outputs...)
 }
 
 // continuePlaceholderTitle reports whether a title is Continue's placeholder —

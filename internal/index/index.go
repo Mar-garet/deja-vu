@@ -335,6 +335,8 @@ import (
 // 60: a resumed Gemini CLI session keeps the prompts deja's recall was
 // prepended to; Gemini's own resume history leaves them out (#4214). The
 // chat file is re-read whole only when it changes, so a rebuild.
+// 60 also: a Continue session gains its tool calls — commands, files, edit
+// spans, written lines and tool output from toolCallStates (#4373).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
