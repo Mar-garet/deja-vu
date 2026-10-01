@@ -3195,6 +3195,12 @@ func rereadsWholeSessions(p string) bool {
 		return true
 	}
 	switch storeHarness(p) {
+	case "opencode":
+		// Read by session since #4207: a reply's text lands in a part created
+		// before the last pass, so only a touched session read whole carries
+		// it, and adding that to what the index held doubled the turns. Its
+		// counts start over with each pass, the goose trade above.
+		return true
 	case "grok", "zed", "hermes", "openclaw":
 		// The same shape: each asks for the sessions touched since the stamp
 		// and hands them back whole, so what comes back replaces what the
@@ -3928,6 +3934,13 @@ func canAppendIncremental(changed map[string]FileState, old map[string]FileState
 		if f.Size <= of.Size {
 			return false
 		}
+		// A store that hands back touched sessions whole has nothing to append:
+		// adding them to what the index holds is the doubling the replacement
+		// path exists to avoid. A database file grows the way a log does often
+		// enough to get here (#4207).
+		if rereadsWholeSessions(p) {
+			return false
+		}
 		// A prior pass that indexed no complete line (a torn first line, or a lone
 		// line with no trailing newline) leaves SafeSize==0 with bytes on disk.
 		// Resuming an append from that ambiguous 0 would either re-read mid-line
@@ -4299,7 +4312,7 @@ func setDatabaseStoreWatermarks(files map[string]FileState, sessions map[string]
 	//
 	// Safe to stamp because ParseGrokDBSince selects messages rather than
 	// sessions and normalises both sides with a millisecond backoff (#2150),
-	// which is the opencode and cursor shape. hermes compares whole seconds
+	// which is the cursor shape. hermes compares whole seconds
 	// with a strict >, and zed returns whole threads; each needs its own fix
 	// before it can be stamped, so neither is here.
 	setStoreLastUpdated(files, sessions, "grok", sources.GrokDB())
@@ -4313,7 +4326,7 @@ func setDatabaseStoreWatermarks(files map[string]FileState, sessions map[string]
 	}
 	// zed, whose cursor selects threads rather than messages: a continued
 	// thread comes back whole, so it joins rereadsWholeSessions below in the
-	// same change — the goose shape, not the opencode one (#2075).
+	// same change — the goose shape, not the cursor one (#2075).
 	setStoreLastUpdated(files, sessions, "zed", sources.ZedDB())
 	for _, db := range sources.CursorDBs() {
 		setStoreLastUpdated(files, sessions, "cursor", db)

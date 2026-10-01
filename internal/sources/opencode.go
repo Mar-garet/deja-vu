@@ -157,18 +157,50 @@ func ParseOpencodeDBSince(db string, t time.Time) ([]model.Session, error) {
 	if t.IsZero() {
 		return ParseOpencodeDBWhere(db, "", 0)
 	}
-	// Each layout is bounded by its own columns, and a store holding both
-	// reads both.
-	return parseOpencodeLayouts("opencode", db, opencodeSinceWhere(t), opencodeV2SinceWhere(t), 0)
+	return parseOpencodeSchemaDBSince("opencode", db, t)
 }
 
-// opencodeSinceWhere bounds a read to what changed after the watermark. Shared
-// with the other stores in this schema — Kilo's CLI database is one (#3643).
-func opencodeSinceWhere(t time.Time) string {
-	rfc := sqlEscape(t.UTC().Format(time.RFC3339Nano))
-	return fmt.Sprintf(" and (%s or m.time_created > '%s' or %s or json_extract(p.data,'$.time.start') > '%s')",
-		newerThanEpoch("m.time_created", t), rfc,
-		newerThanEpoch("json_extract(p.data,'$.time.start')", t), rfc)
+// parseOpencodeSchemaDBSince is the since read for every store in this schema.
+// Each layout is bounded by its own columns, and a store holding both reads
+// both.
+func parseOpencodeSchemaDBSince(harness, db string, t time.Time) ([]model.Session, error) {
+	return parseOpencodeLayouts(harness, db, opencodeSinceWhere(db, t), opencodeV2SinceWhere(db, t), 0)
+}
+
+// opencodeSinceWhere picks the sessions touched after the watermark and reads
+// each of them whole. Shared with the other stores in this schema — Kilo's CLI
+// database is one (#3643).
+//
+// Whole, because opencode creates a reply's message and text part, time.start
+// set, before the text streams in: a pass that read the part empty stamped a
+// watermark past both, and bounding rows by when they were created never asked
+// for the text again (#4207). time_updated is what moves when the text lands,
+// and a session read again replaces what the index holds for it
+// (rereadsWholeSessions), so the turns it already had are not added twice.
+func opencodeSinceWhere(db string, t time.Time) string {
+	// Each a column of its own, so the subquery reads row headers and never a
+	// blob: 0.14s on a 3.8 GB store, against 9s for the row-level clause.
+	touched := fmt.Sprintf("select session_id from message where %s or %s union "+
+		"select session_id from part where %s",
+		newerThanEpoch("time_created", t), newerThanEpoch("time_updated", t),
+		newerThanEpoch("time_updated", t))
+	if !opencodeSchemaOf(db).rowsStamped {
+		// A store from before the columns: the stamps a row is created with.
+		rfc := sqlEscape(t.UTC().Format(time.RFC3339Nano))
+		touched = fmt.Sprintf("select m2.session_id from message m2 join part p2 on p2.message_id=m2.id "+
+			"where %s or m2.time_created > '%s' or %s or json_extract(p2.data,'$.time.start') > '%s'",
+			newerThanEpoch("m2.time_created", t), rfc,
+			newerThanEpoch("json_extract(p2.data,'$.time.start')", t), rfc)
+	}
+	return opencodeSessionTouched("session", t, touched)
+}
+
+// opencodeSessionTouched bounds a read to the sessions in table whose own stamp
+// moved past t, and those touched names. One list for s.id to be looked up in:
+// an OR beside it made SQLite scan every part instead.
+func opencodeSessionTouched(table string, t time.Time, touched string) string {
+	return fmt.Sprintf(" and s.id in (select id from %s where %s or time_updated > '%s' union %s)",
+		table, newerThanEpoch("time_updated", t), sqlEscape(t.UTC().Format(time.RFC3339Nano)), touched)
 }
 
 func ParseOpencodeDBWhere(db, where string, limit int) ([]model.Session, error) {

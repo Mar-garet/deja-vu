@@ -54,7 +54,7 @@ func ParseZCodeDBSince(db string, t time.Time) ([]model.Session, error) {
 	if t.IsZero() {
 		return ParseZCodeDB(db)
 	}
-	return parseOpencodeSchemaDB("zcode", db, opencodeSinceWhere(t), 0)
+	return parseOpencodeSchemaDBSince("zcode", db, t)
 }
 
 // ZCodeSessionFiles lists the transcripts, and the database when it holds

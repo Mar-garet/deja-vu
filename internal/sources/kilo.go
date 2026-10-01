@@ -97,7 +97,7 @@ func ParseKiloDBSince(db string, t time.Time) ([]model.Session, error) {
 	if t.IsZero() {
 		return ParseKiloDB(db)
 	}
-	return parseOpencodeSchemaDB("kilocode", db, opencodeSinceWhere(t), 0)
+	return parseOpencodeSchemaDBSince("kilocode", db, t)
 }
 
 // KiloSessionFiles lists what a Kilo install has on disk: the task transcripts
