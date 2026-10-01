@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
 // Kimi, Qwen, Cursor, Crush, ZCode and Command Code keep deja's hooks in the
@@ -84,5 +86,61 @@ func TestDoctorCallsAClientConfigWithoutDejaMissing(t *testing.T) {
 				t.Error("deja's own entry counted as nothing wired")
 			}
 		})
+	}
+}
+
+// The brief's "no agent wired yet" line reads the same rows doctor prints. A
+// Kimi plugin recalls with no block in config.toml, and Claude Code's hooks
+// live outside the table; either is a wired agent beside a client config deja
+// never wrote to (#4275).
+func TestNothingWiredCountsThePluginAndClaudeHooks(t *testing.T) {
+	t.Run("kimi plugin", func(t *testing.T) {
+		tmp := hermeticEnv(t)
+		home := filepath.Join(tmp, "kimi")
+		t.Setenv("KIMI_CODE_HOME", home)
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("default_model = \"luna\"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if !nothingWired() {
+			t.Fatal("control: a bare config.toml and no plugin already counts as wired")
+		}
+		writeKimiPlugin(t, home, true)
+		if nothingWired() {
+			t.Error("the Kimi plugin recalls on every prompt, and the brief says no agent is wired")
+		}
+	})
+	t.Run("claude hooks", func(t *testing.T) {
+		hermeticEnv(t)
+		qwen := filepath.Join(sources.QwenConfigDir(), "settings.json")
+		if err := os.MkdirAll(filepath.Dir(qwen), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(qwen, []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if !nothingWired() {
+			t.Fatal("control: an empty qwen settings.json already counts as wired")
+		}
+		if _, err := installClaudeAuto("/usr/local/bin/deja", false); err != nil {
+			t.Fatalf("install claude-auto: %v", err)
+		}
+		if nothingWired() {
+			t.Error("Claude Code's hooks are wired, and the brief says no agent is")
+		}
+	})
+}
+
+// A Windows install quotes a path with a space, and TOML escapes the quotes:
+// the line has to be read unescaped to see the binary (#4275).
+func TestDejaHookInReadsAnEscapedQuotedPath(t *testing.T) {
+	line := `command = "\"C:/Program Files/deja/deja.exe\" hook-prompt --plain"` + "\n"
+	if !dejaHookIn("[[hooks]]\nevent = \"UserPromptSubmit\"\n" + line) {
+		t.Errorf("a hook naming a quoted Windows path is not read as deja's: %s", line)
+	}
+	if dejaHookIn("[[hooks]]\n" + `command = "\"C:/Program Files/other/tool.exe\" hook-prompt"` + "\n") {
+		t.Error("another tool's hook-prompt read as deja's")
 	}
 }

@@ -116,7 +116,8 @@ func autoUnwired(a autoWiring, b []byte, err error) bool {
 // dejaHookIn reports whether a config carries an entry of deja's: Kimi's
 // marked block, or any string that runs one of deja's hook subcommands — the
 // MCP server entry runs `mcp` and is not one. A file that is not JSON is read
-// line by line.
+// line by line, its escapes undone: TOML spells a quoted Windows path
+// `"\"C:/Program Files/deja/deja.exe\" hook-prompt"`.
 func dejaHookIn(text string) bool {
 	if strings.Contains(text, kimiHookMarker) {
 		return true
@@ -132,7 +133,7 @@ func dejaHookIn(text string) bool {
 	var root any
 	if json.Unmarshal([]byte(jsoncToJSON(strings.TrimPrefix(text, string(utf8BOM)))), &root) != nil {
 		for _, l := range strings.Split(text, "\n") {
-			if runsDeja(l) {
+			if runsDeja(quotedPathUnescape.Replace(l)) {
 				return true
 			}
 		}
@@ -167,11 +168,18 @@ func dejaHookIn(text string) bool {
 //
 // Auto-recall alone is the question worth asking here. An MCP server is a tool
 // the agent may call; these files are what make memory arrive without anyone
-// asking, which is the thing someone thinks they installed.
+// asking, which is the thing someone thinks they installed. So it reads the
+// rows doctor prints: Claude Code's and codex's hooks, which live outside the
+// table, and a harness plugin that recalls with nothing in the row's file.
 func nothingWired() bool {
+	for _, st := range []hookWiringState{claudeHookWiringState(), codexHookWiringState()} {
+		if st.state != "missing" {
+			return false
+		}
+	}
 	for _, a := range autoWirings() {
 		b, err := os.ReadFile(a.path())
-		if !autoUnwired(a, b, err) {
+		if !autoUnwired(a, b, err) || harnessPluginCarriesRecall(a.name) {
 			return false
 		}
 	}
