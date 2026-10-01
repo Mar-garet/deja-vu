@@ -512,8 +512,10 @@ signal. Both degrade quietly, which is why the report names them.
 
 `auto_recall` is the other half of an install: the files that make memory arrive
 without anyone asking, one row per harness deja can wire. `state` is `wired`,
-`stale` (the file is there and nothing in it calls deja, which is how a dead
-integration looks), `missing`, or `plugin` (the harness carries its own).
+`stale` (deja's file or entry is there and no longer calls the hook, which is
+how a dead integration looks), `missing` (no file, or a client config such as
+Kimi's `config.toml` or Qwen's `settings.json` with no deja hook in it), or
+`plugin` (the harness carries its own).
 `binary_missing` marks a row whose entries name a deja binary that is no longer
 there — what an upgrade leaves behind, with every hook exiting 127.
 
