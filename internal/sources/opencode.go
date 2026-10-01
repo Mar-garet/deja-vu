@@ -117,9 +117,11 @@ func LoadOpencodePrefix(p string) []model.Session {
 }
 
 // OpencodeStoreLacks reports whether the store a CLI session of this harness
-// lives in opened and holds no session with this id — deleted with
-// `opencode session delete`, or pruned. False whenever that cannot be told: no
-// store, or one that would not open.
+// lives in holds no session row with this id — deleted with `opencode session
+// delete`, or pruned. False whenever that cannot be told: no store, or a read
+// that fails. The row is asked for directly, in each session table the store
+// has, rather than through the projection, which skips sessions it has
+// nothing to read from and takes seconds on a long one.
 func OpencodeStoreLacks(harness, id string) bool {
 	db := OpencodeDB()
 	if harness == "kilocode" {
@@ -128,8 +130,23 @@ func OpencodeStoreLacks(harness, id string) bool {
 	if fi, err := os.Stat(db); err != nil || fi.Size() == 0 {
 		return false
 	}
-	ss, err := parseOpencodeSchemaDB(harness, db, fmt.Sprintf(" and s.id = '%s'", sqlEscape(id)), 0)
-	return err == nil && len(ss) == 0
+	query := func(q string) (string, bool) {
+		cmd, stop := sqliteReadCmd(db, q)
+		defer stop()
+		b, err := cmd.Output()
+		return strings.TrimSpace(string(b)), err == nil
+	}
+	names, ok := query(`select name from sqlite_master where type='table' and name in ('session','session_v2')`)
+	if !ok || names == "" {
+		return false
+	}
+	for _, table := range strings.Fields(names) {
+		n, ok := query(fmt.Sprintf(`select count(*) from %s where id='%s'`, table, sqlEscape(id)))
+		if !ok || n != "0" {
+			return false
+		}
+	}
+	return true
 }
 
 func ParseOpencodeDB(db string) ([]model.Session, error) {
