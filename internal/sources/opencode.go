@@ -116,6 +116,22 @@ func LoadOpencodePrefix(p string) []model.Session {
 	return ss
 }
 
+// OpencodeStoreLacks reports whether the store a CLI session of this harness
+// lives in opened and holds no session with this id — deleted with
+// `opencode session delete`, or pruned. False whenever that cannot be told: no
+// store, or one that would not open.
+func OpencodeStoreLacks(harness, id string) bool {
+	db := OpencodeDB()
+	if harness == "kilocode" {
+		db = KiloDB()
+	}
+	if fi, err := os.Stat(db); err != nil || fi.Size() == 0 {
+		return false
+	}
+	ss, err := parseOpencodeSchemaDB(harness, db, fmt.Sprintf(" and s.id = '%s'", sqlEscape(id)), 0)
+	return err == nil && len(ss) == 0
+}
+
 func ParseOpencodeDB(db string) ([]model.Session, error) {
 	return ParseOpencodeDBWhere(db, "", 0)
 }
