@@ -336,11 +336,10 @@ import (
 // prepended to; Gemini's own resume history leaves them out (#4214). The
 // chat file is re-read whole only when it changes, so a rebuild.
 //
-// 61: an aider session's id is its history path and start time rather than
-// its ordinal in the file, so a new history at the path of a deleted one no
-// longer takes the kept sessions' ids (#4332). Ids are set when a file is
-// read, so a rebuild.
-const version = 61
+// 60 also: an aider session's id is its history path and start time rather
+// than its ordinal in the file, so a new history at the path of a deleted one
+// no longer takes the kept sessions' ids (#4332).
+const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an
