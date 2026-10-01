@@ -17,7 +17,6 @@ package sources
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,15 +210,39 @@ func withOpencodeDiffsFor(ss []model.Session) []model.Session {
 // no longer holds became a session with no conversation in it, which a full
 // build does not keep (#4207).
 func ParseOpencodeDiffSession(path string) ([]model.Session, error) {
-	id := strings.TrimSuffix(filepath.Base(path), ".json")
-	if !strings.HasPrefix(id, "ses_") {
-		return nil, nil
+	return ParseOpencodeDiffSessions([]string{path})
+}
+
+// opencodeDiffBatch bounds the ids one query names, well under SQLite's limit
+// on the length of a statement.
+const opencodeDiffBatch = 500
+
+// ParseOpencodeDiffSessions is ParseOpencodeDiffSession for many files at once.
+// Each read of the database also reads every session's parent and title, which
+// is most of its cost: ~430 ms on a 3.8 GB store, paid once a file when a pass
+// read them one by one.
+func ParseOpencodeDiffSessions(paths []string) ([]model.Session, error) {
+	var ids []string
+	seen := map[string]bool{}
+	for _, p := range paths {
+		id := strings.TrimSuffix(filepath.Base(p), ".json")
+		if !strings.HasPrefix(id, "ses_") || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, "'"+sqlEscape(id)+"'")
 	}
-	ss, err := ParseOpencodeDBWhere(OpencodeDB(), fmt.Sprintf(" and s.id = '%s'", sqlEscape(id)), 0)
-	if err != nil || len(ss) == 0 {
-		return nil, err
+	var out []model.Session
+	for len(ids) > 0 {
+		n := min(len(ids), opencodeDiffBatch)
+		ss, err := ParseOpencodeDBWhere(OpencodeDB(), " and s.id in ("+strings.Join(ids[:n], ",")+")", 0)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ss...)
+		ids = ids[n:]
 	}
-	return withOpencodeDiffsFor(ss), nil
+	return withOpencodeDiffsFor(out), nil
 }
 
 // parseOpencodeStore and parseOpencodeStoreSince are the database kind's

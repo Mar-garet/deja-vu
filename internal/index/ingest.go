@@ -3558,29 +3558,74 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	// Judged by path after wholeStoresThisPass, which resolves the store paths.
 	storeKeys := map[string]bool{}
 	keysFrom := map[string][]string{}
-	for p, f := range changed {
-		ss, err := parseChangedFile(harness, p, old.Files[p])
-		if err != nil {
-			// A live-locked or half-written store (Cursor holds its sqlite
-			// under WAL) must not fail every search. Keep the old records
-			// and the old FileState so the next run retries this file.
-			if progress != nil {
-				fmt.Fprintf(progress, "deja: skipping %s this pass: %v\n", filepath.Base(p), err)
-			}
-			delete(changed, p)
-			if of, ok := old.Files[p]; ok {
-				files[p] = of
-			} else {
-				delete(files, p)
-			}
-			continue
+	// A live-locked or half-written store (Cursor holds its sqlite under WAL)
+	// must not fail every search. Keep the old records and the old FileState
+	// so the next run retries this file.
+	skip := func(p string, err error) {
+		if progress != nil {
+			fmt.Fprintf(progress, "deja: skipping %s this pass: %v\n", filepath.Base(p), err)
 		}
+		delete(changed, p)
+		if of, ok := old.Files[p]; ok {
+			files[p] = of
+		} else {
+			delete(files, p)
+		}
+	}
+	take := func(p string, ss []model.Session) {
 		ss = sources.FilterSessions(filterTombstoned(ss))
 		for _, s := range ss {
 			keysFrom[p] = append(keysFrom[p], s.Harness+":"+s.ID)
 		}
 		replacements = append(replacements, ss...)
+	}
+	// opencode's diff files are read after its database: each is read as its
+	// session from the database, which the since read may already have handed
+	// back with the diff folded in (#4207).
+	var diffs []string
+	fromDB := map[string]bool{}
+	for p, f := range changed {
+		if harnessForPath(p) == "opencode-diff" {
+			diffs = append(diffs, p)
+			continue
+		}
+		ss, err := parseChangedFile(harness, p, old.Files[p])
+		if err != nil {
+			skip(p, err)
+			continue
+		}
+		if harnessForPath(p) == "opencode" {
+			for _, s := range ss {
+				fromDB[s.ID] = true
+			}
+		}
+		take(p, ss)
 		files[p] = f
+	}
+	var pending []string
+	for _, p := range diffs {
+		if !fromDB[strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))] {
+			pending = append(pending, p)
+		}
+		files[p] = changed[p]
+	}
+	if len(pending) > 0 {
+		// Read together: one query rather than one a file, each paying for
+		// every session's parent and title again.
+		ss, err := sources.ParseOpencodeDiffSessions(pending)
+		if err != nil {
+			for _, p := range pending {
+				skip(p, err)
+			}
+		} else {
+			at := map[string]string{}
+			for _, p := range pending {
+				at[strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))] = p
+			}
+			for _, s := range ss {
+				take(at[s.ID], []model.Session{s})
+			}
+		}
 	}
 	// First, so everything below reads the same list of stores.
 	wholeStoresThisPass(changed, old.Files)
@@ -3639,8 +3684,8 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		// the first `deja blame` or search after a day of work prints it above
 		// the answer. Zero counts are left out rather than shown as zero.
 		line := fmt.Sprintf("deja: %s %d changed transcript%s", replacementPassMarker, len(changed), pluralS(len(changed)))
-		if len(replacements) > 0 {
-			line += fmt.Sprintf(", %d session%s replaced", len(replacements), pluralS(len(replacements)))
+		if len(replaceKeys) > 0 {
+			line += fmt.Sprintf(", %d session%s replaced", len(replaceKeys), pluralS(len(replaceKeys)))
 		}
 		if len(removed) > 0 {
 			line += fmt.Sprintf(", %d gone", len(removed))

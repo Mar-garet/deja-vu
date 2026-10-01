@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -319,5 +320,88 @@ func TestOpencodeClipCountCoversOnlyTheLastPass(t *testing.T) {
 	}
 	if got := clipped(); got != 0 {
 		t.Errorf("the count after a pass that did not re-read s1 is %d; if it is right now, drop this pin", got)
+	}
+}
+
+// A changed diff file was read as its session one sqlite3 run at a time, each
+// with parents and titles beside it: ~430 ms a file on a 3.8 GB store, so a
+// thousand diffs restored at once cost minutes. A session the database read
+// already handed back with its diff folded in is not read again, and the rest
+// are read together.
+func TestChangedOpencodeDiffsAreReadInOneQuery(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the sqlite3 wrapper is a shell script")
+	}
+	db, _, dir, run := opencodeWithDiff(t)
+	real, err := exec.LookPath("sqlite3")
+	if err != nil {
+		t.Skip("sqlite3 CLI not available")
+	}
+	// Older than anything the since read goes back to.
+	run(`insert into session values('ses_b','/w/app','b',1790850000000,1790850000100);
+insert into message values('mb','ses_b',1790850000100,1790850000100,'{"role":"user"}');
+insert into part values('pb','mb','ses_b',1790850000100,1790850000100,'{"type":"text","text":"why is b slow"}');
+insert into session values('ses_c','/w/app','c',1790850000000,1790850000100);
+insert into message values('mc','ses_c',1790850000100,1790850000100,'{"role":"user"}');
+insert into part values('pc','mc','ses_c',1790850000100,1790850000100,'{"type":"text","text":"why is c slow"}');`)
+	diffs := filepath.Join(filepath.Dir(db), "storage", "session_diff")
+	if err := Ensure(dir, "", true, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Every sqlite3 run of the next pass, logged and passed through.
+	bin := t.TempDir()
+	log := filepath.Join(bin, "runs.log")
+	wrapper := "#!/bin/sh\nprintf '%s\\n' \"$*\" | tr '\\n' ' ' >> " + log + "\necho >> " + log + "\nexec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "sqlite3"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// ses_a gets a reply, and all three diffs change in the same pass.
+	run(`insert into message values('m2','ses_a',1790858250000,1790858252007,'{"role":"assistant"}');
+insert into part values('p2','m2','ses_a',1790858250000,1790858252000,'{"type":"text","text":"the pool is too small"}');
+update session set time_updated=1790858252010 where id='ses_a';`)
+	future := time.Now().Add(time.Hour)
+	for _, id := range []string{"ses_a", "ses_b", "ses_c"} {
+		p := filepath.Join(diffs, id+".json")
+		writeOpencodeDiff(t, p, "gone "+id+"marker line")
+		if err := os.Chtimes(p, future, future); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chtimes(db, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	b, _ := os.ReadFile(log)
+	reads := 0
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.Contains(line, "join message m on m.session_id=s.id") {
+			reads++
+		}
+	}
+	// One for the database's own since read, one for ses_b and ses_c together.
+	if reads != 2 {
+		t.Errorf("the pass read sessions %d times, want 2", reads)
+	}
+	for _, id := range []string{"ses_a", "ses_b", "ses_c"} {
+		s, ok, err := FindByIdentity(dir, "opencode", id)
+		if err != nil || !ok {
+			t.Fatalf("%s is not in the index: %v %v", id, ok, err)
+		}
+		read := false
+		for _, m := range s.Messages {
+			read = read || strings.Contains(m.Text, id+"marker")
+		}
+		if !read {
+			t.Errorf("%s's changed diff was not read", id)
+		}
+	}
+	if a := rolesOf(t, dir); a["user"] != 1 || a["assistant"] != 1 {
+		t.Errorf("want ses_a's two turns once each: %v", a)
 	}
 }

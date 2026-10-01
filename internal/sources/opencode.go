@@ -54,9 +54,9 @@ func LoadOpencode() []model.Session {
 // line that would read one thousand on this machine. The diff is not another
 // conversation, it is the same one's account of what it changed.
 //
-// A diff whose session the database no longer holds stands on its own: opencode
-// prunes the database and leaves the diff, and what it says about a file is
-// still true.
+// A diff whose session the database no longer holds is left out: opencode
+// prunes the database and leaves the diff, and with no conversation beside it
+// there is nothing to list or blame it on.
 func withOpencodeDiffs(ss []model.Session) []model.Session {
 	files := OpencodeDiffFiles()
 	if len(files) == 0 {
