@@ -121,14 +121,14 @@ trusted_hash = "sha256:abc"
 [projects."/some/other"]
 enabled = false
 `
-	got := codexDejaPins(cfg, hooks)["SessionStart"]
+	got := codexDejaPins(cfg, "/h/hooks.json", hooks)["SessionStart"]
 	if !strings.Contains(got, "trusted_hash") {
 		t.Fatalf("the hook's own pin is missing from its section: %q", got)
 	}
 	if strings.Contains(got, "enabled = false") {
 		t.Errorf("the section ran on into an unrelated table, whose enabled flag would decide our status: %q", got)
 	}
-	if codexDejaPins("[projects.\"/x\"]\nenabled = true\n", hooks)["SessionStart"] != "" {
+	if codexDejaPins("[projects.\"/x\"]\nenabled = true\n", "/h/hooks.json", hooks)["SessionStart"] != "" {
 		t.Error("a config that never mentions the hook reported a section for it")
 	}
 }

@@ -75,6 +75,9 @@ func TestDoctorIsQuietWhenCodexHasEveryEvent(t *testing.T) {
 	if got := out.String(); strings.Contains(got, "out of date") {
 		t.Errorf("a complete wiring was reported as stale:\n%s", got)
 	}
+	if st := codexHookWiringState(); st.state != "wired" {
+		t.Errorf("a complete, approved wiring reads %q, want wired", st.state)
+	}
 }
 
 // Codex users keep their own hooks in hooks.json. One that holds no entry of
@@ -227,5 +230,20 @@ func TestDoctorCodexTrustIsReadAtDejasOwnEntry(t *testing.T) {
 	write(pin("session_start:0:0"), pin("session_start:1:0"))
 	if st = codexHookWiringState(); st.state != "wired" || st.approved != 1 {
 		t.Errorf("deja's SessionStart pinned: state %q, %d approved, want wired and 1", st.state, st.approved)
+	}
+
+	// Pins at deja's positions in another hooks file — a project's own, the
+	// plugin's — say nothing about the file deja wrote.
+	other := func(file, pos string) string {
+		return "\n[hooks.state." + strconv.Quote(file+":"+pos) + "]\ntrusted_hash = \"sha256:00\"\n"
+	}
+	for _, file := range []string{"/work/repo/.codex/hooks.json", filepath.Join(home, "plugins", "cache", "deja-vu", "hooks", "hooks.json")} {
+		write(other(file, "session_start:1:0"), other(file, "user_prompt_submit:0:0"), other(file, "pre_tool_use:0:0"))
+		if st = codexHookWiringState(); st.state != "untrusted" || st.approved != 0 {
+			t.Errorf("pins for %s: state %q, %d approved, want untrusted and none", file, st.state, st.approved)
+		}
+		if codexHasSeenItsHook() {
+			t.Errorf("pins for %s, and install would say codex has seen deja's hook", file)
+		}
 	}
 }

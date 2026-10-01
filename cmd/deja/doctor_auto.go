@@ -322,7 +322,8 @@ func codexHasSeenItsHook() bool {
 	if err != nil {
 		return true // nothing to read: do not raise an alarm we cannot support
 	}
-	b, err := os.ReadFile(filepath.Join(sources.CodexHome(), "hooks.json"))
+	path := filepath.Join(sources.CodexHome(), "hooks.json")
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return true
 	}
@@ -331,7 +332,7 @@ func codexHasSeenItsHook() bool {
 		return true
 	}
 	hooks, _ := root["hooks"].(map[string]any)
-	return codexPrimaryPin(codexDejaPins(string(cfg), hooks)) != ""
+	return codexPrimaryPin(codexDejaPins(string(cfg), path, hooks)) != ""
 }
 
 // opencodePluginShapeStale reports whether the installed plugin is written for

@@ -126,7 +126,7 @@ func codexHookWiringState() hookWiringState {
 	// shown is the state where it silently runs nothing. The pin read is the
 	// one for deja's own entry — a user's hook ahead of it under the same
 	// event holds the pin at :0:0 (#4313).
-	pins := codexDejaPins(string(cfg), st.hooks)
+	pins := codexDejaPins(string(cfg), st.path, st.hooks)
 	st.state = "untrusted"
 	if section := codexPrimaryPin(pins); section != "" {
 		off, on := strings.Index(section, "enabled = false"), strings.Index(section, "enabled = true")
@@ -181,7 +181,7 @@ func codexDejaHookPos(hooks map[string]any, event, sub string) (codexHookPos, bo
 			if h == nil || h["type"] != "command" {
 				continue
 			}
-			if cmd, _ := h["command"].(string); strings.Contains(cmd, sub) {
+			if isDejaHookCommand(h["command"], "deja "+sub) {
 				return codexHookPos{codexEventKey(event), g, j}, true
 			}
 		}
@@ -189,8 +189,10 @@ func codexDejaHookPos(hooks map[string]any, event, sub string) (codexHookPos, bo
 	return codexHookPos{}, false
 }
 
-// codexDejaPins maps each event deja has an entry for to the table codex's
-// config keeps for that entry, "" when there is none.
+// codexDejaPins maps each event deja has an entry for in the hooks file at
+// path to the table codex's config keeps for that entry, "" when there is none.
+// Only that file's keys count: a project's own hooks.json or a plugin's carries
+// pins at the same positions for hooks that are not deja's.
 //
 // Codex keys its trust store per hook — `[hooks.state."<path>/hooks.json:
 // <event>:<group>:<hook>"]` — so a user's own hook ahead of deja's under the
@@ -204,8 +206,9 @@ func codexDejaHookPos(hooks map[string]any, event, sub string) (codexHookPos, bo
 // serialisation, or of any combination of the two with the matcher, the event
 // or the key — checked. Presence of a pin is what deja can honestly read: it
 // means codex has been shown this hook and kept an opinion about it.
-func codexDejaPins(cfg string, hooks map[string]any) map[string]string {
+func codexDejaPins(cfg, path string, hooks map[string]any) map[string]string {
 	out := map[string]string{}
+	spellings := codexHookPathSpellings(path)
 	at := map[codexHookPos]string{}
 	for _, h := range codexHookWiring {
 		if pos, ok := codexDejaHookPos(hooks, h.Event, h.Sub); ok {
@@ -233,7 +236,7 @@ func codexDejaPins(cfg string, hooks map[string]any) map[string]string {
 			continue
 		}
 		pos, file, ok := parseCodexTrustKey(key)
-		if ok && strings.HasSuffix(file, "hooks.json") {
+		if ok && spellings[file] {
 			if e, ours := at[pos]; ours {
 				event, start = e, i
 			}
