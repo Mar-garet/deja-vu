@@ -356,6 +356,9 @@ import (
 //
 // 60 also: Roo and Kilo extension tasks read apply_patch, search_replace,
 // edit_file and edit calls into files, edit and wrote records (#4419).
+//
+// 60 also: a Roo or Kilo extension turn is stamped at its own ts, not at the
+// task's last activity plus N seconds (#4420).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

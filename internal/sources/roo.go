@@ -295,6 +295,9 @@ func parseRooShapedTask(path, harness string) ([]model.Session, error) {
 	var turns []struct {
 		Role    string          `json:"role"`
 		Content json.RawMessage `json:"content"`
+		// Roo stamps every turn in epoch milliseconds. A float, so a value
+		// written with a fraction does not fail the whole task.
+		TS float64 `json:"ts"`
 	}
 	if err := json.Unmarshal(b, &turns); err != nil {
 		// One document per task, as in cline: a file that will not parse is a
@@ -325,7 +328,13 @@ func parseRooShapedTask(path, harness string) ([]model.Session, error) {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
 		}
+		// A turn's own ts first: history_item's is when the task was last
+		// touched, so counting seconds from it put a long task at its end and
+		// past the clock (#4420). A turn without one keeps that scheme.
 		ts := base.Add(time.Duration(ti) * time.Second)
+		if m.TS > 0 {
+			ts = time.UnixMilli(int64(m.TS))
+		}
 		if m.Role == "user" {
 			if tool := clineTurnToolOutput(m.Content, ts); len(tool) > 0 {
 				s.Touch(ts)
