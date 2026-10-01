@@ -203,17 +203,26 @@ func gooseExtensionsBlock(s string) string {
 // reader's entries ended up nested in deja's — and went with it on uninstall
 // (#4289).
 func yamlKeyBlock(s, key string) string {
+	if at := yamlKeyLineEnd(s, key); at >= 0 {
+		return s[at:]
+	}
+	return ""
+}
+
+// yamlKeyLineEnd is the offset just past the first top-level line that is
+// key, or -1 when there is none or it is the file's last line with no newline.
+func yamlKeyLineEnd(s, key string) int {
 	at := 0
 	for _, line := range strings.SplitAfter(s, "\n") {
 		at += len(line)
 		if yamlIndentWidth(line) == 0 && yamlKeyLine(line, key) {
 			if !strings.HasSuffix(line, "\n") {
-				return ""
+				return -1
 			}
-			return s[at:]
+			return at
 		}
 	}
-	return ""
+	return -1
 }
 
 // yamlBlockIndent returns the indent the entries under a key are written at.

@@ -128,7 +128,7 @@ func dropEmptyYAMLKey(s, key string) string {
 			j++
 		}
 		k := j
-		for k < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[k]), "#") {
+		for k < len(lines) && (strings.TrimSpace(lines[k]) == "" || strings.HasPrefix(strings.TrimSpace(lines[k]), "#")) {
 			k++
 		}
 		if k > j && k < len(lines) && yamlLineBelongsTo(lines[k], lines[i]) {

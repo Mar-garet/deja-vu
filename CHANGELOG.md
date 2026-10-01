@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `deja install hermes` and `goose` join an `mcp_servers:` / `extensions:` block that opens the file, carries a comment or starts with one, instead of adding a second key that hid the reader's other servers; a key written twice or spelled another way is refused, and doctor reads such a block, BOM included (#4289).
+- `deja install hermes`, `goose` and `continue` join an `mcp_servers:` / `extensions:` / `slash_commands:` / `mcpServers:` / `prompts:` block that opens the file, carries a comment or starts with one, instead of adding a second key that hid the reader's other servers; a key written twice or spelled another way is refused, and doctor reads such a block, BOM included (#4289).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).
 - `deja resume` on a Gemini CLI session runs `gemini --resume` in the directory the session ran in, read from `projects.json` / `.project_root`; from anywhere else Gemini answered "No previous sessions found for this project" (#4211).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).

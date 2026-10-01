@@ -181,3 +181,54 @@ func TestInstallGooseKeepsWhatItDidNotWrite(t *testing.T) {
 		})
 	}
 }
+
+// Continue's two lists, and a goose key whose entries follow a comment and a
+// blank line: the same key-line rules, so nothing of the reader's is lost or
+// hidden.
+func TestContinueAndGooseKeysWithCommentsRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name, cfg string
+		install   func(string, bool) (installResult, error)
+		path      func() string
+	}{
+		{"continue commented key", "name: x\nmcpServers: # c\n  - name: foo\n    command: z\n", installContinue, continueConfigPath},
+		{"continue comment-only block", "name: x\nmcpServers:\n  # none\n", installContinue, continueConfigPath},
+		{"continue col0 comment then blank", "name: x\nprompts:\n# mine\n\n  - name: p\n    prompt: hi\n", installContinue, continueConfigPath},
+		{"goose col0 comment then blank", "extensions:\n# mine\n\n  foo:\n    cmd: z\n", installGoose, func() string { return filepath.Join(gooseConfigDir(), "config.yaml") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv("GOOSE_PATH_ROOT", "")
+			path := tc.path()
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(tc.cfg), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 2; i++ {
+				if _, err := tc.install("/bin/deja", false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			b, _ := os.ReadFile(path)
+			if strings.Contains(string(b), "#") && strings.Contains(string(b), "  # none  -") {
+				t.Fatalf("an item was glued onto a comment:\n%s", b)
+			}
+			for _, key := range []string{"\nmcpServers", "\nprompts", "\nextensions"} {
+				if n := strings.Count("\n"+string(b), key); n > 1 {
+					t.Fatalf("%q written %d times:\n%s", key, n, b)
+				}
+			}
+			if _, err := tc.install("/bin/deja", true); err != nil {
+				t.Fatal(err)
+			}
+			if b, _ := os.ReadFile(path); string(b) != tc.cfg {
+				t.Fatalf("install and uninstall did not give the file back:\nwant %q\ngot  %q", tc.cfg, b)
+			}
+		})
+	}
+}
