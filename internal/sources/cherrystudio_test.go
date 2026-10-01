@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -228,3 +229,51 @@ func TestCherryStudioFollowsAMovedDataDir(t *testing.T) {
 }
 
 func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+// Cherry Studio runs dsh with DSH_HOME inside its data dir, so a deja it starts
+// inherits a DeepSeek root that is Cherry's store. The log belongs to Cherry
+// Studio alone; listed by deepseek too, it was counted under both (#4342).
+func TestCherryStudioDshLogIsNotAlsoDeepSeeks(t *testing.T) {
+	cherryHome(t)
+	dshHome := filepath.Join(cherryStudioAppDirs()[0], "Data", "Agents", ".dsh")
+	log := filepath.Join(dshHome, "sessions", "--work-pgbouncer-lab--", "session-c0ffee00-0000-4000-8000-000000000003", "session.jsonl")
+	copyFixture(t, "fixtures/registry/deepseek/sessions/--work-pgbouncer-lab--/session-eaf5c9ac-0e47-4d2f-b982-8bae306062d1/session.jsonl", log)
+	t.Setenv("DEJA_DEEPSEEK_ROOT", "")
+	t.Setenv("DSH_HOME", dshHome)
+
+	if !slices.Contains(CherryStudioSessionFiles(), log) {
+		t.Fatalf("Cherry Studio does not list its own dsh log, so this measures nothing")
+	}
+	if got := DeepSeekSessionFiles(); slices.Contains(got, log) {
+		t.Errorf("deepseek lists Cherry Studio's dsh log too: %q", got)
+	}
+}
+
+// A data dir moved to the home directory makes the legacy <dir>/.claude/projects
+// root Claude Code's own store. Cherry Studio must not list those sessions as
+// its own (#4347).
+func TestCherryStudioMovedToHomeLeavesClaudesStoreAlone(t *testing.T) {
+	home := cherryHome(t)
+	t.Setenv("DEJA_CLAUDE_ROOT", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	stock := filepath.Join(home, ".claude", "projects", "-work-api", "s-1.jsonl")
+	if err := os.MkdirAll(filepath.Dir(stock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stock, []byte(cherrySnapshotTranscript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".cherrystudio"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := json.Marshal(map[string]any{"app.user_data_path": map[string]string{"/Applications/Cherry Studio.app/Contents/MacOS/Cherry Studio": home}})
+	if err := os.WriteFile(filepath.Join(home, ".cherrystudio", "boot-config.json"), cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(ClaudeFiles(), stock) {
+		t.Fatalf("Claude does not list its own transcript, so this measures nothing")
+	}
+	if got := CherryStudioSessionFiles(); slices.Contains(got, stock) {
+		t.Errorf("Cherry Studio lists Claude Code's own transcript: %q", got)
+	}
+}

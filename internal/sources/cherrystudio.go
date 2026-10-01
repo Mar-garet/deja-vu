@@ -149,9 +149,18 @@ func cherryStudioMovedDirs() []string {
 	}
 	var out []string
 	for _, v := range cfg.UserDataPath {
-		if d, ok := v.(string); ok && filepath.IsAbs(d) {
-			out = append(out, filepath.Clean(d))
+		d, ok := v.(string)
+		if !ok || !filepath.IsAbs(d) {
+			continue
 		}
+		d = filepath.Clean(d)
+		// Moved to the home directory, the legacy <dir>/.claude/projects root
+		// is Claude Code's own store, and every Claude session would be listed
+		// as Cherry Studio's.
+		if slices.Contains(ClaudeRoots(), filepath.Join(d, ".claude", claudeProjectsDirName())) {
+			continue
+		}
+		out = append(out, d)
 	}
 	sort.Strings(out)
 	return out
@@ -204,12 +213,23 @@ func ParseCherryStudioDshFile(path string) ([]model.Session, error) {
 	return ss, err
 }
 
+// The kinds match every path the index classifies, and resolving the roots
+// reads boot-config.json and stats each candidate: a no-op pass over 3000 pi
+// files went from 0.13 s to 0.8 s. The store's own segment rules a path out
+// first.
 func cherryStudioPiFile(p string) bool {
-	return strings.HasSuffix(p, ".jsonl") && underAnyRoot(p, cherryStudioPiRoots())
+	return strings.HasSuffix(p, ".jsonl") && strings.Contains(p, cherryStudioAgentSegment(".pi")) &&
+		underAnyRoot(p, cherryStudioPiRoots())
+}
+
+func cherryStudioAgentSegment(agent string) string {
+	sep := string(filepath.Separator)
+	return sep + filepath.Join("Data", "Agents", agent, "sessions") + sep
 }
 
 func cherryStudioDshFile(p string) bool {
-	return isDeepSeekLog(p) && underAnyRoot(p, cherryStudioDshRoots())
+	return isDeepSeekLog(p) && strings.Contains(p, cherryStudioAgentSegment(".dsh")) &&
+		underAnyRoot(p, cherryStudioDshRoots())
 }
 
 func underAnyRoot(p string, roots []string) bool {
@@ -234,6 +254,10 @@ func ParseCherryStudioFileFromOffset(path string, offset int64) ([]model.Session
 // CherryStudioUnderRoot reports whether a path belongs to this store, so the
 // registry can claim it without stealing a stock Claude transcript.
 func CherryStudioUnderRoot(p string) bool {
+	sep := string(filepath.Separator)
+	if os.Getenv("DEJA_CHERRYSTUDIO_ROOTS") == "" && !strings.Contains(p, sep+".claude"+sep) {
+		return false
+	}
 	for _, root := range CherryStudioRoots() {
 		if strings.HasPrefix(p, root) {
 			return true

@@ -78,8 +78,22 @@ func isDeepSeekLog(p string) bool {
 	return false
 }
 
+// DeepSeekSessionFiles leaves out Cherry Studio's dsh store. Cherry runs dsh
+// with DSH_HOME pointed into its own data dir, so a deja it starts inherits that
+// root and listed those logs under both harnesses (#4342).
 func DeepSeekSessionFiles() []string {
-	return walkFiles(DeepSeekRoot(), isDeepSeekLog)
+	files := walkFiles(DeepSeekRoot(), isDeepSeekLog)
+	cherry := cherryStudioDshRoots()
+	if len(cherry) == 0 {
+		return files
+	}
+	out := files[:0]
+	for _, p := range files {
+		if !underAnyRoot(p, cherry) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func LoadDeepSeek() []model.Session {
