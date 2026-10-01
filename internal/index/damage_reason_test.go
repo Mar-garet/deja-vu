@@ -80,6 +80,18 @@ func TestDamageReasonNamesWhatBroke(t *testing.T) {
 				}
 			}
 		}, "the postings directory is empty"},
+		{"a record log with a tail the manifest never committed", func(t *testing.T, dir string) {
+			f, err := os.OpenFile(filepath.Join(dir, "records.bin"), os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.Write([]byte("a record from a build that crashed")); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}, "longer than the manifest committed"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

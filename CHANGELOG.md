@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- MCP recall answers from the index while an incremental `deja index` pass runs instead of telling the agent "deja is indexing". A record log that has grown past the last committed manifest is a pass in flight, not damage; one that is shorter still is (#4266).
+- MCP recall answers from the index while an incremental `deja index` pass runs instead of telling the agent "deja is indexing". A record log that has grown past the committed manifest while a pass holds the lock is that pass appending, not damage; with no pass running, or a log that is shorter, it still is (#4266).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).
 - A failed Gemini CLI command is indexed with its exit status (`$ git log …  → exit 128`), the way Codex, opencode and Cursor commands are, so the failed-command recall sees it. The index rebuilds once (#4208).
 - `deja resume` refuses an opencode or Kilo CLI session that was deleted in the agent and points at `deja show`; it printed `opencode -s <id>`, which failed with "Session not found" (#4205).
