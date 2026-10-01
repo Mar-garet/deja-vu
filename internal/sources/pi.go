@@ -34,7 +34,10 @@ func ParsePiFileFromOffset(path string, offset int64) ([]model.Session, error) {
 }
 
 func parsePiFileFromOffset(path string, offset int64) ([]model.Session, error) {
-	return parsePiShaped(path, offset, "pi", piProjectName(path), false)
+	// The header's cwd names the project, the folder only when it has none:
+	// pi folds every / into a -, so the folder cannot tell my-app from my/app
+	// (#4427).
+	return parsePiShaped(path, offset, "pi", piProjectName(path), true)
 }
 
 // parsePiShaped parses a pi-format transcript (shared by pi and OpenClaw,
@@ -116,9 +119,12 @@ func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
 	if id, _ := m["id"].(string); id != "" {
 		s.ID = id
 	}
+	// The cwd as it is, not encoded into a folder name and decoded back: that
+	// round trip is the guess between my-app and my/app the header settles
+	// (#4427).
 	if useHeaderCwd {
-		if cwd, _ := m["cwd"].(string); cwd != "" {
-			s.Project = claudeProjectName(pathToProjectKey(cwd))
+		if name := cwdProjectName(str(m["cwd"])); name != "" {
+			s.Project = name
 		}
 	}
 	s.Touch(parseTimeAny(m["timestamp"]))

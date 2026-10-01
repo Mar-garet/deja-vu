@@ -51,7 +51,9 @@
 </ul>
 <p>Senpi (OmO Native) descends from pi and kept its transcript envelope — a</p>
 <p><code>session</code> header line, then one <code>message</code> line per turn — so the parsing is</p>
-<p>pi&#39;s. The encoded directory names the project, the way pi&#39;s does.</p>
+<p>pi&#39;s. The header&#39;s <code>cwd</code> names the project; the encoded directory is the</p>
+<p>fallback for a header without one, because Senpi folds every <code>/</code> into <code>-</code> and</p>
+<p><code>/tmp/my-app</code> and <code>/tmp/my/app</code> share a folder name (#4427).</p>
 <p>It kept the rest of pi too, which is what closes the harness: on a live install</p>
 <p>of <code>@code-yeongyu/senpi</code> every surface answered on senpi&#39;s own screen.</p>
 <ul>

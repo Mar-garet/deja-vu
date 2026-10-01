@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A pi or Senpi session in `my-app` is no longer filed under `my/app`. The project comes from the `cwd` in the session header instead of the folder name, which turns every `/` into `-`. omp, OpenClaw, gjc, prime-agent and Kimchi read the header already but encoded it and decoded it back, which made the same guess. The index rebuilds once (#4427).
 - Senpi sessions keep the commands, reads and edits its eval cells ran. With codemode on, Senpi's default, the shell runs only inside a cell, so these were the only commands a Senpi session had, and none were indexed. The cell's output reads as text rather than a JSON string (#4425).
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name (#4402).
 - A gjc, pi, omp or prime-agent session no longer gets itself back as the top hit of its own first MCP recall. The extension asked for the session-start digest without the session id, so the session was not marked live until a later hook; the pi npm package had the same gap (#4394).

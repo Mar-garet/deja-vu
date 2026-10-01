@@ -46,7 +46,7 @@
 <tr><td><strong>Last verified</strong></td><td>2026-09-06</td></tr>
 </table></div>
 <h2 id="discovery">Discovery</h2>
-<p>pi stores session transcripts under <code>~/.pi/agent/sessions/</code>. Each project directory uses the same <code>--</code>-encoded path scheme as Claude Code, e.g. <code>--Users-max-code-deja-vu--</code> for <code>/Users/max/code/deja-vu</code>. Within each project directory, session files are named <code>&lt;ISO-timestamp&gt;_&lt;UUID&gt;.jsonl</code>.</p>
+<p>pi stores session transcripts under <code>~/.pi/agent/sessions/</code>. Each project directory uses the same <code>--</code>-encoded path scheme as Claude Code, e.g. <code>--Users-max-code-deja-vu--</code> for <code>/Users/max/code/deja-vu</code>. Within each project directory, session files are named <code>&lt;ISO-timestamp&gt;_&lt;UUID&gt;.jsonl</code>. The encoding is lossy (<code>my-app</code> and <code>my/app</code> give the same name), so the header&#39;s <code>cwd</code> names the project and the directory is the fallback for a header without one (#4427).</p>
 <h2 id="file-layout">File layout</h2>
 <p>Each <code>.jsonl</code> file is a single session. The first line is always a session header:</p>
 <pre><code class="language-json">{&#34;type&#34;:&#34;session&#34;,&#34;version&#34;:3,&#34;id&#34;:&#34;&lt;uuid&gt;&#34;,&#34;timestamp&#34;:&#34;&lt;ISO-8601&gt;&#34;,&#34;cwd&#34;:&#34;&lt;absolute-path&gt;&#34;}</code></pre>
