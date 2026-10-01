@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja show` says a message was stored short only on the session that holds it. In a store that keeps every session in one file, such as Zed's threads.db, one long pasted log put the note on every session in it (#4340).
 - A session that ended a few minutes ago shows up in the next session's MCP recall. deja hid every session its hooks had touched in the last 20 minutes as one an agent was still inside; Claude Code and Gemini CLI now get a `SessionEnd` hook that clears that mark when the session closes, including a one-shot `gemini -p`. Installing or uninstalling hooks also keeps the key order of your own entries in `settings.json` instead of sorting them (#4210).
 - `deja index` no longer says "no agent history was found" when the transcript it just reported deleted is still held and searchable (#4221).
 - `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).

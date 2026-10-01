@@ -779,9 +779,10 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 }
 
 // clippedMessageNote says that a message in this session was stored short of
-// what the transcript holds. The count is the store's, not this session's —
-// deja records it per file at ingest — so the line names the session's own
-// file and leaves the arithmetic to `deja doctor`.
+// what the transcript holds. deja records the count per file at ingest, and a
+// store like Zed's threads.db keeps every session in one file, so the file's
+// count put the note on every session in it (#4340). The file says a clip
+// happened; the session's own messages at the cap say which ones it holds.
 func clippedMessageNote(dir string, s model.Session) string {
 	if s.Path == "" {
 		return ""
@@ -791,8 +792,18 @@ func clippedMessageNote(dir string, s model.Session) string {
 	if !ok || e.Clipped == 0 {
 		return ""
 	}
+	n := 0
+	for _, m := range s.Messages {
+		if index.StoredShort(m.Text) {
+			n++
+		}
+	}
+	n = min(n, e.Clipped)
+	if n == 0 {
+		return ""
+	}
 	return fmt.Sprintf("deja: %s stored short of what the transcript holds — the rest of %s is in the file itself",
-		pluralMessages(e.Clipped), pluralThem(e.Clipped))
+		pluralMessages(n), pluralThem(n))
 }
 
 func pluralMessages(n int) string {

@@ -4810,6 +4810,15 @@ func filePrefixHash(path string, n int64) uint64 {
 	return h.Sum64()
 }
 
+// StoredShort reports whether a stored message text is one the cap cut: the
+// cut lands on a rune start at most utf8.UTFMax-1 bytes before the cap. A store
+// that keeps many sessions in one file records its clip count against that
+// file, so this is how a reader tells which of those sessions holds the clipped
+// message (#4340).
+func StoredShort(text string) bool {
+	return len(text) > maxIndexedText-utf8.UTFMax
+}
+
 // countClipped records messages stored short of the transcript, against the
 // file that holds them. The caller holds the lock where one is needed;
 // redactForIngest runs single-threaded.
