@@ -82,7 +82,7 @@ func TestGooseEditAndWriteCallsLeaveEditAndWroteRecords(t *testing.T) {
 func TestGooseTextEditorReadsOnlyWhatTheCommandTakes(t *testing.T) {
 	for _, command := range []string{"view", "undo_edit"} {
 		raw := `[{"type":"toolRequest","id":"t4","toolCall":{"status":"success","value":{"name":"developer__text_editor","arguments":` +
-			`{"command":"` + command + `","path":"/w/app/queue.go","old_str":"size := 10","new_str":"pool := make(chan conn, maxPoolSize)","file_text":"package app\n\nconst maxPoolSize = 40\n"}}}}]`
+			`{"command":"` + command + `","path":"/w/app/queue.go","old_str":"size := 10","new_str":"pool := make(chan conn, maxPoolSize)","file_text":"package app\n\nconst maxPoolSize = 40\n","edits":[{"old_str":"zzz","new_str":"pool := make(chan conn, maxPoolSize)"}]}}}}]`
 		s := gooseSessionFrom(t, "assistant", raw)
 		for _, m := range s.Messages {
 			if m.Role == RoleEdit || m.Role == RoleWrote {

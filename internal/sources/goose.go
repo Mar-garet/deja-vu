@@ -300,7 +300,8 @@ var gooseTextEditorDialect = toolDialect{
 
 // gooseTextEditorArgs keeps the text arguments the call's command reads:
 // old_str and new_str for str_replace, new_str for insert, file_text for
-// write. A view or an undo_edit carrying stray ones changed nothing.
+// write. A view or an undo_edit carrying stray ones changed nothing, and
+// text_editor has no `edits` list for the shared dialect reader to find.
 func gooseTextEditorArgs(args map[string]any) map[string]any {
 	keep := map[string][]string{
 		"str_replace": {"old_str", "new_str"},
@@ -309,7 +310,7 @@ func gooseTextEditorArgs(args map[string]any) map[string]any {
 	}[str(args["command"])]
 	out := make(map[string]any, len(args))
 	for k, v := range args {
-		if k != "old_str" && k != "new_str" && k != "file_text" {
+		if k != "old_str" && k != "new_str" && k != "file_text" && k != "edits" {
 			out[k] = v
 		}
 	}
