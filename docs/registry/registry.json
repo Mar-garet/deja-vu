@@ -59,7 +59,7 @@
         "fixtures/registry/amp/thread.json"
       ],
       "parser_source": "internal/sources/amp.go",
-      "last_verified": "2026-09-02",
+      "last_verified": "2026-10-01",
       "display_name": "Amp",
       "capabilities": {
         "mcp": true,
