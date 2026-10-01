@@ -162,6 +162,15 @@ func addAiderReadEntry(s, ctx string) (string, error) {
 	return s[:at] + entry + s[at:], nil
 }
 
+// yamlPlainSafe reports that s reads as the same string unquoted in a block
+// list item.
+func yamlPlainSafe(s string) bool {
+	if s == "" || s != strings.TrimSpace(s) || strings.ContainsAny(s[:1], "-?:,[]{}#&*!|>'\"%@`") {
+		return false
+	}
+	return !strings.Contains(s, ": ") && !strings.Contains(s, " #") && !strings.HasSuffix(s, ":") && !strings.ContainsAny(s, "\\")
+}
+
 // aiderReadItems is what a top-level `read: <v>` line holds, as the block list
 // install turns it into: a flow list's items, nothing for a null, or the one
 // file a scalar names. ok is false for a value it cannot take apart.
@@ -233,10 +242,17 @@ func yamlFlowItems(v string) ([]string, bool) {
 		return nil, true
 	}
 	items = append(items, strings.TrimSpace(cur.String()))
-	// A quoted item keeps its quotes in the block list: unquoted, "#a.md"
-	// is a comment and 'k: v.md' a mapping, and aider loses the file.
-	if slices.Contains(items, "") {
-		return nil, true
+	for i, it := range items {
+		if it == "" {
+			return nil, true
+		}
+		// A name quoted in the flow list is the same file unquoted, and the
+		// block list deja writes takes it plain — when plain reads the same:
+		// unquoted, "#a.md" is a comment and 'k: v.md' a mapping, and aider
+		// loses the file.
+		if len(it) > 1 && (it[0] == '"' || it[0] == '\'') && it[len(it)-1] == it[0] && yamlPlainSafe(it[1:len(it)-1]) {
+			items[i] = it[1 : len(it)-1]
+		}
 	}
 	return items, true
 }
