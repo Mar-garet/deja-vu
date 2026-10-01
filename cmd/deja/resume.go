@@ -268,8 +268,11 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// Its sessions are per-workspace — `--continue` refuses in a directory
 		// that has none — so the command goes with the workspace it was worked
 		// in. `--session-id` is the alias of `--resume` on both the TUI and
-		// `codewhale exec` (verified against 0.9.13's own --help).
-		return s.Project, "codewhale --resume " + s.ID, nil
+		// `codewhale exec` (verified against 0.9.13's own --help). The
+		// directory is the absolute workspace from the session file; the
+		// project label is a relative path that only resolved from the
+		// workspace's parent (#4362).
+		return existingDir(sources.CodeWhaleWorkspace(s.Path)), "codewhale --resume " + s.ID, nil
 	case "reasonix":
 		// `--resume` looks an id up in the store of the workspace it runs in
 		// (the git root of the working directory), so it goes with that
