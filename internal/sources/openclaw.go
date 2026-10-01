@@ -1,11 +1,8 @@
 package sources
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -195,29 +192,6 @@ func zstdToTempNamed(path, harness string) (string, error) {
 		return "", err
 	}
 	return f.Name(), nil
-}
-
-// zstdDecodeFile decompresses a file's frames through the zstd CLI. A log
-// still being appended, or one whose writer died mid-frame, ends in a torn
-// frame, and zstd has written every complete frame before it to stdout by the
-// time it fails. Those are kept, and the file is counted as one unusable line
-// in the ingest diagnostics, so the one torn file is named instead of the
-// whole session dropping and the store reading as unreadable (#4294). Only a
-// file nothing decodes from is an error.
-func zstdDecodeFile(path, harness string, raw []byte) ([]byte, error) {
-	cmd := exec.Command("zstd", "-d", "-c", "-q")
-	cmd.Stdin = bytes.NewReader(raw)
-	var out, errBuf bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		if out.Len() == 0 {
-			return nil, fmt.Errorf("%s: zstd -d %s: %w: %s", harness, filepath.Base(path), err,
-				strings.TrimSpace(errBuf.String()))
-		}
-		diagMalformedLine(path)
-	}
-	return out.Bytes(), nil
 }
 
 // openclawProject attributes a session to its agent id; the header cwd, when
