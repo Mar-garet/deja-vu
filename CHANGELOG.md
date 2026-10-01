@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cherry Studio agents that run on pi or dsh are indexed, not only the Claude Code ones: their stores under `Data/Agents/.pi` and `Data/Agents/.dsh` are read and filed under `cherrystudio` (#4342).
+- A Cherry Studio data directory moved in the app's settings is read; deja follows `app.user_data_path` in `~/.cherrystudio/boot-config.json` instead of finding nothing (#4347).
 - A session that ended a few minutes ago shows up in the next session's MCP recall. deja hid every session its hooks had touched in the last 20 minutes as one an agent was still inside; Claude Code and Gemini CLI now get a `SessionEnd` hook that clears that mark when the session closes, including a one-shot `gemini -p`. Installing or uninstalling hooks also keeps the key order of your own entries in `settings.json` instead of sorting them (#4210).
 - `deja index` no longer says "no agent history was found" when the transcript it just reported deleted is still held and searchable (#4221).
 - `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).

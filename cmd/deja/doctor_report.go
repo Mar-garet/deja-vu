@@ -527,7 +527,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 		{"cline", sources.ClineStoreRoots(), sources.ClineSessionFiles(), sources.ParseClineFile},
 		{"roo", sources.RooRoots(), sources.RooTaskFiles(), sources.ParseRooTask},
 		{"kilocode", sources.KiloRoots(), sources.KiloTaskFiles(), sources.ParseKiloTask},
-		{"cherrystudio", sources.CherryStudioRoots(), sources.CherryStudioSessionFiles(), sources.ParseCherryStudioFile},
+		{"cherrystudio", sources.CherryStudioAllRoots(), sources.CherryStudioSessionFiles(), sources.ParseCherryStudioFile},
 		// One row for both Kiro clients: the probe picks the reader from the
 		// path, the way the ingest does.
 		{"kiro", []string{sources.KiroRoot()}, sources.KiroSessionFiles(), doctorProbeKiro},

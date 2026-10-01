@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,3 +135,96 @@ func TestCherryStudioAndClaudeDoNotClaimEachOther(t *testing.T) {
 		t.Errorf("a stock Claude transcript is claimed by cherrystudio: %q", kinds[stockFile])
 	}
 }
+
+// cherryHome points every app-dir lookup at a fresh home, so the default
+// Cherry Studio data dir is a temp dir on every platform.
+func cherryHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("DEJA_CHERRYSTUDIO_ROOTS", "")
+	return home
+}
+
+func copyFixture(t *testing.T, from, to string) {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", from))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(to, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Cherry Studio runs agents on three runtimes and gives each its own store
+// under Data/Agents: .claude, .pi/sessions and .dsh/sessions. Before the fix
+// only the Claude one was read, so a Cherry agent on pi or dsh left nothing in
+// the index (#4342).
+func TestCherryStudioReadsItsPiAndDshAgents(t *testing.T) {
+	cherryHome(t)
+	agents := filepath.Join(cherryStudioAppDirs()[0], "Data", "Agents")
+	pi := filepath.Join(agents, ".pi", "sessions", "2026-07-17T10-00-00-000Z_c0ffee00-0000-4000-8000-000000000002.jsonl")
+	dsh := filepath.Join(agents, ".dsh", "sessions", "--work-pgbouncer-lab--", "session-c0ffee00-0000-4000-8000-000000000003", "session.jsonl")
+	copyFixture(t, "fixtures/registry/pi/session.jsonl", pi)
+	copyFixture(t, "fixtures/registry/deepseek/sessions/--work-pgbouncer-lab--/session-eaf5c9ac-0e47-4d2f-b982-8bae306062d1/session.jsonl", dsh)
+
+	got := map[string]bool{}
+	for _, s := range LoadCherryStudio() {
+		if s.Harness != "cherrystudio" {
+			t.Errorf("%s: harness = %q, want cherrystudio", s.Path, s.Harness)
+		}
+		if len(s.Messages) == 0 {
+			t.Errorf("%s: no messages", s.Path)
+		}
+		got[s.Path] = true
+	}
+	if !got[pi] || !got[dsh] {
+		t.Fatalf("read %v, want the pi and the dsh session", got)
+	}
+	// The incremental path must route each file to the same reader: the dsh
+	// log would otherwise fall to the deepseek kind, which matches by name.
+	for _, p := range []string{pi, dsh} {
+		if k := KindForPath(p); !strings.HasPrefix(k, "cherrystudio") {
+			t.Errorf("%s is claimed by kind %q", p, k)
+		}
+	}
+}
+
+// Cherry Studio lets a user move its data dir; the new place is kept in
+// ~/.cherrystudio/boot-config.json under app.user_data_path, a map from the
+// executable to the directory. Before the fix deja only looked at the default
+// and found nothing after a move (#4347).
+func TestCherryStudioFollowsAMovedDataDir(t *testing.T) {
+	home := cherryHome(t)
+	moved := filepath.Join(t.TempDir(), "moved-data")
+	cfg := `{"app.disable_hardware_acceleration":false,"app.user_data_path":{"/Applications/Cherry Studio.app/Contents/MacOS/Cherry Studio":` + strconvQuote(moved) + `},"temp.user_data_relocation":null}`
+	if err := os.MkdirAll(filepath.Join(home, ".cherrystudio"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".cherrystudio", "boot-config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(moved, "Data", "Agents", ".claude", "projects", "-work-api", "cs-1.jsonl")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(cherrySnapshotTranscript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := CherryStudioSessionFiles()
+	if len(files) != 1 || files[0] != p {
+		t.Fatalf("files = %v, want the transcript in the moved dir", files)
+	}
+	if k := KindForPath(p); k != "cherrystudio" {
+		t.Errorf("kind = %q, want cherrystudio", k)
+	}
+}
+
+func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }

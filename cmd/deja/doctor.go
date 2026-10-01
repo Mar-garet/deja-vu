@@ -994,7 +994,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// the row names the roots it found rather than the app directory (#3644).
 	cherryFiles := len(sources.CherryStudioSessionFiles())
 	cherryLoc := "CherryStudio/Data/Agents/.claude"
-	if roots := sources.CherryStudioRoots(); len(roots) > 0 {
+	if roots := sources.CherryStudioAllRoots(); len(roots) > 0 {
 		cherryLoc = strings.Join(roots, string(os.PathListSeparator))
 	}
 	printRow("cherrystudio", cherryLoc, cherryFiles > 0, doctorCount(cherryFiles, "file"))
