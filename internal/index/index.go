@@ -338,6 +338,10 @@ import (
 // (#4258). Gemini CLI reads through the same dialect, so its `write_file`
 // leaves a wrote record too. A finished transcript is not re-read, so a
 // rebuild.
+//
+// Also 60: a resumed Gemini CLI session keeps the prompts deja's recall was
+// prepended to; Gemini's own resume history leaves them out (#4214). The
+// chat file is re-read whole only when it changes, so a rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
