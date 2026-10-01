@@ -665,23 +665,36 @@ func parseDoctorHermes(path string) ([]model.Session, error) {
 }
 
 func inspectDoctorStore(check doctorStoreCheck) (doctorStore, time.Time) {
-	store := doctorStore{Name: check.name, State: "missing", Paths: check.paths, Files: len(check.files)}
+	store, mod, newest := probeDoctorStore(check)
+	if newest == "" {
+		return store, mod
+	}
+	return parseDoctorStore(check, store, mod, newest)
+}
+
+// probeDoctorStore is the half of the inspection that needs no parser: every
+// root statted and listed, and the newest file opened. Every "denied" answer
+// comes from here, so a caller asking only that stops here — the parse that
+// follows read a whole SQLite store again on every `deja index` (#4272).
+// newest is "" when the answer is already final.
+func probeDoctorStore(check doctorStoreCheck) (store doctorStore, mod time.Time, newest string) {
+	store = doctorStore{Name: check.name, State: "missing", Paths: check.paths, Files: len(check.files)}
 	// A store the reader has excluded is answered before anything is read. The
 	// row said `needs-sqlite3` or `needs-zstd` for a harness they may never
 	// want read, which names a package to install for a problem they do not
 	// have, and the exclude file had no way to say so (#3499).
 	if sources.HarnessExcluded(check.name) {
 		store.State = "excluded"
-		return store, time.Time{}
+		return store, time.Time{}, ""
 	}
 	// A store with more than one root can be half-readable, and this loop
 	// returns on the first refusal — the walk below has said so since #816
 	// while this said the whole harness was denied (#3407).
-	denyRoot := func(path string) (doctorStore, time.Time) {
+	denyRoot := func(path string) (doctorStore, time.Time, string) {
 		store.State = "denied"
 		store.Denied = path
 		store.Partial = len(check.files) > 0
-		return store, time.Time{}
+		return store, time.Time{}, ""
 	}
 	for _, path := range check.paths {
 		if path == "" {
@@ -718,7 +731,7 @@ func inspectDoctorStore(check doctorStoreCheck) (doctorStore, time.Time) {
 		store.State = "denied"
 		store.Denied = denied
 		store.Partial = len(check.files) > 0
-		return store, time.Time{}
+		return store, time.Time{}, ""
 	}
 	// Nothing refused to be read *of what was walked*. Saying "found" for a
 	// store whose walk stopped early is the same silence #864 closed, one
@@ -733,9 +746,9 @@ func inspectDoctorStore(check doctorStoreCheck) (doctorStore, time.Time) {
 				break
 			}
 		}
-		return store, time.Time{}
+		return store, time.Time{}, ""
 	}
-	newest, mod := newestDoctorFile(check.files)
+	newest, mod = newestDoctorFile(check.files)
 	f, err := os.Open(newest)
 	if err != nil {
 		if os.IsPermission(err) {
@@ -749,12 +762,16 @@ func inspectDoctorStore(check doctorStoreCheck) (doctorStore, time.Time) {
 			// files are all locked is not partly anything, and saying "some
 			// sessions are missing" there understates it.
 			store.Partial = anotherFileOpens(check.files, newest)
-			return store, mod
+			return store, mod, ""
 		}
 		store.State = "parsed-zero"
-		return store, mod
+		return store, mod, ""
 	}
 	_ = f.Close()
+	return store, mod, newest
+}
+
+func parseDoctorStore(check doctorStoreCheck, store doctorStore, mod time.Time, newest string) (doctorStore, time.Time) {
 	sessions, parseErr := check.parse(newest)
 	store.State = "ok"
 	// A store can be half-readable: cursor keeps CLI transcripts as JSONL and
