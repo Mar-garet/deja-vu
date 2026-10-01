@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -153,6 +154,35 @@ func TestResumeQwenRunsInTheProjectDirectory(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && dir != real {
 		t.Fatalf("dir = %q, want the project directory %q", dir, real)
+	}
+}
+
+// A directory named outside ASCII is blanked in qwen's folder name, so the cd
+// comes from the cwd the transcript records (#4258).
+func TestResumeQwenRunsInANonASCIIProjectDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	real := filepath.Join(tmp, "проект q")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEJA_QWEN_ROOT", filepath.Join(tmp, "qwen"))
+	encoded := regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(real, "-")
+	chats := filepath.Join(tmp, "qwen", "projects", encoded, "chats")
+	if err := os.MkdirAll(chats, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(chats, "ee561e79.jsonl")
+	cwd, _ := json.Marshal(real)
+	line := `{"sessionId":"ee561e79","type":"user","cwd":` + string(cwd) + `,"message":{"role":"user","parts":[{"text":"hi"}]}}` + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "ee561e79", Path: path})
+	if err != nil || cmd != "qwen -r ee561e79" {
+		t.Fatalf("qwen resume: %q %v", cmd, err)
+	}
+	if dir != real {
+		t.Fatalf("dir = %q, want %q", dir, real)
 	}
 }
 

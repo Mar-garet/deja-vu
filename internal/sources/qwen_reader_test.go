@@ -1,0 +1,119 @@
+package sources
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/vshulcz/deja-vu/internal/model"
+)
+
+func parseQwenRows(t *testing.T, rows ...string) model.Session {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("DEJA_QWEN_ROOT", root)
+	dir := filepath.Join(root, "projects", "-w-app", "chats")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "s1.jsonl")
+	if err := os.WriteFile(path, []byte(strings.Join(rows, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseQwenFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v %d", err, len(ss))
+	}
+	return ss[0]
+}
+
+// Qwen Code 0.20 calls its edit tool `edit`; `replace` is the old name it
+// still maps to it. Read under the old name only, an edit left no files,
+// wrote or edit record, and write_file no wrote record (#4254).
+func TestQwenEditAndWriteFileLeaveEditRecords(t *testing.T) {
+	s := parseQwenRows(t,
+		`{"sessionId":"s1","timestamp":"2026-10-01T15:21:00.629Z","type":"assistant","cwd":"/w/app","message":{"role":"model","parts":[{"functionCall":{"id":"call_1","name":"edit","args":{"file_path":"/w/app/retry.go","old_string":"func retry() int { return 3 }","new_string":"func retry() int { return 5 }"}}}]}}`,
+		`{"sessionId":"s1","timestamp":"2026-10-01T15:21:02.000Z","type":"assistant","cwd":"/w/app","message":{"role":"model","parts":[{"functionCall":{"id":"call_2","name":"write_file","args":{"file_path":"/w/app/backoff.go","content":"package main\n\nconst backoffSeconds = 2 // wait between upstream retries\n"}}}]}}`,
+	)
+	byRole := map[string][]string{}
+	for _, m := range s.Messages {
+		byRole[m.Role] = append(byRole[m.Role], m.Text)
+	}
+	if got := strings.Join(byRole[RoleFiles], "|"); got != "/w/app/retry.go|/w/app/backoff.go" {
+		t.Errorf("files = %q", got)
+	}
+	if got := byRole[RoleEdit]; len(got) != 1 || got[0] != "/w/app/retry.go\nfunc retry() int { return 3 }" {
+		t.Errorf("edit = %q, want the replaced span of the edit", got)
+	}
+	wrote := byRole[RoleWrote]
+	if len(wrote) != 2 || !strings.HasPrefix(wrote[0], "/w/app/retry.go\n") || !strings.HasPrefix(wrote[1], "/w/app/backoff.go\n") {
+		t.Errorf("wrote = %q, want one record for the edit and one for the new file", wrote)
+	}
+}
+
+// A failed command's status is in the footer of its result, which Qwen writes
+// as its own tool_result record after the call (#4255).
+func TestQwenFailedCommandCarriesItsExitCode(t *testing.T) {
+	s := parseQwenRows(t,
+		`{"sessionId":"s1","timestamp":"2026-10-01T15:18:00.000Z","type":"assistant","cwd":"/w/app","message":{"role":"model","parts":[{"functionCall":{"id":"call_1","name":"run_shell_command","args":{"command":"git log --oneline -1 -- retry.go"}}},{"functionCall":{"id":"call_2","name":"run_shell_command","args":{"command":"git status --short"}}}]}}`,
+		`{"sessionId":"s1","timestamp":"2026-10-01T15:18:01.000Z","type":"tool_result","cwd":"/w/app","message":{"role":"user","parts":[{"functionResponse":{"id":"call_1","name":"run_shell_command","response":{"error":"Command: git log --oneline -1 -- retry.go\nDirectory: (root)\nOutput: fatal: your current branch 'master' does not have any commits yet\nError: (none)\nExit Code: 128\nSignal: 0\nProcess Group PGID: 1157"}}}]},"toolCallResult":{"callId":"call_1","status":"error"}}`,
+		`{"sessionId":"s1","timestamp":"2026-10-01T15:18:02.000Z","type":"tool_result","cwd":"/w/app","message":{"role":"user","parts":[{"functionResponse":{"id":"call_2","name":"run_shell_command","response":{"output":"Command: git status --short\nDirectory: (root)\nOutput: (empty)\nError: (none)\nExit Code: 0\nSignal: 0\nProcess Group PGID: 1158"}}}]},"toolCallResult":{"callId":"call_2","status":"success"}}`,
+		`{"sessionId":"s1","timestamp":"2026-10-01T15:18:03.000Z","type":"tool_result","cwd":"/w/app","message":{"role":"user","parts":[{"functionResponse":{"id":"call_1","name":"run_shell_command","response":{"error":"Exit Code: 2"}}}]}}`,
+	)
+	var cmds []string
+	for _, m := range s.Messages {
+		if m.Role == RoleCommand {
+			cmds = append(cmds, m.Text)
+		}
+	}
+	want := []string{"$ git log --oneline -1 -- retry.go  → exit 128", "$ git status --short"}
+	if strings.Join(cmds, "|") != strings.Join(want, "|") {
+		t.Fatalf("commands = %q, want %q", cmds, want)
+	}
+}
+
+// Qwen Code names a project folder the way Claude Code does, every character
+// outside [A-Za-z0-9] as "-", so a directory named in Cyrillic came back as
+// its last ASCII piece and resume could not find it. Every record carries the
+// real directory as cwd (#4258).
+func TestAQwenSessionInANonASCIIDirectoryKeepsItsProject(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DEJA_QWEN_ROOT", filepath.Join(root, "qwen"))
+	work := filepath.Join(root, "w", "проект q")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "qwen", "projects", claudeEncodePath(work), "chats")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "ee561e79-e05c-4f4f-a8f2-38f08ed7c87b.jsonl")
+	line := `{"sessionId":"ee561e79-e05c-4f4f-a8f2-38f08ed7c87b","timestamp":"2026-10-01T15:30:00.000Z","type":"user","cwd":` + jsonString(work) + `,"message":{"role":"user","parts":[{"text":"кэш живёт в «ёлке»"}]}}` + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseQwenFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v %d", err, len(ss))
+	}
+	if want := "w/проект q"; ss[0].Project != want {
+		t.Errorf("project = %q, want %q", ss[0].Project, want)
+	}
+	if got := QwenSessionDir(path); got != work {
+		t.Errorf("session dir = %q, want %q", got, work)
+	}
+
+	// A cwd the folder was not named for is not taken for it.
+	other := filepath.Join(root, "qwen", "projects", "-w-app", "chats")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join(other, "s2.jsonl")
+	if err := os.WriteFile(moved, []byte(strings.Replace(line, "ee561e79-e05c-4f4f-a8f2-38f08ed7c87b", "s2", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ss, _ := ParseQwenFile(moved); len(ss) != 1 || ss[0].Project != "w/app" {
+		t.Errorf("a cwd from another folder named the project: %#v", ss)
+	}
+}

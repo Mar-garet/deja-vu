@@ -383,18 +383,14 @@ func claudeProjectDirFor(s model.Session) string {
 	return sources.ClaudeSessionDir(s.Path)
 }
 
-// qwenProjectDirFor recovers the original working directory from the
-// transcript location. qwen scopes its session list to the current project,
-// so `qwen -r <id>` finds nothing when run from anywhere else.
+// qwenProjectDirFor recovers the original working directory of a session.
+// qwen scopes its session list to the current project, so `qwen -r <id>`
+// finds nothing when run from anywhere else.
 func qwenProjectDirFor(s model.Session) string {
 	if s.Path == "" {
 		return ""
 	}
-	base := sources.QwenProjectDirBase(s.Path)
-	if base == "" {
-		return ""
-	}
-	return sources.ResolveEncodedPath(base)
+	return sources.QwenSessionDir(s.Path)
 }
 
 // cursorProjectDirFor recovers the working directory a CLI transcript belongs

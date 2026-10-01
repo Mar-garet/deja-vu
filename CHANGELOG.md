@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Qwen Code sessions: an edit under 0.20's `edit` tool name and a `write_file` are indexed as edits, so blame and restore see them; a failed command carries its exit status (`→ exit 128`); and a session in a directory named outside A–Z and 0–9 gets that directory as its project and a `deja resume` that cds into it. The index rebuilds once (#4254, #4255, #4258).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).
 - A failed Gemini CLI command is indexed with its exit status (`$ git log …  → exit 128`), the way Codex, opencode and Cursor commands are, so the failed-command recall sees it. The index rebuilds once (#4208).
 - `deja resume` refuses an opencode or Kilo CLI session that was deleted in the agent and points at `deja show`; it printed `opencode -s <id>`, which failed with "Session not found" (#4205).
