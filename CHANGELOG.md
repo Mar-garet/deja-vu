@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name (#4402).
+- A gjc, pi, omp or prime-agent session no longer gets itself back as the top hit of its own first MCP recall. The extension asked for the session-start digest without the session id, so the session was not marked live until a later hook; the pi npm package had the same gap (#4394).
 - Kimchi sub-agent runs are no longer indexed as sessions of their own, where a sub-agent's restatement of the task competed with the session that spawned it. They are skipped the way Claude Code's and gjc's are, `DEJA_INCLUDE_SUBAGENTS=1` takes them, and `deja doctor` names them as skipped. The index rebuilds once (#4401).
 - `deja resume` on a gjc or Kimchi session `cd`s into the directory the session ran in, read from the transcript header. From anywhere else gjc refused the session and Kimchi offered to fork it, so the printed command did not reopen it (#4395, #4400).
 - `deja doctor` no longer reports one unrecognised gjc file per project. gjc 0.18's `.gjc-managed-session-scope.v2.json` is left out of the count, and sub-agent passes are named as skipped, the way Claude Code's are (#4393).
