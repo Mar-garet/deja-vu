@@ -182,3 +182,46 @@ func TestResumeHermesRefusesAReservedProfileDirectory(t *testing.T) {
 		}
 	}
 }
+
+// A profile directory may itself be a symlink — profiles/big moved to a bigger
+// disk. Hermes decides the profile on the path as written, so resolving it
+// first took big's sessions for strays and printed the plain command, and with
+// HERMES_HOME on big the root and the other profiles lost their flag too.
+func TestResumeHermesSymlinkedProfile(t *testing.T) {
+	tmp := hermeticEnv(t)
+	root := filepath.Join(tmp, "hermes")
+	if err := os.MkdirAll(filepath.Join(root, "profiles", "work"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "data", "big"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(tmp, "data", "big"), filepath.Join(root, "profiles", "big")); err != nil {
+		t.Skip("no symlinks here")
+	}
+	t.Setenv("DEJA_HERMES_PROFILES_ROOT", "")
+	const id = "20261001_182638_264fd2"
+	cmdFor := func(path string) string {
+		t.Helper()
+		_, cmd, err := resumeCommand(model.Session{ID: id, Harness: "hermes", Project: "p", Path: path})
+		if err != nil {
+			t.Fatalf("resume %s: %v", path, err)
+		}
+		return cmd
+	}
+	bigDB := filepath.Join(root, "profiles", "big", "state.db")
+	for _, home := range []string{root, filepath.Join(root, "profiles", "big")} {
+		t.Setenv("DEJA_HERMES_HOME", home)
+		for path, want := range map[string]string{
+			bigDB: "hermes -p big --resume " + id,
+			filepath.Join(root, "profiles", "work", "state.db"): "hermes -p work --resume " + id,
+		} {
+			if got := cmdFor(path); got != want {
+				t.Errorf("HERMES_HOME=%s, %s: %q, want %q", home, path, got, want)
+			}
+		}
+	}
+	if got, want := cmdFor(filepath.Join(root, "state.db")), "hermes -p default --resume "+id; got != want {
+		t.Errorf("HERMES_HOME on big, root store: %q, want %q", got, want)
+	}
+}

@@ -288,27 +288,29 @@ func hermesProfile(db string) string {
 // The root is worked out the way Hermes' get_default_hermes_root does: a
 // HERMES_HOME under `profiles/` is a profile, which `hermes -p work` exports
 // to everything it runs, deja included, and the root is two levels up. In that
-// mode the root's store is always named. Paths are compared resolved — a
-// trailing slash, a symlink or a relative HERMES_HOME is the same home — and a
-// store that is neither the root's nor a profile's, or a Postgres one, keeps
-// the plain command.
+// mode the root's store is always named. Like Hermes, the profile and its name
+// are read off the path as written, absolute and cleaned, so a profile that is
+// a symlink to another disk is still that profile; symlinks are resolved only
+// to tell whether two directories are the same one, so a symlinked or relative
+// home still matches. A store that is neither the root's nor a profile's, or a
+// Postgres one, keeps the plain command.
 func HermesResumeProfile(db string) (name string, dir bool) {
 	if IsHermesPGStore(db) {
 		return "", false
 	}
-	root, inProfile := hermesResolved(HermesHome()), false
+	root, inProfile := hermesAbs(HermesHome()), false
 	if filepath.Base(filepath.Dir(root)) == "profiles" {
 		root, inProfile = filepath.Dir(filepath.Dir(root)), true
 	}
 	profiles := filepath.Join(root, "profiles")
 	if p := os.Getenv("DEJA_HERMES_PROFILES_ROOT"); p != "" {
-		profiles = hermesResolved(p)
+		profiles = hermesAbs(p)
 	}
-	store := hermesResolved(filepath.Dir(db))
-	if samePath(filepath.Dir(store), profiles) {
+	store := hermesAbs(filepath.Dir(db))
+	if sameDir(filepath.Dir(store), profiles) {
 		return filepath.Base(store), true
 	}
-	if !samePath(store, root) {
+	if !sameDir(store, root) {
 		return "", false
 	}
 	if inProfile {
@@ -322,6 +324,20 @@ func HermesResumeProfile(db string) (name string, dir bool) {
 		return "default", false
 	}
 	return "", false
+}
+
+// hermesAbs is p absolute and cleaned, symlinks left as written.
+func hermesAbs(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
+}
+
+// sameDir reports whether two directories are the same one: as written, or
+// once their symlinks are followed.
+func sameDir(a, b string) bool {
+	return samePath(a, b) || samePath(hermesResolved(a), hermesResolved(b))
 }
 
 // hermesResolved is p absolute, cleaned and with its symlinks followed: those
