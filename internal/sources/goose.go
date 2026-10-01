@@ -276,7 +276,7 @@ func appendGooseParts(s *model.Session, role string, t time.Time, p goosePartsOf
 }
 
 // gooseDialect is the developer extension's editor since goose folded it into
-// the core (goose 1.26): `edit` takes path, before and after, `write` takes
+// the core (goose 1.27): `edit` takes path, before and after, `write` takes
 // path and content (crates/goose/src/agents/platform_extensions/developer/
 // edit.rs). The call is stored under the bare name, with the extension in
 // `_meta`.
@@ -296,6 +296,29 @@ var gooseTextEditorDialect = toolDialect{
 	oldKey:     "old_str",
 	newKey:     "new_str",
 	contentKey: "file_text",
+}
+
+// gooseTextEditorArgs keeps the text arguments the call's command reads:
+// old_str and new_str for str_replace, new_str for insert, file_text for
+// write. A view or an undo_edit carrying stray ones changed nothing.
+func gooseTextEditorArgs(args map[string]any) map[string]any {
+	keep := map[string][]string{
+		"str_replace": {"old_str", "new_str"},
+		"insert":      {"new_str"},
+		"write":       {"file_text"},
+	}[str(args["command"])]
+	out := make(map[string]any, len(args))
+	for k, v := range args {
+		if k != "old_str" && k != "new_str" && k != "file_text" {
+			out[k] = v
+		}
+	}
+	for _, k := range keep {
+		if v, ok := args[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // gooseParts splits a goose content array into the things deja indexes
@@ -351,8 +374,12 @@ func gooseParts(v any) goosePartsOf {
 				}
 			}
 			if args != nil {
+				tool := strings.TrimPrefix(name, "developer__")
+				if tool == "text_editor" {
+					args = gooseTextEditorArgs(args)
+				}
 				calls = append(calls, map[string]any{
-					"type": "tool_use", "name": strings.TrimPrefix(name, "developer__"), "input": args,
+					"type": "tool_use", "name": tool, "input": args,
 				})
 			}
 		case "toolResponse":

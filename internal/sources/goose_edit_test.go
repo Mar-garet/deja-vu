@@ -75,3 +75,19 @@ func TestGooseEditAndWriteCallsLeaveEditAndWroteRecords(t *testing.T) {
 		}
 	}
 }
+
+// text_editor carries every argument any of its commands takes, and goose
+// reads only the ones the command names: a view or an undo with stray old_str
+// or new_str changed nothing, so it leaves no edit and no wrote record.
+func TestGooseTextEditorReadsOnlyWhatTheCommandTakes(t *testing.T) {
+	for _, command := range []string{"view", "undo_edit"} {
+		raw := `[{"type":"toolRequest","id":"t4","toolCall":{"status":"success","value":{"name":"developer__text_editor","arguments":` +
+			`{"command":"` + command + `","path":"/w/app/queue.go","old_str":"size := 10","new_str":"pool := make(chan conn, maxPoolSize)","file_text":"package app\n\nconst maxPoolSize = 40\n"}}}}]`
+		s := gooseSessionFrom(t, "assistant", raw)
+		for _, m := range s.Messages {
+			if m.Role == RoleEdit || m.Role == RoleWrote {
+				t.Errorf("%s: %s record %q, want none", command, m.Role, m.Text)
+			}
+		}
+	}
+}
