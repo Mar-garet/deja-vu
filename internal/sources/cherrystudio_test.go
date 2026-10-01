@@ -155,3 +155,22 @@ func TestCherryStudioResumesOnlyOnANewCall(t *testing.T) {
 		t.Error("a tail after the user line was refused")
 	}
 }
+
+// Resumes reads the tail only up to the first line that names a call. A
+// stream's snapshots run back to back, so once another call starts the stored
+// one is done, and reading on cost a search the whole tail before the inline
+// append cap could hand it off (#4346).
+func TestCherryStudioResumesStopsAtTheNextCall(t *testing.T) {
+	lines := strings.SplitAfter(cherrySnapshotTranscript, "\n")
+	at := int64(len(strings.Join(lines[:2], "")))
+	// After the stored half of req-1: a new call, then a stray req-1 line the
+	// check must not reach.
+	body := strings.Join(lines[:2], "") + lines[4] + lines[1]
+	p := filepath.Join(t.TempDir(), "cs-1.jsonl")
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !CherryStudioResumes(p, at) {
+		t.Error("read past the call that started after the stored one")
+	}
+}

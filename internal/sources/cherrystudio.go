@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"bufio"
 	"encoding/json"
 	"io"
 	"os"
@@ -142,13 +143,25 @@ func CherryStudioResumes(path string, offset int64) bool {
 	if key == "" {
 		return true
 	}
-	resumes := true
-	_ = scanJSONLBytes(path, offset, func(line []byte) {
-		if resumes && cherrySnapshotKey(line) == key {
-			resumes = false
+	// Only as far as the first line that names a call: a stream's snapshots
+	// run back to back, so if that line starts another call the stored one is
+	// finished. Scanning the whole tail cost a search the read the inline
+	// append cap exists to spare it.
+	f, err := os.Open(path)
+	if err != nil {
+		return true
+	}
+	defer func() { _ = f.Close() }()
+	r := bufio.NewReader(io.NewSectionReader(f, offset, 1<<62))
+	for {
+		line, err := r.ReadBytes('\n')
+		if k := cherrySnapshotKey(trimJSONSpace(line)); k != "" {
+			return k != key
 		}
-	})
-	return resumes
+		if err != nil {
+			return true
+		}
+	}
 }
 
 // cherrySnapshotKey is the call a line reports on, by requestId or message id
