@@ -1375,6 +1375,12 @@ func doctorMCP(w io.Writer) {
 				fmt.Fprintf(w, "  %-12s %s\n", "", other)
 			}
 		}
+		// Declared and switched off is not wired in any sense a session
+		// feels: the client never starts the server (#4303).
+		if status == "wired" && dejaEntrySwitchedOff(c.path) {
+			fmt.Fprintf(w, "  %-12s %s\n", "",
+				"the entry is switched off — "+c.name+" will not start it until you turn it back on")
+		}
 		// Zed's entry can defer to an extension instead of naming a binary,
 		// and then "wired" is a fact about an id rather than about anything
 		// runnable (#3660).
@@ -1403,6 +1409,34 @@ func doctorMCPDuplicateNote(keys []string) string {
 		return fmt.Sprintf("two entries in this config run deja (%s) — every session starts the server twice", names)
 	}
 	return fmt.Sprintf("%d entries in this config run deja (%s) — every session starts the server %d times", len(keys), names, len(keys))
+}
+
+// dejaEntrySwitchedOff reports whether every deja entry in a JSON config is
+// switched off — `disabled: true`, or opencode's `enabled: false`, the test
+// install uses. One entry still on is enough for recall to work.
+func dejaEntrySwitchedOff(path string) bool {
+	b, err := readConfig(path)
+	if err != nil {
+		return false
+	}
+	var root map[string]any
+	if json.Unmarshal([]byte(jsoncToJSON(string(b))), &root) != nil {
+		return false
+	}
+	off := false
+	for _, m := range mcpServerMaps(root) {
+		for key, v := range m {
+			if key != "deja" && !mcpEntryRunsDeja(v) {
+				continue
+			}
+			entry, ok := v.(map[string]any)
+			if !ok || !entrySwitchedOff(entry) {
+				return false
+			}
+			off = true
+		}
+	}
+	return off
 }
 
 // dejaCommandMissing returns the deja binary a config names when that file is
