@@ -286,7 +286,7 @@ func doctorWiringExe(w io.Writer) {
 func doctorCodexHook(w io.Writer) {
 	st := codexHookWiringState()
 	hooksPath, status, missing, hooks := st.path, st.state, st.missing, st.hooks
-	if st.absent {
+	if st.absent || status == "missing" || status == "plugin" {
 		// The plugin ships the same hooks under its own root, and codex trusts
 		// those the same way. Nothing was installed here, and nothing is
 		// missing either.
