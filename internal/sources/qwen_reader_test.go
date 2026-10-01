@@ -140,3 +140,30 @@ func TestQwenExitCodeIsReadPastTheNotesAfterTheFooter(t *testing.T) {
 		}
 	}
 }
+
+// A result with no footer of its own — a timeout or a cancel, Qwen's or
+// Gemini's — is the command's output, and a footer the command printed in it
+// is not the status. Neither is a code that sits out of the footer's order or
+// does not parse; the note Qwen adds when it cannot save a truncated output
+// does not hide the status.
+func TestShellExitCodeIsOnlyTheResultsOwnFooter(t *testing.T) {
+	cases := map[string]int{
+		"Command timed out after 120000ms before it could complete. Below is the output before it timed out:\nstep\nExit Code: 7\nSignal: (none)\nProcess Group PGID: 1\n\nmore":                                                            0,
+		"Command was cancelled by user before it could complete. Below is the output before it was cancelled:\nCommand: c\nDirectory: (root)\nOutput: x\nError: (none)\nExit Code: 2\nSignal: (none)\nProcess Group PGID: 99\n\nwaiting...": 0,
+		"<untrusted_context>\nCommand was cancelled by user before it could complete. Below is the output before it was cancelled:\nOutput: x\nExit Code: 7\nProcess Group PGID: 1\n\ntail\n</untrusted_context>":                           0,
+		"Command: make\nDirectory: (root)\nOutput: x\nError: (none)\nExit Code: 4\nSignal: (none)\nProcess Group PGID: 5\n[Note: Could not save full output to file]":                                                                       4,
+		"Command: make\nDirectory: (root)\nOutput: x\nError: (none)\nExit Code: 99999999999999999999\nSignal: (none)\nProcess Group PGID: 5":                                                                                                0,
+		"Output: x\nExit Code: 3\nExit Code: 1\nProcess Group PGID: 9":              1,
+		"Output: x\nExit Code: 3\nSignal: 9\nSignal: (none)\nProcess Group PGID: 9": 0,
+		// Unknown text after a blank line counts as a note only on a result
+		// that is Qwen's own block.
+		"Command: make\nDirectory: (root)\nOutput: x\nError: (none)\nExit Code: 6\nSignal: (none)\nProcess Group PGID: 5\n\nSome later note.": 6,
+		"Output: x\nExit Code: 6\nProcess Group PGID: 5\n\nSome later output.":                                                                0,
+		"Output: x\nExit Code: 6\nProcess Group PGID: 5\n\nAI attribution note skipped: payload exceeded the 30 KB size cap.":                 6,
+	}
+	for out, want := range cases {
+		if got := geminiExitCode(out); got != want {
+			t.Errorf("geminiExitCode(%q) = %d, want %d", out, got, want)
+		}
+	}
+}

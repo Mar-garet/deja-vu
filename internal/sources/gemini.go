@@ -269,56 +269,104 @@ var geminiExit = regexp.MustCompile(`^Exit Code: (\d+)$`)
 // the process group — so a line the command printed itself is not taken for
 // it. 0 when the footer carries none.
 //
-// Qwen writes the same footer, Exit Code always, and then may add notes after
-// a blank line: a hint once a foreground command has run for half its timeout,
-// an attribution warning on git commit. So the footer is the last run of
-// footer lines that either ends the text or ends on the process group line
-// with a blank line after it (#4255).
+// Qwen writes the same footer, Exit Code always, at the end of a block that
+// starts "Command: ", and may then add notes after a blank line: a hint once a
+// foreground command has run for half its timeout, an attribution warning on
+// git commit (#4255). A timeout or a cancel has no footer at all, so a footer
+// further up is the command's own output, unless what follows it is a note.
 func geminiExitCode(out string) int {
 	lines := strings.Split(out, "\n")
 	for i := range lines {
 		lines[i] = strings.TrimSpace(lines[i])
 	}
-	tail := true
+	qwenBlock := false
+	for _, l := range lines {
+		if l == "" || l == "<untrusted_context>" {
+			continue
+		}
+		qwenBlock = strings.HasPrefix(l, "Command: ")
+		break
+	}
 	for i := len(lines) - 1; i >= 0; i-- {
-		if lines[i] == "" || lines[i] == "</untrusted_context>" {
+		l := lines[i]
+		if l == "" || l == "</untrusted_context>" || l == qwenSaveFailedNote {
 			continue
 		}
-		if !geminiFooterLine(lines[i]) {
-			tail = false
-			continue
+		if geminiFooterRank(l) >= 0 {
+			return geminiFooterExit(lines[:i+1])
 		}
-		end, start := i, i
-		for start > 0 && geminiFooterLine(lines[start-1]) {
-			start--
+		// A paragraph after a blank line that is a note Qwen appends, or
+		// anything after Qwen's own block, is skipped; anything else means
+		// the result ends in output, not in a footer.
+		p := i
+		for p > 0 && lines[p-1] != "" {
+			p--
 		}
-		i = start
-		closed := strings.HasPrefix(lines[end], "Process Group PGID: ") && end+1 < len(lines) && lines[end+1] == ""
-		if !tail && !closed {
-			continue
+		above := p - 1
+		for above >= 0 && lines[above] == "" {
+			above--
 		}
-		for j := end; j >= start; j-- {
-			if m := geminiExit.FindStringSubmatch(lines[j]); m != nil {
-				code, _ := strconv.Atoi(m[1])
-				return code
-			}
+		if p == 0 || above < 0 {
+			return 0
 		}
-		return 0
+		afterQwenFooter := qwenBlock && strings.HasPrefix(lines[above], "Process Group PGID: ")
+		if !afterQwenFooter && !qwenNote(lines[p]) {
+			return 0
+		}
+		i = p
 	}
 	return 0
 }
 
-// geminiFooterLine reports whether a trimmed line is one of the footer's own.
-func geminiFooterLine(l string) bool {
+// qwenSaveFailedNote is the line Qwen puts straight under a truncated result
+// when it could not save the whole output to a file.
+const qwenSaveFailedNote = "[Note: Could not save full output to file]"
+
+// qwenNote reports whether a paragraph starting with l is one of the notes
+// Qwen 0.20 appends after the shell footer.
+func qwenNote(l string) bool {
+	return strings.HasPrefix(l, "Note: this foreground command ran for ") ||
+		strings.HasPrefix(l, "AI attribution note skipped: ")
+}
+
+// geminiFooterOrder is the order the footer's lines are written in.
+var geminiFooterOrder = []string{"Exit Code: ", "Signal: ", "Background PIDs: ", "Process Group PGID: "}
+
+// geminiFooterRank is a line's place in geminiFooterOrder, -1 when it is not
+// a footer line.
+func geminiFooterRank(l string) int {
 	if geminiExit.MatchString(l) {
-		return true
+		return 0
 	}
-	for _, label := range []string{"Signal: ", "Background PIDs: ", "Process Group PGID: "} {
+	for r, label := range geminiFooterOrder[1:] {
 		if strings.HasPrefix(l, label) {
-			return true
+			return r + 1
 		}
 	}
-	return false
+	return -1
+}
+
+// geminiFooterExit reads the footer that ends lines: walking up, each line
+// must come earlier in the written order than the one below it, so a line of
+// output that happens to look like a footer line is not taken into it.
+func geminiFooterExit(lines []string) int {
+	below := len(geminiFooterOrder)
+	for i := len(lines) - 1; i >= 0; i-- {
+		r := geminiFooterRank(lines[i])
+		if r < 0 || r >= below {
+			return 0
+		}
+		if r == 0 {
+			m := geminiExit.FindStringSubmatch(lines[i])
+			code, err := strconv.Atoi(m[1])
+			if err != nil {
+				return 0
+			}
+			return code
+		}
+		below = r
+	}
+	return 0
 }
 
 type geminiCall struct {
