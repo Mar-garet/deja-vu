@@ -54,6 +54,11 @@ func installAider(_ string, uninstall bool) (installResult, error) {
 			return installResult{}, fmt.Errorf("%s: %w", shortHome(path), aerr)
 		}
 		if inline != "" {
+			// One record per config: the state is stored sorted, so an older
+			// line left beside it could be the one uninstall reads.
+			if was != "" && was != inline {
+				forgetBlockAdded(path, aiderReadWasKey+was)
+			}
 			noteBlockAdded(path, aiderReadWasKey+inline)
 		}
 	} else if was != "" {

@@ -138,3 +138,36 @@ func TestAiderRefusesBlockScalarRead(t *testing.T) {
 		}
 	}
 }
+
+// The record of the line install promoted is per config, and the newest one is
+// what uninstall puts back. A second promotion left the first record beside it,
+// and the record is stored sorted, so a later process could read the old line
+// and leave the reader's new one as a block list.
+func TestAiderReadWasKeepsOnlyTheLatestLine(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	path := filepath.Join(home, ".aider.conf.yml")
+	newProcess := func() {
+		recordWiring([]string{"aider"}, false)
+		blocksAddedThisRun = nil
+		blocksForgottenThisRun = map[string]bool{}
+	}
+	t.Cleanup(newProcess)
+	for _, conf := range []string{"read: b.md\n", "read: a.md\n"} {
+		if err := os.WriteFile(path, []byte(conf), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := installAider("/bin/echo", false); err != nil {
+			t.Fatal(err)
+		}
+		newProcess()
+	}
+	if _, err := installAider("/bin/echo", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := aiderConf(t, home); got != "read: a.md\n" {
+		t.Errorf("uninstall gave back %q, want the line the last install promoted", got)
+	}
+}
