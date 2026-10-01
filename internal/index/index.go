@@ -353,6 +353,9 @@ import (
 // only the path (#4265).
 //
 // 60 also: a failed Kimi Code command carries its exit status (#4262).
+// 60 also: a Kilo CLI or ZCode session doubled in the index on each pass after
+// a write to its database (#4396); the copies already held go only on a
+// rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
