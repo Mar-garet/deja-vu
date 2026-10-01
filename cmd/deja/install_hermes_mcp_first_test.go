@@ -102,6 +102,17 @@ func TestInstallRefusesATopLevelKeyItCannotJoin(t *testing.T) {
 }
 
 func TestInstallGooseJoinsACommentedExtensionsKey(t *testing.T) {
+	for _, cfg := range []string{
+		"extensions: # mine\n  foo:\n    cmd: z\n",
+		"extensions: # mine\n    foo:\n        cmd: z\n",
+		"extensions:   \n    foo:\n        cmd: z\n",
+		"extensions:\n# mine\n  foo:\n    cmd: z\n",
+	} {
+		t.Run(cfg, func(t *testing.T) { gooseRoundTrip(t, cfg) })
+	}
+}
+
+func gooseRoundTrip(t *testing.T, cfg string) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -111,7 +122,6 @@ func TestInstallGooseJoinsACommentedExtensionsKey(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "extensions: # mine\n  foo:\n    cmd: z\n"
 	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +131,11 @@ func TestInstallGooseJoinsACommentedExtensionsKey(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	if n := strings.Count(string(b), "extensions:"); n != 1 {
 		t.Fatalf("%d extensions keys, want one:\n%s", n, b)
+	}
+	// deja's entry sits beside the reader's, at the block's own indent.
+	pad := yamlBlockIndent(gooseExtensionsBlock(cfg))
+	if !strings.Contains(string(b), "\n"+pad+"deja:\n") || !strings.Contains(string(b), "\n"+pad+"foo:\n") {
+		t.Fatalf("deja and foo are not siblings at %q:\n%s", pad, b)
 	}
 	if _, err := installGoose("/bin/deja", true); err != nil {
 		t.Fatal(err)

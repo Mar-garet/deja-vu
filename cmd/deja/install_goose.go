@@ -188,11 +188,21 @@ func removeGooseExtension(s string) string {
 // gooseExtensionsBlock returns the text after the extensions key, or "" when
 // there is no block form of it to read an indent from.
 func gooseExtensionsBlock(s string) string {
-	i := strings.Index("\n"+s, "\nextensions:\n")
-	if i < 0 {
-		return ""
+	// The key line as the writer finds it, comment and trailing blanks
+	// included: reading only the bare spelling wrote deja's entry at two
+	// spaces over a block at four, and the reader's entries ended up nested
+	// in deja's — and went with it on uninstall (#4289).
+	at := 0
+	for _, line := range strings.SplitAfter(s, "\n") {
+		at += len(line)
+		if yamlIndentWidth(line) == 0 && yamlKeyLine(line, "extensions:") {
+			if !strings.HasSuffix(line, "\n") {
+				return ""
+			}
+			return s[at:]
+		}
 	}
-	return s[i+len("\nextensions:\n")-1:]
+	return ""
 }
 
 // yamlBlockIndent returns the indent the entries under a key are written at.

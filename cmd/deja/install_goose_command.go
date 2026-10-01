@@ -118,12 +118,16 @@ func dropEmptyYAMLKey(s, key string) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); i++ {
+		// Only the bare key, the way deja writes it: one carrying the
+		// reader's comment is theirs to keep, empty or not.
 		if strings.TrimRight(lines[i], " ") != key {
 			out = append(out, lines[i])
 			continue
 		}
+		// A comment, even at column 0, is not the end of the block: the
+		// entries under it still belong to the key (#4289).
 		j := i + 1
-		for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
+		for j < len(lines) && (strings.TrimSpace(lines[j]) == "" || strings.HasPrefix(strings.TrimSpace(lines[j]), "#")) {
 			j++
 		}
 		// Nested is "indented further than the key", not "starts with two

@@ -319,8 +319,8 @@ func yamlTopKeyEnd(doc, key string) (int, error) {
 		if i := strings.Index(v, " #"); i >= 0 {
 			v = strings.TrimSpace(v[:i])
 		}
-		switch v {
-		case "{}", "[]", "~", "null":
+		switch strings.ToLower(v) {
+		case "{}", "[]", "~", "null", "''", `""`:
 			// Nothing of the reader's under it: a block written after it
 			// shadows nothing, and uninstall takes that block back.
 			continue
