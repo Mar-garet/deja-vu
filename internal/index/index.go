@@ -339,6 +339,8 @@ import (
 // (#4370).
 // 60 also: a Continue session gains its tool calls — commands, files, edit
 // spans, written lines and tool output from toolCallStates (#4373).
+// 60 also: a Continue turn is never dated after its file's mtime; a fork had
+// its last turns in the future (#4376).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

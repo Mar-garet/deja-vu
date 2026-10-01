@@ -184,10 +184,23 @@ func ParseContinueFile(path string) ([]model.Session, error) {
 		s.Title = firstLineTrim(entry.Title)
 	}
 
+	var mtime time.Time
+	if fi, err := os.Stat(path); err == nil {
+		mtime = fi.ModTime()
+	}
 	base := continueDate(entry.DateCreated)
 	if base.IsZero() {
-		if fi, err := os.Stat(path); err == nil {
-			base = fi.ModTime()
+		base = mtime
+	}
+	// A second a turn, unless that runs past the file's mtime: a fork copies the
+	// whole history under a fresh dateCreated, and 17 items one second apart
+	// dated the last turn 16 s after the file was written. Then the turns are
+	// spread between the start and the mtime instead (#4376).
+	step := time.Second
+	if n := len(doc.History); n > 1 && !mtime.IsZero() && base.Add(time.Duration(n-1)*step).After(mtime) {
+		step = 0
+		if mtime.After(base) {
+			step = mtime.Sub(base) / time.Duration(n-1)
 		}
 	}
 	for i, it := range doc.History {
@@ -200,7 +213,7 @@ func ParseContinueFile(path string) ([]model.Session, error) {
 		// A turn has no time of its own, so they are laid out in order from the
 		// session's start — the same thing every whole-document parser here
 		// does, and enough for ordering within the session.
-		at := base.Add(time.Duration(i) * time.Second)
+		at := base.Add(time.Duration(i) * step)
 		if text := continueText(it.Message.Content); text != "" {
 			s.Touch(at)
 			s.Messages = append(s.Messages, model.Message{Role: role, Text: text, Time: at})
