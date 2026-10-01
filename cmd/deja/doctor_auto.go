@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -96,16 +97,100 @@ func autoWirings() []autoWiring {
 	}
 }
 
-// nothingWired reports whether no harness on this machine has an auto-recall
-// file. It is a stat per harness and no index read, which is what the brief can
-// afford — that screen has to feel instant.
+// autoInClientConfig names the rows whose file is the client's own config
+// rather than one deja writes whole. Those exist whether deja ever wrote to
+// them or not, so the file being there says nothing about deja (#4275).
+var autoInClientConfig = map[string]bool{
+	"cursor": true, "qwen": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+}
+
+// autoUnwired reports whether a row's file holds no deja wiring at all: it is
+// not there, or it is the client's own config with no entry of deja's in it.
+// Either is a machine that was never wired, not one whose wiring went stale.
+func autoUnwired(a autoWiring, b []byte, err error) bool {
+	if err != nil {
+		return true
+	}
+	return autoInClientConfig[a.name] && !strings.Contains(string(b), a.marker) && !dejaHookIn(string(b))
+}
+
+// dejaHookIn reports whether a config carries an entry of deja's: Kimi's
+// marked block, or any string that runs one of deja's hook subcommands — the
+// MCP server entry runs `mcp` and is not one. A file that is not JSON is read
+// line by line, its escapes undone: TOML spells a quoted Windows path
+// `"\"C:/Program Files/deja/deja.exe\" hook-prompt"`.
+func dejaHookIn(text string) bool {
+	if strings.Contains(text, kimiHookMarker) {
+		return true
+	}
+	runsDeja := func(s string) bool {
+		for name := range hookNames {
+			if isDejaHookCommand(s, "deja "+name) {
+				return true
+			}
+		}
+		return false
+	}
+	var root any
+	if json.Unmarshal([]byte(jsoncToJSON(strings.TrimPrefix(text, string(utf8BOM)))), &root) != nil {
+		for _, l := range strings.Split(text, "\n") {
+			if runsDeja(quotedPathUnescape.Replace(l)) {
+				return true
+			}
+		}
+		return false
+	}
+	var walk func(v any) bool
+	walk = func(v any) bool {
+		switch v := v.(type) {
+		case string:
+			return runsDeja(v)
+		case []any:
+			for _, e := range v {
+				if walk(e) {
+					return true
+				}
+			}
+		case map[string]any:
+			for _, e := range v {
+				if walk(e) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return walk(root)
+}
+
+// nothingWired reports whether no harness on this machine has auto-recall
+// wired. It reads one small file per harness and no index, which is what the
+// brief can afford — that screen has to feel instant.
 //
 // Auto-recall alone is the question worth asking here. An MCP server is a tool
 // the agent may call; these files are what make memory arrive without anyone
-// asking, which is the thing someone thinks they installed.
+// asking, which is the thing someone thinks they installed. So it reads the
+// rows doctor prints: Claude Code's and codex's hooks, which live outside the
+// table, and a harness plugin that recalls with nothing in the row's file.
 func nothingWired() bool {
+	if claudeHookWiringState().state != "missing" {
+		return false
+	}
+	// Codex counts with one of deja's events in hooks.json or the plugin
+	// enabled, asked here rather than read off the row: hooks.json also holds
+	// the user's own hooks, and the row says plugin only without the file.
+	if codexPluginInstalled() {
+		return false
+	}
+	codex := codexHookWiringState()
+	for _, h := range codexHookWiring {
+		if hookEventWired(codex.hooks, h.Event, h.Sub) {
+			return false
+		}
+	}
 	for _, a := range autoWirings() {
-		if _, err := os.Stat(a.path()); err == nil {
+		b, err := os.ReadFile(a.path())
+		if !autoUnwired(a, b, err) || harnessPluginCarriesRecall(a.name) {
 			return false
 		}
 	}
@@ -157,7 +242,7 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	switch {
 	case harnessPluginCarriesRecall(a.name) && (err != nil || !strings.Contains(string(b), a.marker)):
 		state = "plugin"
-	case err != nil:
+	case autoUnwired(a, b, err):
 		state = "missing"
 	case a.marker != "" && !strings.Contains(string(b), a.marker):
 		state = "stale"
@@ -212,6 +297,11 @@ func doctorAutoRecall(w io.Writer) {
 		switch {
 		case err != nil:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "missing", reportPath(path), note)
+		case autoUnwired(a, b, err):
+			// The client's config is there and deja never wrote its hook into
+			// it: the MCP install writes this same file, and only the -auto
+			// target writes the hook (#3313, #4275).
+			fmt.Fprintf(w, "  %-12s %-11s %s  (no deja hook — `deja install %s-auto`)\n", a.name, "missing", reportPath(path), a.name)
 		case a.marker != "" && !strings.Contains(string(b), a.marker):
 			// "reinstall" was the advice, and for the common way to get here
 			// it cannot work: the MCP install writes this same file, and only
