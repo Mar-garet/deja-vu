@@ -2,6 +2,7 @@ package sources
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,44 @@ func continueList(dir string) map[string]continueListEntry {
 		}
 	}
 	return out
+}
+
+// ContinueSessionDir is the workspace a session ran in: workspaceDirectory on
+// the session file, else on its sessions.json entry. The IDE writes it as a
+// file URI, the CLI as a path. "" when neither names an absolute path (#4375).
+func ContinueSessionDir(path string) string {
+	var doc struct {
+		SessionID          string `json:"sessionId"`
+		WorkspaceDirectory string `json:"workspaceDirectory"`
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || json.Unmarshal(b, &doc) != nil {
+		return ""
+	}
+	ws := doc.WorkspaceDirectory
+	if ws == "" {
+		id := doc.SessionID
+		if id == "" {
+			id = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		}
+		ws = continueList(filepath.Dir(path))[id].WorkspaceDirectory
+	}
+	if strings.HasPrefix(ws, "file://") {
+		u, err := url.Parse(ws)
+		if err != nil || (u.Host != "" && u.Host != "localhost") {
+			return ""
+		}
+		ws = u.Path
+		// file:///C:/proj is /C:/proj once parsed.
+		if len(ws) > 2 && ws[0] == '/' && ws[2] == ':' {
+			ws = ws[1:]
+		}
+		ws = filepath.FromSlash(ws)
+	}
+	if !filepath.IsAbs(ws) {
+		return ""
+	}
+	return ws
 }
 
 type continueSession struct {
