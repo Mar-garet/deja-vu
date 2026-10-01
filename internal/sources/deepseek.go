@@ -41,6 +41,10 @@ import (
 // Reasoning blocks in that array are the model thinking out loud, not what it
 // told the person, so they stay out of the transcript.
 //
+// A tool call is written twice too: as a tool-call block in that
+// assistant/message and as its own `tool/call` event. Only the event is read,
+// so a call is counted once (#4291).
+//
 // Tool output is its own event, `tool/result`, whose content nests a
 // tool-result block around the text.
 //
@@ -181,6 +185,9 @@ func ParseDeepSeekFile(path string) ([]model.Session, error) {
 			}
 		case "step/end", "turn/end":
 			flush()
+		case "tool/call":
+			flush()
+			s.Messages = append(s.Messages, deepSeekWorkRecords(data, at)...)
 		case "tool/result":
 			flush()
 			msg, _ := data["message"].(map[string]any)
@@ -195,6 +202,63 @@ func ParseDeepSeekFile(path string) ([]model.Session, error) {
 		return nil, nil
 	}
 	return []model.Session{s}, nil
+}
+
+// deepSeekDialect is dsh's tool vocabulary, read off its bundled tools: bash
+// (pwsh on Windows) takes `command`, and read, write and edit take `file_path`
+// with Claude's old_string/new_string/content.
+var deepSeekDialect = toolDialect{
+	pathKey:    "file_path",
+	pathTools:  map[string]bool{"read": true, "write": true, "edit": true, "str_replace_editor": true},
+	shellTools: map[string]bool{"bash": true, "pwsh": true},
+	editTools:  map[string]bool{"write": true, "edit": true, "str_replace_editor": true},
+}
+
+// deepSeekWorkRecords turns one tool/call event into command, files, edit and
+// wrote records. The call is rewritten into the tool_use shape the shared
+// extractors read, as qwen's is.
+func deepSeekWorkRecords(data map[string]any, t time.Time) []model.Message {
+	name, _ := data["name"].(string)
+	args, _ := data["arguments"].(map[string]any)
+	if raw, ok := data["arguments"].(string); ok {
+		_ = json.Unmarshal([]byte(raw), &args)
+	}
+	if name == "" || args == nil {
+		return nil
+	}
+	if name == "str_replace_editor" {
+		// The editor names its file `path` and its spans old_str, new_str and
+		// file_text, and its `command` is view/create/str_replace, not a shell.
+		args = map[string]any{
+			"file_path":  args["path"],
+			"old_string": args["old_str"],
+			"new_string": args["new_str"],
+			"content":    args["file_text"],
+		}
+	}
+	calls := []any{map[string]any{"type": "tool_use", "name": name, "input": args}}
+	var recs []model.Message
+	if IndexToolPaths() {
+		if p := toolPathsIn(calls, deepSeekDialect); p != "" {
+			recs = append(recs, model.Message{Role: RoleFiles, Text: p, Time: t})
+		}
+	}
+	if IndexWrites() {
+		for _, w := range wroteRecordsIn(calls, deepSeekDialect) {
+			recs = append(recs, model.Message{Role: RoleWrote, Text: w, Time: t})
+		}
+	}
+	if IndexEdits() {
+		for _, span := range editSpansIn(calls, deepSeekDialect) {
+			recs = append(recs, model.Message{Role: RoleEdit, Text: span, Time: t})
+		}
+	}
+	if IndexCommands() {
+		for _, cmd := range commandsIn(calls, deepSeekDialect) {
+			recs = append(recs, model.Message{Role: RoleCommand, Text: cmd, Time: t})
+		}
+	}
+	return recs
 }
 
 // deepSeekSpokenByUser separates what a person typed from what a plugin spliced

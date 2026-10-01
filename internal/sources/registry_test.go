@@ -375,9 +375,11 @@ func validateRegistrySessions(t *testing.T, id string, sessions []model.Session)
 		for _, message := range session.Messages {
 			// tool-output is a role the index stores and the search filters by
 			// (retrieval.go: roleToolOutput); a fixture whose harness records
-			// what a tool printed should be able to show it.
+			// what a tool printed should be able to show it. The work records a
+			// tool call leaves — files, command, edit, wrote — are stored too.
 			role := message.Role
-			if (role != "user" && role != "assistant" && role != "tool-output") ||
+			work := role == RoleFiles || role == RoleCommand || role == RoleEdit || role == RoleWrote
+			if (role != "user" && role != "assistant" && role != "tool-output" && !work) ||
 				strings.TrimSpace(message.Text) == "" || message.Time.IsZero() {
 				t.Fatalf("%s fixture produced invalid message: %#v", id, message)
 			}
