@@ -539,7 +539,9 @@ reads `missing`, since both files also carry the user's own hooks; for
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
 start the server, and `switched_off` when the entry is turned off
-(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not.
+(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not. The `deepseek` row carries `plugin_missing` when
+`cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh
+from starting at all.
 
 `commands` is the third thing an install writes: the `/deja` a user types, one
 row per harness. `state` is `written`, `missing`, `someone else's` for a file

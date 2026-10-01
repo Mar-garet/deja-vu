@@ -6,10 +6,12 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1384,6 +1386,11 @@ func doctorMCP(w io.Writer) {
 		// Zed's entry can defer to an extension instead of naming a binary,
 		// and then "wired" is a fact about an id rather than about anything
 		// runnable (#3660).
+		if status == "wired" && c.name == "deepseek" {
+			if missing := dshPluginsMissing(c.path); len(missing) > 0 {
+				fmt.Fprintf(w, "  %-12s %s\n", "", dshPluginsMissingNote(c.path, missing))
+			}
+		}
 		if status == "wired" && c.name == "zed" {
 			if note := zedUnreachableNote(c.path); note != "" {
 				fmt.Fprintf(w, "  %-12s %s\n", "", note)
@@ -1840,6 +1847,159 @@ func doctorDSHWired(path string) bool {
 		return false
 	}
 	return strings.Contains(string(b), "id: mcp-deja")
+}
+
+// dshPluginsMissing lists the plugin files deja's block in the layer names by
+// path and that are not on disk. dsh imports every row when it builds a
+// profile, and one file that is gone fails the whole load: no agent at all, not
+// just no recall, while the server row above still reads wired (#4292).
+func dshPluginsMissing(path string) []string {
+	b, err := readConfig(path)
+	if err != nil {
+		return nil
+	}
+	var missing []string
+	inBlock := false
+	for _, line := range strings.Split(lfText(b), "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(t, dshBlockStart):
+			inBlock = true
+			continue
+		case t == dshBlockEnd:
+			inBlock = false
+			continue
+		}
+		name, ok := strings.CutPrefix(t, "name:")
+		if !inBlock || !ok {
+			continue
+		}
+		for _, m := range dshNameMissing(yamlScalar(strings.TrimSpace(name))) {
+			if !slices.Contains(missing, m) {
+				missing = append(missing, m)
+			}
+		}
+	}
+	return missing
+}
+
+// dshNameMissing is what one plugin name resolves to that dsh cannot load.
+// The rules are dsh 0.1.1-rc.2's, measured rather than assumed: a name
+// starting with "." is resolved against the directory of the profile being
+// built, not against the layer, so it is checked in every profile there is; a
+// file:// URL is imported as the file; `~/` is never expanded and loads
+// nothing even when the file is there. A package name such as
+// '@deepseek-ai/dsh-mcp-client' resolves inside dsh's own bundle and is not a
+// file deja can check.
+func dshNameMissing(name string) []string {
+	switch {
+	case strings.HasPrefix(name, "~/"):
+		return []string{name}
+	case strings.HasPrefix(name, "file://"):
+		u, err := url.Parse(name)
+		if err != nil {
+			return nil
+		}
+		p := filepath.FromSlash(u.Path)
+		if !doctorExists(p) {
+			return []string{p}
+		}
+	case strings.HasPrefix(name, "."):
+		var out []string
+		for _, dir := range dshProfileDirs() {
+			if p := filepath.Join(dir, filepath.FromSlash(name)); !doctorExists(p) {
+				out = append(out, p)
+			}
+		}
+		return out
+	case filepath.IsAbs(name) && !doctorExists(name):
+		return []string{name}
+	}
+	return nil
+}
+
+// dshProfileDirs are the profiles dsh has generated, one directory each beside
+// the node_modules their plugins load from.
+func dshProfileDirs() []string {
+	root := filepath.Join(sources.DSHHome(), "profiles")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() && e.Name() != "node_modules" && !strings.HasPrefix(e.Name(), ".") {
+			out = append(out, filepath.Join(root, e.Name()))
+		}
+	}
+	return out
+}
+
+// dshLayerNamesMissing reports whether the layer names a plugin file that is gone.
+func dshLayerNamesMissing(file string) bool {
+	for _, m := range dshPluginsMissing(dshPatchPath()) {
+		if m == file {
+			return true
+		}
+	}
+	return false
+}
+
+// dshPluginsMissingNote is the line under the deepseek row when the layer names
+// a plugin file that is gone. The -auto target is named when the layer carries
+// the auto row, since the plain one would take that row out.
+func dshPluginsMissingNote(path string, missing []string) string {
+	b, _ := readConfig(path)
+	target := "deepseek"
+	if strings.Contains(string(b), "id: deja-auto") {
+		target = "deepseek-auto"
+	}
+	names := make([]string, len(missing))
+	for i, m := range missing {
+		names[i] = reportPath(m)
+	}
+	list, it := names[0], "it"
+	if n := len(names); n > 1 {
+		list, it = strings.Join(names[:n-1], ", ")+" and "+names[n-1], "them"
+	}
+	return "names " + list + ", which dsh cannot find — dsh will not start; `deja install " + target + "` writes " + it + " again, or `deja uninstall deepseek` takes deja out of the layer"
+}
+
+// yamlScalar reads one plain, single- or double-quoted YAML scalar, the three
+// ways a hand edit or deja's own yamlQuote can spell a path. A comment after
+// it is not part of it: a plain scalar ends at " #", a quoted one at its
+// closing quote.
+func yamlScalar(v string) string {
+	if len(v) >= 2 && v[0] == '\'' {
+		for i := 1; i < len(v); i++ {
+			if v[i] != '\'' {
+				continue
+			}
+			if i+1 < len(v) && v[i+1] == '\'' {
+				i++
+				continue
+			}
+			return strings.ReplaceAll(v[1:i], "''", "'")
+		}
+	}
+	if len(v) >= 2 && v[0] == '"' {
+		for i := 1; i < len(v); i++ {
+			if v[i] == '\\' {
+				i++
+				continue
+			}
+			if v[i] == '"' {
+				r := strings.NewReplacer(`\\`, `\`, `\"`, `"`)
+				return r.Replace(v[1:i])
+			}
+		}
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] == '#' && (v[i-1] == ' ' || v[i-1] == '\t') {
+			return strings.TrimSpace(v[:i])
+		}
+	}
+	return v
 }
 
 // doctorZCodeWired reads `mcp.servers`, one level deeper than the `mcpServers`

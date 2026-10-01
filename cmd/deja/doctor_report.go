@@ -332,6 +332,9 @@ type doctorMCPStatus struct {
 	// SwitchedOff marks a wired entry the user turned off, which the client
 	// will not start (#4303).
 	SwitchedOff bool `json:"switched_off,omitempty"`
+	// PluginMissing marks a dsh layer that names a deja plugin file that is
+	// gone, which keeps dsh from starting at all (#4292).
+	PluginMissing bool `json:"plugin_missing,omitempty"`
 }
 
 type doctorCommandStatus struct {
@@ -945,6 +948,9 @@ func collectDoctorMCP() []doctorMCPStatus {
 		}
 		if state == "wired" && dejaEntrySwitchedOff(config.path) {
 			row.SwitchedOff = true
+		}
+		if state == "wired" && config.name == "deepseek" && len(dshPluginsMissing(config.path)) > 0 {
+			row.PluginMissing = true
 		}
 		out = append(out, row)
 	}

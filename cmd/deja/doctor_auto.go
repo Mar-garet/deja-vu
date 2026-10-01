@@ -297,6 +297,11 @@ func doctorAutoRecall(w io.Writer) {
 		switch {
 		case err != nil:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "missing", reportPath(path), note)
+			// Missing here is not "never installed" when the layer still names
+			// the file: dsh then fails the whole profile load (#4292).
+			if a.name == "deepseek" && dshLayerNamesMissing(path) {
+				fmt.Fprintf(w, "  %-12s %s\n", "", reportPath(dshPatchPath())+" still names it — dsh will not start; `deja install deepseek-auto` writes it again, or `deja uninstall deepseek` takes deja out of the layer")
+			}
 		case autoUnwired(a, b, err):
 			// The client's config is there and deja never wrote its hook into
 			// it: the MCP install writes this same file, and only the -auto
