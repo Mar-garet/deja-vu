@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `deja install hermes-auto` adds deja to a `plugins.enabled` written as a flow list (`[spotify]` becomes `[spotify, deja]`) instead of appending a second `plugins:` block, which switched your own plugins off. Uninstall puts the list back in the style it was written, so `enabled: []` no longer comes back as a null `enabled:` (#4243, #4249).
+- `deja install hermes-auto` adds deja to a `plugins.enabled` written as a flow list (`[spotify]` becomes `[spotify, deja]`) instead of appending a second `plugins:` block, which switched your own plugins off. Uninstall puts the list back as it was written, `enabled: []` and `enabled: ~` included, and keeps any plugin or key you added to a block deja created. A `plugins:` block deja cannot edit safely (a list or a scalar under it, a quoted key, two of them) is refused with a message to add deja by hand (#4243, #4249).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).
 - `deja resume` on a Gemini CLI session runs `gemini --resume` in the directory the session ran in, read from `projects.json` / `.project_root`; from anywhere else Gemini answered "No previous sessions found for this project" (#4211).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).

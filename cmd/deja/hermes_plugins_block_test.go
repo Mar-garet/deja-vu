@@ -98,6 +98,14 @@ func TestHermesPluginsEnabledKeepsItsListStyle(t *testing.T) {
 		{"plugins:\n  enabled: [ ]\n", "  enabled: [ deja]\n"},
 		{"plugins:\n  enabled: [ spotify ]\n", "  enabled: [ spotify, deja ]\n"},
 		{"plugins:\n  enabled: ['x]y', spotify]\n", "  enabled: ['x]y', spotify, deja]\n"},
+		{"plugins:\n  enabled: ['a #b', spotify]\n", "  enabled: ['a #b', spotify, deja]\n"},
+		{"plugins:\n  enabled:\t# c\n    - spotify\n", "    - spotify\n    - deja\n"},
+		{"plugins:\n  enabled: [a]\t# c\n", "  enabled: [a, deja]\t# c\n"},
+		{"plugins:\n  enabled: [spotify,]\n", "  enabled: [spotify, deja,]\n"},
+		{"plugins:\n  enabled: Null\n", "  enabled:\n    - deja\n"},
+		{"plugins:\n  enabled: ~  # nothing\n", "  enabled:  # nothing\n    - deja\n"},
+		{"plugins:\n  enabled:  NULL\n  disabled: []\n", "  enabled:\n    - deja\n  disabled: []\n"},
+		{"_config_version: 32\n...\n", "\nplugins:\n  enabled:\n    - deja\n...\n"},
 	} {
 		t.Run(strings.ReplaceAll(tc.before, "\n", "·"), func(t *testing.T) {
 			path := hermesConfig(t, tc.before)
@@ -193,6 +201,13 @@ func TestInstallRefusesAPluginsListItCannotEdit(t *testing.T) {
 		"plugins:\n  enabled:\n    spotify: true\n",
 		"plugins:\n  enabled:\n    spotify\n",
 		"plugins:\n  enabled: [a]\nmodel: x\nplugins:\n  enabled: [b]\n",
+		"plugins:\n  enabled: [a]\n  enabled: [b]\n",
+		"plugins:\n  - foo\nmodel: x\n",
+		"plugins:\n- foo\n",
+		"plugins:\n  foo\n",
+		"\"plugins\":\n  enabled: [a]\n",
+		"plugins :\n  enabled: [a]\n",
+		"plugins:\n  enabled: nulL\n",
 	} {
 		t.Run(strings.ReplaceAll(before, "\n", "·"), func(t *testing.T) {
 			path := hermesConfig(t, before)
@@ -220,5 +235,17 @@ func TestHermesPluginsEnabledNullIsAnEmptyList(t *testing.T) {
 				t.Fatalf("install:\nwant %q\ngot  %q", want, b)
 			}
 		})
+	}
+}
+
+// deja's own entry with a comment after it, tab or space, is still deja's.
+func TestHermesPluginsKnowsDejasEntryWithAComment(t *testing.T) {
+	before := "plugins:\n  enabled:\n    - spotify\n    - deja\t# mine\n"
+	path := hermesConfig(t, before)
+	if err := setHermesPluginEnabled(true); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != before {
+		t.Fatalf("install listed deja twice:\n%s", b)
 	}
 }
