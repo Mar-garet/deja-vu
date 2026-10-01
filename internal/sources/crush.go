@@ -121,7 +121,11 @@ func ParseCrushDBSince(db string, t time.Time) ([]model.Session, error) {
 	}
 	where := ""
 	if !t.IsZero() {
-		where = " where " + newerThanEpoch("s.updated_at", t)
+		// The watermark is the newest turn's whole second, and a turn written
+		// later in that second moves updated_at to the same second: a strict >
+		// never asks for it (#4381). Sessions come back whole, so the second
+		// re-offered costs a re-read of what is already held, nothing more.
+		where = " where " + newerThanEpoch("s.updated_at", t.Add(-time.Second))
 	}
 	// json_object rather than the shell's -json mode, which is quadratic in
 	// what it escapes — see sqliteRows. A parts column is stored JSON.
