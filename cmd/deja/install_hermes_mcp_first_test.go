@@ -20,6 +20,7 @@ func TestInstallHermesJoinsAnMCPBlockOnTheFirstLine(t *testing.T) {
 		"bare key last": "model: x\nmcp_servers:",
 		"comment child": "mcp_servers:\n    # my servers\n  foo:\n    command: z\n",
 		"bom":           "\ufeffmcp_servers:\n  foo:\n    command: z\n",
+		"document end":  "model: x\n...\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()

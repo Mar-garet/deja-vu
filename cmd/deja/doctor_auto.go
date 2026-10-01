@@ -333,16 +333,26 @@ func yamlTopKeyEnd(doc, key string) (int, error) {
 	// Past any comment or blank line under the key: a comment there heads the
 	// reader's entries, and an entry written above it would carry it away
 	// when uninstall takes that entry out (#4289).
-	for found < len(doc) {
-		end := strings.IndexByte(doc[found:], '\n')
+	// A blank line is skipped only when what follows it still belongs to the
+	// key; the one that separates an empty key from the next one is the
+	// file's, and an entry written below it moved on every install.
+	for at := found; at < len(doc); {
+		end := strings.IndexByte(doc[at:], '\n')
 		if end < 0 {
 			break
 		}
-		t := strings.TrimSpace(doc[found : found+end])
+		line := doc[at : at+end]
+		t := strings.TrimSpace(line)
 		if t != "" && !strings.HasPrefix(t, "#") {
+			if yamlIndentWidth(line) > 0 {
+				found = at
+			}
 			break
 		}
-		found += end + 1
+		at += end + 1
+		if t != "" {
+			found = at
+		}
 	}
 	return found, nil
 }

@@ -230,7 +230,14 @@ func installHermesMCP(exe string, uninstall bool) (installResult, error) {
 		if at >= 0 {
 			next = next[:at] + entry + next[at:]
 		} else {
-			next += "\nmcp_servers:\n" + entry
+			// Before a `...` document end, where #4260 puts the plugins block
+			// too: a key after it is a second document Hermes cannot parse.
+			block := "\nmcp_servers:\n" + entry
+			if i := strings.LastIndex("\n"+next, "\n...\n"); i >= 0 {
+				next = next[:i] + strings.TrimPrefix(block, "\n") + next[i:]
+			} else {
+				next += block
+			}
 			noteBlockAdded(path, "mcp_servers")
 		}
 	} else if blockWasAdded(path, "mcp_servers") {
