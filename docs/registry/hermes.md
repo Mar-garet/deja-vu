@@ -18,14 +18,17 @@ negative code is a process killed by a signal after it started, so the command s
 written sides — `patch` in its V4A mode as Hermes' own parser reads it, `Move File`
 included, with the lines after a move or delete belonging to no file. A `tool` row is
 kept as tool output by its `output`, `content`, `diff`, `matches_text` or `error`, or,
-when none holds text, by every string in it (`search_files` in files mode,
+when it has none of those keys, by every string in it (`search_files` in files mode,
 `web_search`, `delegate_task`); keys starting with `_` and a bare byte count are not
 kept. Rows rewound away (`active = 0`, `compacted = 0`, or `active = 0` on a store
-without `compacted`) are skipped. In-place compaction archives the turns it summarises
-and writes the kept head and tail again as live rows: a live call, result or message
-that repeats an archived one is that copy and counts once, the compressor's stubs are
-dropped, and the `[CONTEXT COMPACTION — REFERENCE ONLY]` summary is kept under the
-`summary` role. Multimodal content, stored as
+without `compacted`) are skipped. Rows are read in insertion order, as Hermes reads them.
+In-place compaction archives the turns it summarises and writes the kept head, a
+summary and the kept tail as one batch of live rows; the head rows that repeat the
+start of the archive and the tail rows that repeat its end are that batch's copies and
+are not read twice (#4296). The same request or run after the batch counts again. The
+summary (`[CONTEXT COMPACTION …` or the older `[CONTEXT SUMMARY]:`) is kept under the
+`summary` role; when Hermes merged it into the first tail message, the text after its
+end marker keeps that message's role. The compressor's stubs are dropped. Multimodal content, stored as
 `\x00json:` and a list of parts, keeps its text parts and not the image (#4242). The
 Postgres path still reads prose only. A `sessions` table beside it carries `id`, `cwd`,
 `git_repo_root` and `title`; the `cwd` is where the work happened and is what names

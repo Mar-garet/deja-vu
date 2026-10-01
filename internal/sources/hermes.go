@@ -115,8 +115,6 @@ func parseHermesDBWhere(db, where string) ([]model.Session, error) {
 	if fi, err := os.Stat(db); err != nil || fi.Size() == 0 {
 		return nil, nil
 	}
-	// json_object rather than the shell's -json mode, which is quadratic in
-	// what it escapes — see sqliteRows.
 	cols := hermesColumns(db)
 	// Rewind takes turns back with active=0; compaction archives the turns it
 	// summarised with active=0 and compacted=1, and Hermes' own search still
@@ -129,10 +127,15 @@ func parseHermesDBWhere(db, where string) ([]model.Session, error) {
 	case cols["active"]:
 		live = " and active = 1"
 	}
+	// json_object rather than the shell's -json mode, which is quadratic in
+	// what it escapes — see sqliteRows. In insertion order, as Hermes reads
+	// its own sessions (get_messages): a row's timestamp can be the
+	// platform's event time, and the rows compaction writes as one batch have
+	// to stay together (#4296).
 	q := `select json_object('session_id',cast(session_id as text),'role',cast(role as text),` +
 		`'content',cast(content as text),'timestamp',timestamp` + archived + `) from messages ` +
 		`where role in ('user','assistant') and content is not null and content <> ''` + live + where +
-		` order by session_id,timestamp,id`
+		` order by session_id,id`
 	if cols["tool_calls"] && cols["tool_call_id"] && cols["tool_name"] {
 		// A tool-call row has no content, only tool_calls, and the result lands
 		// on a `tool` row; both carry the session's work (#4242).
@@ -142,7 +145,7 @@ func parseHermesDBWhere(db, where string) ([]model.Session, error) {
 			`'tool_name',cast(tool_name as text)` + archived + `) from messages ` +
 			`where role in ('user','assistant','tool') and ((content is not null and content <> '')` +
 			` or (tool_calls is not null and tool_calls <> ''))` + live + where +
-			` order by session_id,timestamp,id`
+			` order by session_id,id`
 	}
 	cmd, stopRead := sqliteReadCmd(db, q)
 	defer stopRead()
@@ -238,6 +241,43 @@ func hermesColumns(db string) map[string]bool {
 		}
 	}
 	return cols
+}
+
+// hermesContentJSON is the prefix Hermes stores structured content under —
+// a multimodal message's list of parts (hermes_state.py _encode_content).
+const hermesContentJSON = "\x00json:"
+
+// hermesText is a row's content as text: the text parts of a multimodal
+// message, never the base64 of its images.
+func hermesText(content string) string {
+	if !strings.HasPrefix(content, hermesContentJSON) {
+		return strings.TrimSpace(content)
+	}
+	var v any
+	if json.Unmarshal([]byte(content[len(hermesContentJSON):]), &v) != nil {
+		return ""
+	}
+	parts, _ := v.([]any)
+	if m, ok := v.(map[string]any); ok {
+		parts = []any{m}
+	}
+	var out []string
+	for _, p := range parts {
+		switch e := p.(type) {
+		case string:
+			out = append(out, e)
+		case map[string]any:
+			if e["type"] != nil && e["type"] != "text" {
+				continue
+			}
+			if s, _ := e["text"].(string); s != "" {
+				out = append(out, s)
+			} else if s, _ := e["text_summary"].(string); s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 // hermesTime reads Hermes' REAL epoch seconds. The shared parser handles

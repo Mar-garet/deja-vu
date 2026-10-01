@@ -56,14 +56,17 @@
 <p>written sides — <code>patch</code> in its V4A mode as Hermes&#39; own parser reads it, <code>Move File</code></p>
 <p>included, with the lines after a move or delete belonging to no file. A <code>tool</code> row is</p>
 <p>kept as tool output by its <code>output</code>, <code>content</code>, <code>diff</code>, <code>matches_text</code> or <code>error</code>, or,</p>
-<p>when none holds text, by every string in it (<code>search_files</code> in files mode,</p>
+<p>when it has none of those keys, by every string in it (<code>search_files</code> in files mode,</p>
 <p><code>web_search</code>, <code>delegate_task</code>); keys starting with <code>_</code> and a bare byte count are not</p>
 <p>kept. Rows rewound away (<code>active = 0</code>, <code>compacted = 0</code>, or <code>active = 0</code> on a store</p>
-<p>without <code>compacted</code>) are skipped. In-place compaction archives the turns it summarises</p>
-<p>and writes the kept head and tail again as live rows: a live call, result or message</p>
-<p>that repeats an archived one is that copy and counts once, the compressor&#39;s stubs are</p>
-<p>dropped, and the <code>[CONTEXT COMPACTION — REFERENCE ONLY]</code> summary is kept under the</p>
-<p><code>summary</code> role. Multimodal content, stored as</p>
+<p>without <code>compacted</code>) are skipped. Rows are read in insertion order, as Hermes reads them.</p>
+<p>In-place compaction archives the turns it summarises and writes the kept head, a</p>
+<p>summary and the kept tail as one batch of live rows; the head rows that repeat the</p>
+<p>start of the archive and the tail rows that repeat its end are that batch&#39;s copies and</p>
+<p>are not read twice (#4296). The same request or run after the batch counts again. The</p>
+<p>summary (<code>[CONTEXT COMPACTION …</code> or the older <code>[CONTEXT SUMMARY]:</code>) is kept under the</p>
+<p><code>summary</code> role; when Hermes merged it into the first tail message, the text after its</p>
+<p>end marker keeps that message&#39;s role. The compressor&#39;s stubs are dropped. Multimodal content, stored as</p>
 <p><code>\x00json:</code> and a list of parts, keeps its text parts and not the image (#4242). The</p>
 <p>Postgres path still reads prose only. A <code>sessions</code> table beside it carries <code>id</code>, <code>cwd</code>,</p>
 <p><code>git_repo_root</code> and <code>title</code>; the <code>cwd</code> is where the work happened and is what names</p>

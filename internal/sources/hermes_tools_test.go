@@ -158,7 +158,7 @@ func TestHermesToolResultIsItsText(t *testing.T) {
 }
 
 // Compaction archives the live rows (active=0, compacted=1) and writes the
-// kept tail again as new active rows; rewind takes turns back (active=0,
+// summary and the kept tail again as new active rows; rewind takes turns back (active=0,
 // compacted=0). The first must not count a call twice, the second must not
 // count at all (hermes_state.py archive_and_compact, rewind_to_message).
 func TestHermesCompactionAndRewind(t *testing.T) {
@@ -170,6 +170,7 @@ func TestHermesCompactionAndRewind(t *testing.T) {
 		 ('s','user','fix the retry budget',NULL,NULL,NULL,1785000000.0,0,1),
 		 ('s','assistant','',NULL,`+call("c1", "/w/a.py")+`,NULL,1785000001.0,0,1),
 		 ('s','tool','{"success": true, "diff": "-old\n+new"}','c1',NULL,'patch',1785000002.0,0,1),
+		 ('s','user','[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below.',NULL,NULL,NULL,1785000010.0,1,0),
 		 ('s','assistant','',NULL,`+call("c1", "/w/a.py")+`,NULL,1785000010.0,1,0),
 		 ('s','tool','[Old tool output cleared to save context space]','c1',NULL,'patch',1785000011.0,1,0),
 		 ('s','user','try b.py instead',NULL,NULL,NULL,1785000020.0,0,0),
@@ -346,5 +347,89 @@ func TestHermesCompactionDoesNotRepeatProse(t *testing.T) {
 	}
 	if len(by[RoleSummary]) != 1 {
 		t.Errorf("summary = %q, want the compaction summary under its own role", by[RoleSummary])
+	}
+}
+
+// An archived row stands for one copy, in the batch compaction wrote around
+// its summary. The same request and run after that batch is new work, even
+// with the same text and the same derived call id (#4296).
+func TestHermesRepeatAfterCompactionIsKept(t *testing.T) {
+	call := `'[{"id":"call_3f1a2b4c5d6e","type":"function","function":{"name":"terminal","arguments":"{\"command\": \"go test ./...\"}"}}]'`
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,tool_call_id,tool_calls,tool_name,timestamp,active,compacted) VALUES
+		 ('s','user','fix the pool',NULL,NULL,NULL,1785000000.0,0,1),
+		 ('s','user','run the tests again',NULL,NULL,NULL,1785000001.0,0,1),
+		 ('s','assistant','',NULL,`+call+`,NULL,1785000002.0,0,1),
+		 ('s','tool','{"output": "FAIL pool_test.go:12", "exit_code": 1}','call_3f1a2b4c5d6e',NULL,'terminal',1785000003.0,0,1),
+		 ('s','assistant','still failing',NULL,NULL,NULL,1785000004.0,0,1),
+		 ('s','user','fix the pool',NULL,NULL,NULL,1785000010.0,1,0),
+		 ('s','assistant','[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below.',NULL,NULL,NULL,1785000010.0,1,0),
+		 ('s','assistant','still failing',NULL,NULL,NULL,1785000010.0,1,0),
+		 ('s','user','run the tests again',NULL,NULL,NULL,1785000020.0,1,0),
+		 ('s','assistant','',NULL,`+call+`,NULL,1785000021.0,1,0),
+		 ('s','tool','{"output": "ok  example/pool 0.2s", "exit_code": 0}','call_3f1a2b4c5d6e',NULL,'terminal',1785000022.0,1,0);`)
+	by := hermesRoles(t, db)
+	if got := strings.Join(by["user"], "|"); got != "fix the pool|run the tests again|run the tests again" {
+		t.Errorf("user = %q", by["user"])
+	}
+	if got := strings.Join(by["assistant"], "|"); got != "still failing" {
+		t.Errorf("assistant = %q", by["assistant"])
+	}
+	if got := strings.Join(by[RoleCommand], "|"); got != "$ go test ./...  → exit 1|$ go test ./..." {
+		t.Errorf("commands = %q", by[RoleCommand])
+	}
+	if got := strings.Join(by[RoleToolOutput], "|"); got != "FAIL pool_test.go:12|ok  example/pool 0.2s" {
+		t.Errorf("tool output = %q", by[RoleToolOutput])
+	}
+}
+
+// When the kept head ends on assistant and the tail starts on user, Hermes
+// prepends the summary to the first tail message, up to an end marker
+// (agent/context_compressor.py _merge_summary_into_tail). What follows the
+// marker is that message, and may be the only copy of the prompt.
+func TestHermesSummaryMergedIntoPrompt(t *testing.T) {
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,tool_call_id,tool_calls,tool_name,timestamp,active,compacted) VALUES
+		 ('s','user','fix the pool',NULL,NULL,NULL,1785000000.0,0,1),
+		 ('s','assistant','looking at it now',NULL,NULL,NULL,1785000001.0,0,1),
+		 ('s','user','fix the pool',NULL,NULL,NULL,1785000010.0,1,0),
+		 ('s','assistant','looking at it now',NULL,NULL,NULL,1785000010.0,1,0),
+		 ('s','user','[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below.
+## Active Task
+fix the pool
+
+--- END OF CONTEXT SUMMARY — respond to the message below, not the summary above ---
+
+now raise the pool size to 32',NULL,NULL,NULL,1785000010.0,1,0);`)
+	by := hermesRoles(t, db)
+	if got := strings.Join(by["user"], "|"); got != "fix the pool|now raise the pool size to 32" {
+		t.Errorf("user = %q", by["user"])
+	}
+	if got := strings.Join(by[RoleSummary], "|"); len(by[RoleSummary]) != 1 || strings.Contains(got, "pool size to 32") {
+		t.Errorf("summary = %q, want the summary alone", by[RoleSummary])
+	}
+}
+
+// A quiet passing run has an empty output; what sits beside it is
+// bookkeeping, not the result.
+func TestHermesEmptyOutputIsNoResult(t *testing.T) {
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,tool_call_id,tool_calls,tool_name,timestamp) VALUES
+		 ('s','user','run the tests',NULL,NULL,NULL,1785000000.0),
+		 ('s','tool','{"output": "", "exit_code": 0, "error": null, "verification_evidence": {"command": "go test ./...", "kind": "test", "scope": "repo", "status": "passed"}}','c1',NULL,'terminal',1785000001.0);`)
+	if got := hermesRoles(t, db)[RoleToolOutput]; len(got) != 0 {
+		t.Errorf("tool output = %q, want none", got)
+	}
+}
+
+// Older Hermes opened its summary with LEGACY_SUMMARY_PREFIX.
+func TestHermesLegacySummaryPrefix(t *testing.T) {
+	db := writeHermesStore(t, hermes017Schema, `
+		INSERT INTO messages (session_id,role,content,timestamp) VALUES
+		 ('s','user','fix the pool',1785000000.0),
+		 ('s','assistant','[CONTEXT SUMMARY]: the pool was resized to 16',1785000001.0);`)
+	by := hermesRoles(t, db)
+	if len(by["assistant"]) != 0 || len(by[RoleSummary]) != 1 {
+		t.Errorf("assistant = %q, summary = %q", by["assistant"], by[RoleSummary])
 	}
 }
