@@ -39,11 +39,25 @@
     <summary>deja search syntax: exact and phrase queries, natural language with stop words, fuzzy typo tolerance, confidence tiers, and optional local semantic recall.</summary>
   </entry>
   <entry>
+    <title>Where coding agents store their history — session format registry</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/README.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/README.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>Where Claude Code, Codex, Cursor, opencode and thirty-one more coding agents keep their conversation history on disk, what is inside those files, and how each format drifts.</summary>
+  </entry>
+  <entry>
     <title>Where Claude Code stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/claude-code.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/claude-code.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>Where Claude Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Command Code stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/commandcode.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/commandcode.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>Where Command Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where VS Code Copilot Chat stores its history — session format</title>
@@ -275,19 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/forgetting.html"></link>
     <updated>2026-09-30T00:00:00Z</updated>
     <summary>Why coding agents start from scratch every session, what compaction keeps, and how to read the history Claude Code, Codex and Cursor already wrote.</summary>
-  </entry>
-  <entry>
-    <title>Install deja and index your agent history — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/getting-started.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/getting-started.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>Install deja and index your coding-agent history in one command, then search it and wire it into your agents over MCP.</summary>
-  </entry>
-  <entry>
-    <title>Claude Code lost your context: how to get it back — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/lost-context.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/lost-context.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>A crash, a cleared window or a restart takes the agent&#39;s context but not the transcript — how to get the work back and stop paying for it next time.</summary>
   </entry>
 </feed>
