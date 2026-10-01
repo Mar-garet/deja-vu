@@ -340,6 +340,11 @@ import (
 // rebuild.
 //
 // Also 60: a resumed Gemini CLI session keeps the prompts deja's recall was
+// 60: a Hermes session keeps its tool calls and results — commands, files,
+// edits and tool output were all dropped (#4242). An unchanged session is
+// not re-read from the store, so a rebuild.
+//
+// 60 also: a resumed Gemini CLI session keeps the prompts deja's recall was
 // prepended to; Gemini's own resume history leaves them out (#4214). The
 // chat file is re-read whole only when it changes, so a rebuild.
 // 60: a goose edit or write call leaves an edit and a wrote record, not only
