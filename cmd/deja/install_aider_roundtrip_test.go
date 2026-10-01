@@ -24,6 +24,8 @@ func TestAiderConfigRoundTrips(t *testing.T) {
 		{"block, comment under key", "read:\n  # the house rules\n  - C.md\n"},
 		{"block at column 0", "read:\n- C.md\n- D.md\nmodel: x\n"},
 		{"lf block", "model: x\nread:\n  - C.md\n"},
+		{"null", "model: x\nread: ~\n"},
+		{"quoted flow", "read: [\"#notes.md\", 'k: v.md']\n"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			home := t.TempDir()
@@ -104,6 +106,35 @@ func TestAiderRefusesTwoReadKeys(t *testing.T) {
 	} {
 		if _, err := addAiderReadEntry(conf, "/x/aider-context.md"); err == nil {
 			t.Errorf("%q was joined instead of refused", conf)
+		}
+	}
+}
+
+// A flow item keeps its quotes when install makes the list a block list:
+// unquoted, "#notes.md" reads as a comment and 'k: v.md' as a mapping, and
+// aider loses both files.
+func TestAiderFlowListKeepsQuotes(t *testing.T) {
+	if got, _ := addAiderReadEntry("read: ~\n", "/x/aider-context.md"); strings.Contains(got, "- ~") {
+		t.Errorf("a null read: became a null item:\n%s", got)
+	}
+	got, err := addAiderReadEntry("read: [\"#notes.md\", 'k: v.md', plain.md]\n", "/x/aider-context.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"  - \"#notes.md\"\n", "  - 'k: v.md'\n", "  - plain.md\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in\n%s", want, got)
+		}
+	}
+}
+
+// A block scalar or an alias under read: is not a file name to promote: the
+// indicator became a list item and the text under it was left dangling below
+// deja's entry.
+func TestAiderRefusesBlockScalarRead(t *testing.T) {
+	for _, conf := range []string{"read: |\n  x.md\n", "read: >-\n  x.md\n", "read: *files\n"} {
+		if got, err := addAiderReadEntry(conf, "/x/aider-context.md"); err == nil {
+			t.Errorf("%q was rewritten instead of refused:\n%s", conf, got)
 		}
 	}
 }

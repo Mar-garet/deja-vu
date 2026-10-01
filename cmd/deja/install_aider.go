@@ -124,25 +124,19 @@ func addAiderReadEntry(s, ctx string) (string, error) {
 		if !ok || strings.TrimSpace(v) == "" || strings.HasPrefix(strings.TrimSpace(v), "#") {
 			continue
 		}
-		// A flow list is not a scalar. Taken as one, `read: [a.md, b.md]`
-		// became a single entry `- [a.md, b.md]` and aider looked for a file
-		// with that name — the reader's two files gone from its view, reported
-		// as a successful install (#3197).
-		if items, isFlow := yamlFlowItems(strings.TrimSpace(v)); isFlow {
-			if items == nil {
-				// A shape this cannot take apart safely. Refuse, the way the
-				// goose and Continue writers do, rather than rewrite it wrong.
-				return "", fmt.Errorf("read: %s is a list deja cannot rewrite \u2014 move it to a block list and run this again", strings.TrimSpace(v))
-			}
-			var b strings.Builder
-			b.WriteString("read:\n")
-			for _, it := range items {
-				b.WriteString("  - " + it + "\n")
-			}
-			b.WriteString(entry)
-			return strings.Replace(s, line+"\n", b.String(), 1), nil
+		items, ok := aiderReadItems(v)
+		if !ok {
+			// A shape this cannot take apart safely. Refuse, the way the
+			// goose and Continue writers do, rather than rewrite it wrong.
+			return "", fmt.Errorf("read: %s is not a form deja can rewrite \u2014 move it to a block list and run this again", strings.TrimSpace(v))
 		}
-		return strings.Replace(s, line+"\n", "read:\n  - "+strings.TrimSpace(v)+"\n"+entry, 1), nil
+		var b strings.Builder
+		b.WriteString("read:\n")
+		for _, it := range items {
+			b.WriteString("  - " + it + "\n")
+		}
+		b.WriteString(entry)
+		return strings.Replace(s, line+"\n", b.String(), 1), nil
 	}
 	if s != "" && !strings.HasSuffix(s, "\n") {
 		s += "\n"
@@ -161,6 +155,35 @@ func addAiderReadEntry(s, ctx string) (string, error) {
 		entry = line[:len(line)-len(strings.TrimLeft(line, " "))] + "- " + ctx + "\n"
 	}
 	return s[:at] + entry + s[at:], nil
+}
+
+// aiderReadItems is what a top-level `read: <v>` line holds, as the block list
+// install turns it into: a flow list's items, nothing for a null, or the one
+// file a scalar names. ok is false for a value it cannot take apart.
+//
+// A flow list is not a scalar. Taken as one, `read: [a.md, b.md]` became a
+// single entry `- [a.md, b.md]` and aider looked for a file with that name —
+// the reader's two files gone from its view, reported as a successful install
+// (#3197). Nor is a null, a block scalar, an alias, an anchor, a tag or a
+// mapping: promoted, `read: ~` became a null item and `read: |` an item `- |`
+// with its text left dangling under deja's entry.
+func aiderReadItems(v string) (items []string, ok bool) {
+	v = strings.TrimSpace(v)
+	if items, isFlow := yamlFlowItems(v); isFlow {
+		return items, items != nil
+	}
+	bare := v
+	if i := strings.Index(bare, " #"); i >= 0 {
+		bare = strings.TrimSpace(bare[:i])
+	}
+	switch strings.ToLower(bare) {
+	case "~", "null", "''", `""`:
+		return []string{}, true
+	}
+	if v == "" || strings.ContainsAny(v[:1], "|>&*!{") {
+		return nil, false
+	}
+	return []string{v}, true
 }
 
 // yamlFlowItems takes apart a YAML flow list \u2014 `[a, b]` \u2014 into its items, and
@@ -205,15 +228,10 @@ func yamlFlowItems(v string) ([]string, bool) {
 		return nil, true
 	}
 	items = append(items, strings.TrimSpace(cur.String()))
-	for i, it := range items {
-		if it == "" {
-			return nil, true
-		}
-		// A name quoted in the flow list is the same file unquoted, and the
-		// block list deja writes takes it plain.
-		if len(it) > 1 && (it[0] == '"' || it[0] == '\'') && it[len(it)-1] == it[0] {
-			items[i] = it[1 : len(it)-1]
-		}
+	// A quoted item keeps its quotes in the block list: unquoted, "#a.md"
+	// is a comment and 'k: v.md' a mapping, and aider loses the file.
+	if slices.Contains(items, "") {
+		return nil, true
 	}
 	return items, true
 }
@@ -258,11 +276,8 @@ func removeAiderReadEntry(s, was string) (string, bool) {
 // made it from, when the block holds the same files in the same order. A list
 // the reader has changed since stays as they left it.
 func restoreAiderRead(lines []string, was string) ([]string, bool) {
-	v := strings.TrimSpace(strings.TrimPrefix(was, "read: "))
-	want, isFlow := yamlFlowItems(v)
-	if !isFlow {
-		want = []string{v}
-	} else if want == nil {
+	want, ok := aiderReadItems(strings.TrimPrefix(was, "read: "))
+	if !ok {
 		return lines, false
 	}
 	for i, l := range lines {
