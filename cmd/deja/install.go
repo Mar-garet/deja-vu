@@ -3829,7 +3829,9 @@ func jsoncCodeOf(line string, inBlock bool) (code string, stillInBlock bool, end
 			continue
 		}
 		b.WriteByte(c)
-		if c != ' ' && c != '\t' {
+		// A CR is the end of a CRLF line, not code: a comma after it sat
+		// alone at the start of the next line in an editor.
+		if c != ' ' && c != '\t' && c != '\r' {
 			end = i + 1
 		}
 	}
