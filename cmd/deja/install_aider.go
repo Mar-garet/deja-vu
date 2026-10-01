@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // aider has neither an MCP client nor hooks, but read-only files are re-read
@@ -284,13 +285,28 @@ func cmdAider(dir string, rest []string, sourceInstance string) error {
 	}
 	// Ctrl-C reaches the whole foreground group and is aider's own key for
 	// stopping a reply; left to its default it ended this process instead, and
-	// the file kept the digest.
+	// the file kept the digest. A SIGTERM or a closed terminal ended it too,
+	// and left aider running with nobody waiting on it: those go on to aider,
+	// and this waits for it to exit.
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	defer signal.Stop(sig)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	defer func() {
+		signal.Stop(sig)
+		close(sig)
+	}()
 	cmd := exec.Command(bin, rest...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() {
+		for s := range sig {
+			if s != os.Interrupt {
+				_ = cmd.Process.Signal(s)
+			}
+		}
+	}()
+	return cmd.Wait()
 }
 
 func aiderRecallCount() int {
