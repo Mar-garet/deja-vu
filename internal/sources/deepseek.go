@@ -3,9 +3,7 @@ package sources
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -289,14 +287,5 @@ func readDeepSeekLog(path string) ([]byte, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
-	cmd := exec.Command("zstd", "-d", "-c", "-q")
-	cmd.Stdin = bytes.NewReader(raw)
-	var out, errBuf bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("deepseek: zstd -d %s: %w: %s", filepath.Base(path), err,
-			strings.TrimSpace(errBuf.String()))
-	}
-	return out.Bytes(), nil
+	return zstdDecodeFile(path, "deepseek", raw)
 }
