@@ -282,11 +282,30 @@ func hermesProfile(db string) string {
 // found" (#4248). A profile's session is always named, so the command does not
 // depend on which one is active; a sticky `hermes profile use work` makes the
 // root store need naming too, as `default`.
+//
+// The root is worked out the way Hermes' get_default_hermes_root does: a
+// HERMES_HOME under `profiles/` is a profile, which `hermes -p work` exports
+// to everything it runs, deja included, and the root is two levels up. In that
+// mode the profile is always named. A Postgres session keeps the plain command.
 func HermesResumeProfile(db string) string {
-	if filepath.Dir(filepath.Dir(db)) == filepath.Clean(HermesProfilesRoot()) {
+	if IsHermesPGStore(db) {
+		return ""
+	}
+	root, inProfile := HermesHome(), false
+	if filepath.Base(filepath.Dir(root)) == "profiles" {
+		root, inProfile = filepath.Dir(filepath.Dir(root)), true
+	}
+	profiles := filepath.Join(root, "profiles")
+	if p := os.Getenv("DEJA_HERMES_PROFILES_ROOT"); p != "" {
+		profiles = p
+	}
+	if filepath.Dir(filepath.Dir(db)) == filepath.Clean(profiles) {
 		return filepath.Base(filepath.Dir(db))
 	}
-	b, err := os.ReadFile(filepath.Join(HermesHome(), "active_profile"))
+	if inProfile {
+		return "default"
+	}
+	b, err := os.ReadFile(filepath.Join(root, "active_profile"))
 	if err != nil {
 		return ""
 	}

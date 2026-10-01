@@ -50,6 +50,48 @@ func TestResumeHermesNamesTheProfileTheSessionIsIn(t *testing.T) {
 	}
 }
 
+// Run as a child of `hermes -p work`, deja inherits HERMES_HOME pointed at the
+// profile's own directory, and read that as the root: the root store's sessions
+// and the other profiles' came out with bare commands that open work's. Hermes
+// takes the root to be two levels up from a directory under `profiles`, and in
+// that mode the command always names the profile. A Postgres session keeps the
+// command it had; a directory Hermes would not take as a profile name is
+// refused rather than handed to -p.
+func TestResumeHermesUnderAProfilesHome(t *testing.T) {
+	tmp := hermeticEnv(t)
+	root := filepath.Join(tmp, "hermes")
+	t.Setenv("DEJA_HERMES_PROFILES_ROOT", "")
+	t.Setenv("DEJA_HERMES_HOME", filepath.Join(root, "profiles", "work"))
+	const id = "20261001_182638_264fd2"
+	cmdFor := func(path string) (string, error) {
+		_, cmd, err := resumeCommand(model.Session{ID: id, Harness: "hermes", Project: "p", Path: path})
+		return cmd, err
+	}
+	for path, want := range map[string]string{
+		filepath.Join(root, "state.db"):                      "hermes -p default --resume " + id,
+		filepath.Join(root, "profiles", "work", "state.db"):  "hermes -p work --resume " + id,
+		filepath.Join(root, "profiles", "other", "state.db"): "hermes -p other --resume " + id,
+	} {
+		if got, err := cmdFor(path); err != nil || got != want {
+			t.Errorf("%s: %q, %v; want %q", path, got, err, want)
+		}
+	}
+
+	t.Setenv("DEJA_HERMES_HOME", root)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "active_profile"), []byte("work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := cmdFor("hermes-pg:abc123"); err != nil || got != "hermes --resume "+id {
+		t.Errorf("postgres session: %q, %v; want the plain command", got, err)
+	}
+	if got, err := cmdFor(filepath.Join(root, "profiles", "Work.Old", "state.db")); err == nil || !strings.Contains(err.Error(), "deja show") {
+		t.Errorf("a directory Hermes takes for no profile: %q, %v; want a refusal", got, err)
+	}
+}
+
 // `hermes sessions delete` takes the row out of state.db while deja keeps the
 // session searchable, and the printed `hermes --resume` then failed with
 // "Session not found" (#4250) — the opencode case of #4205.

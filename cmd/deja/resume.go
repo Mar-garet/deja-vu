@@ -109,6 +109,10 @@ func formatResumeCommand(dir, cmdline string) string {
 // from a session store cannot alter the command deja builds or prints.
 var resumeIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
+// hermesProfilePattern is Hermes' own PROFILE_ID_RE (hermes_constants.py): a
+// name outside it is not a profile `hermes -p` will open.
+var hermesProfilePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+
 // openclawKeyPattern matches a session key (agent:<id>:<name>). Colons are
 // what separates a key's parts, so the id pattern is too strict here — and
 // anything looser than this would let a key read off disk carry shell
@@ -203,8 +207,8 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// exact conversation rather than the most recent one — from the
 		// profile whose store holds it (#4248).
 		if p := sources.HermesResumeProfile(s.Path); p != "" {
-			if !resumeIDPattern.MatchString(p) {
-				return "", "", fmt.Errorf("session %s is in Hermes profile %q, a name deja will not place in a command — `hermes -p <profile> --resume %s` reopens it", digest.Short(s.ID), p, s.ID)
+			if !hermesProfilePattern.MatchString(p) {
+				return "", "", fmt.Errorf("session %s is in %q, a directory Hermes does not take as a profile name, so `hermes -p` cannot reopen it — `deja show %s` has the conversation", digest.Short(s.ID), p, digest.Short(s.ID))
 			}
 			return "", "hermes -p " + p + " --resume " + s.ID, nil
 		}
