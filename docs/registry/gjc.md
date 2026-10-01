@@ -30,6 +30,12 @@ project directory names the project, and the header's cwd wins when it is there.
   beside the sessions naming the directory. The header's cwd gives the
   project either way. `deja doctor` leaves the scope file and the skipped
   passes out of its "not recognised here" count (#4393).
+- **Edits are hashline, not pi's.** gjc 0.18's `edit` rejects pi's
+  `{path, edits}` ("input: expected string") and takes one `input` string:
+  `§path`, then ops (`≔A..B` replace, `«A` insert before, `»A` insert after),
+  each followed by the lines it writes. deja records the file and the written
+  lines from the call, and the replaced lines from the result's
+  `details.diff` (`-1|old line`), since the call holds only anchors (#4113).
 - `service_tier_change` lines are not turns and are dropped rather than read as
   empty messages.
 - Wiring: `deja install gjc` writes the server into `~/.gjc/agent/mcp.json`,

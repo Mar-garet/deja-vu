@@ -6,10 +6,80 @@
   <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/"></link>
   <link rel="self" type="application/atom+xml" href="https://vshulcz.github.io/deja-vu/feed.xml"></link>
   <link rel="hub" href="https://pubsubhubbub.appspot.com/"></link>
-  <updated>2026-10-01T00:00:00Z</updated>
+  <updated>2026-10-02T00:00:00Z</updated>
   <author>
     <name>vshulcz</name>
   </author>
+  <entry>
+    <title>Add memory to Qwen Code: every agent&#39;s sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-qwen.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-qwen.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>How to give Qwen Code recall over every coding agent&#39;s sessions on this machine — the Gemini extension format, and Claude-format marketplaces.</summary>
+  </entry>
+  <entry>
+    <title>Where gajae-code stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/gjc.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/gjc.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where gajae-code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Goose stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/goose.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/goose.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Goose writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Hermes stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/hermes.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/hermes.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Hermes writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Kimchi Coding stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/kimchi.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimchi.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Kimchi Coding writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Kimi Code stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/kimi.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimi.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Kimi Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where omp (Oh My Pi) stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/omp.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/omp.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where omp (Oh My Pi) writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where pi stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/pi.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/pi.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where pi writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Qwen Code stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/qwen.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/qwen.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Qwen Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>给 Qwen Code 加记忆：召回这台机器上所有智能体的历史会话 — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>如何让 Qwen Code 查到这台机器上每个编程智能体的会话：走 Gemini 扩展格式，也走 Claude 格式的插件市场。</summary>
+  </entry>
   <entry>
     <title>Claude Code, Codex, Cursor and 32 more agents — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/guide/harnesses.html</id>
@@ -23,13 +93,6 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-claude-code.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>How to give Claude Code recall over every coding agent&#39;s sessions on this machine — the MCP server, the SessionStart hook and the plugin marketplace.</summary>
-  </entry>
-  <entry>
-    <title>Add memory to Qwen Code: every agent&#39;s sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-qwen.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-qwen.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>How to give Qwen Code recall over every coding agent&#39;s sessions on this machine — the Gemini extension format, and Claude-format marketplaces.</summary>
   </entry>
   <entry>
     <title>Resume yesterday&#39;s Claude Code or Codex session — deja-vu</title>
@@ -74,46 +137,11 @@
     <summary>Where Gemini CLI writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
-    <title>Where Goose stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/goose.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/goose.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Goose writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Hermes stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/hermes.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/hermes.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Hermes writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Kimi Code stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/kimi.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimi.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Kimi Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
     <title>Where opencode stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/opencode.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/opencode.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>Where opencode writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Qwen Code stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/qwen.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/qwen.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Qwen Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>给 Qwen Code 加记忆：召回这台机器上所有智能体的历史会话 — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/zh/guide/memory-for-qwen.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>如何让 Qwen Code 查到这台机器上每个编程智能体的会话：走 Gemini 扩展格式，也走 Claude 格式的插件市场。</summary>
   </entry>
   <entry>
     <title>What compaction drops, and how to get it back — deja-vu</title>
@@ -261,33 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-kiro-session-history.html"></link>
     <updated>2026-09-30T00:00:00Z</updated>
     <summary>Kiro keeps CLI and IDE sessions in two different trees under ~/.kiro/sessions. Where each one is, how to remove one session or all, and what else Kiro keeps.</summary>
-  </entry>
-  <entry>
-    <title>How to delete old Claude Code sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-old-claude-sessions.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-old-claude-sessions.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>find ~/.claude/projects -mtime +30 -delete drops them, cleanupPeriodDays does it on a timer — and why age frees far less disk than size.</summary>
-  </entry>
-  <entry>
-    <title>Delete opencode session history — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-opencode-session-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-opencode-session-history.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>opencode keeps every session in one SQLite database. What the tables hold, how to remove a session, and why deleting rows does not free the space.</summary>
-  </entry>
-  <entry>
-    <title>Delete Roo Code task history</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-roo-task-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-roo-task-history.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>Find Roo Code history across editor hosts and custom storage. Delete one task or all tasks, understand what is lost, or keep the history searchable.</summary>
-  </entry>
-  <entry>
-    <title>Delete Zed agent thread history</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-zed-thread-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-zed-thread-history.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>Find Zed agent threads in threads.db, delete one through the history view, or remove the built-in agent database with Zed closed. Know what is lost.</summary>
   </entry>
 </feed>
