@@ -123,17 +123,11 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 		// `pytest -v` whose log runs past a megabyte (#1716). What arrived is
 		// still worth reading: pull the output back out of the cut JSON rather
 		// than throwing away a megabyte that begins with the error.
-		out = salvageFromPayload(string(raw))
+		out = sources.UnwrapShellReport(salvageFromPayload(string(raw)))
 	}
 	if out == "" {
 		return nil
 	}
-	// The same labelled report gemini and qwen wrap a command's output in,
-	// arriving as a plain string rather than under llmContent: qwen's failure
-	// payload carries it in `error`. With the frame in place the error reads as
-	// `Output: ./main.go:9:2: …` and hashes to a signature no session recorded.
-	// Output without the frame comes back untouched.
-	out = sources.UnwrapShellReport(out)
 	// Out of the raw bytes for a cut payload, the way the tool name is: the
 	// line keeps to the project it names, and the harness sends cwd ahead of
 	// the output.
@@ -187,6 +181,13 @@ func isCommandTool(name string) bool {
 // toolResponseText pulls whatever the harness called the output. Claude Code
 // sends an object with stdout and stderr, codex a string, and others a mix; a
 // bare string response is the whole output.
+//
+// What comes back is unwrapped of the labelled report gemini and qwen put
+// around a command's output — gemini under llmContent, qwen's failure payload
+// as a plain string in `error`. With the frame in place the error reads as
+// `Output: ./main.go:9:2: …` and hashes to a signature no session recorded.
+// Once, as the index does: a second pass took a leading "Output: " off the
+// command's own output too.
 func toolResponseText(raw json.RawMessage) string {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return ""
@@ -201,7 +202,7 @@ func toolResponseText(raw json.RawMessage) string {
 				return text
 			}
 		}
-		return clampOutput(s)
+		return clampOutput(sources.UnwrapShellReport(s))
 	}
 	var obj map[string]any
 	if json.Unmarshal(raw, &obj) != nil {
@@ -217,18 +218,12 @@ func toolResponseText(raw json.RawMessage) string {
 		if !ok || strings.TrimSpace(v) == "" {
 			continue
 		}
-		if key == "llmContent" {
-			v = sources.UnwrapShellReport(v)
-		}
-		if strings.TrimSpace(v) == "" {
-			continue
-		}
 		if b.Len() > 0 {
 			b.WriteByte('\n')
 		}
 		b.WriteString(v)
 	}
-	return clampOutput(b.String())
+	return clampOutput(sources.UnwrapShellReport(b.String()))
 }
 
 // after returns what follows key where it is used as one, or "" when the key is

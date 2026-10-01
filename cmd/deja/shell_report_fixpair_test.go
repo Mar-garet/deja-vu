@@ -28,13 +28,13 @@ func qwenShellReport(cmd, out string, code int) string {
 // assertShellReportPair checks both ends of #4256: the pair is mined under the
 // error the command printed, and the failure hook finds it from the harness's
 // own payload.
-func assertShellReportPair(t *testing.T, response map[string]any) {
+func assertShellReportPair(t *testing.T, errLine string, response map[string]any) {
 	t.Helper()
 	if _, err := captureRunStderr(t, "index"); err != nil {
 		t.Fatal(err)
 	}
 	dir := os.Getenv("DEJA_INDEX_DIR")
-	fixes := index.FixesFor(dir, shellReportErr, 5, nil)
+	fixes := index.FixesFor(dir, errLine, 5, nil)
 	if len(fixes) == 0 || strings.TrimPrefix(fixes[0].Command, "$ ") != shellReportFix {
 		t.Fatalf("no pair mined under the bare error: %+v", fixes)
 	}
@@ -55,10 +55,10 @@ func assertShellReportPair(t *testing.T, response map[string]any) {
 	}
 }
 
-// Qwen labels every shell result `Error: (none)`, so a command that worked
-// read as one that failed and no qwen session ever yielded a pair; and the
-// pair was stored as `Output: <error>`, which the hook never looks up (#4256).
-func TestFixPairMinedFromQwenShellReports(t *testing.T) {
+// qwenShellSessions writes two Qwen Code sessions that each hit shellReportErr
+// and then run shellReportFix, which prints fixOut and exits fixCode.
+func qwenShellSessions(t *testing.T, fixOut string, fixCode int) {
+	t.Helper()
 	hermeticEnv(t)
 	chats := filepath.Join(os.Getenv("DEJA_QWEN_ROOT"), "projects", "-work-app", "chats")
 	if err := os.MkdirAll(chats, 0o755); err != nil {
@@ -79,19 +79,28 @@ func TestFixPairMinedFromQwenShellReports(t *testing.T) {
 			call("c1", sid, "go vet ./...", 1),
 			result("c1", sid, qwenShellReport("go vet ./...", shellReportErr, 1), 2),
 			call("c2", sid, shellReportFix, 3),
-			result("c2", sid, qwenShellReport(shellReportFix, "go: creating new go.mod: module example.com/vetdemo", 0), 4),
+			result("c2", sid, qwenShellReport(shellReportFix, fixOut, fixCode), 4),
 		}
 		if err := os.WriteFile(filepath.Join(chats, sid+".jsonl"), []byte(strings.Join(rows, "\n")+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// Qwen's PostToolUseFailure carries the report under `error`.
-	assertShellReportPair(t, map[string]any{"error": qwenShellReport("go vet ./...", shellReportErr, 1)})
 }
 
-// Gemini wraps the output in the same `Output:` label; the pair was stored with
-// it and the hook, which strips it, never found the pair (#4256).
-func TestFixPairMinedFromGeminiShellReports(t *testing.T) {
+// Qwen labels every shell result `Error: (none)`, so a command that worked
+// read as one that failed and no qwen session ever yielded a pair; and the
+// pair was stored as `Output: <error>`, which the hook never looks up (#4256).
+func TestFixPairMinedFromQwenShellReports(t *testing.T) {
+	qwenShellSessions(t, "go: creating new go.mod: module example.com/vetdemo", 0)
+	// Qwen's PostToolUseFailure carries the report under `error`.
+	assertShellReportPair(t, shellReportErr, map[string]any{"error": qwenShellReport("go vet ./...", shellReportErr, 1)})
+}
+
+// geminiShellSessions writes two Gemini CLI sessions that each hit a command
+// printing errOut and then run shellReportFix, and returns the failing
+// result as Gemini wraps it.
+func geminiShellSessions(t *testing.T, errOut string) string {
+	t.Helper()
 	hermeticEnv(t)
 	root := os.Getenv("DEJA_GEMINI_ROOT")
 	chats := filepath.Join(root, "tmp", "work-app", "chats")
@@ -110,7 +119,7 @@ func TestFixPairMinedFromGeminiShellReports(t *testing.T) {
 		return fmt.Sprintf(`{"id":"g%d","timestamp":%q,"type":"gemini","content":"","toolCalls":[{"id":%q,"name":"run_shell_command","args":{"command":%q},"result":[%s]}]}`, i, ts(i), id, cmd, resp) + "\n" +
 			fmt.Sprintf(`{"id":"u%d","timestamp":%q,"type":"user","content":[%s]}`, i, ts(i), resp)
 	}
-	failed := "<untrusted_context>\nOutput: " + shellReportErr + "\nExit Code: 1\nProcess Group PGID: 98713\n</untrusted_context>"
+	failed := "<untrusted_context>\nOutput: " + errOut + "\nExit Code: 1\nProcess Group PGID: 98713\n</untrusted_context>"
 	for n := 0; n < 2; n++ {
 		sid := fmt.Sprintf("gemini-%d", n)
 		rows := []string{
@@ -124,8 +133,15 @@ func TestFixPairMinedFromGeminiShellReports(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	return failed
+}
+
+// Gemini wraps the output in the same `Output:` label; the pair was stored with
+// it and the hook, which strips it, never found the pair (#4256).
+func TestFixPairMinedFromGeminiShellReports(t *testing.T) {
+	failed := geminiShellSessions(t, shellReportErr)
 	// Gemini's AfterTool carries it under tool_response.llmContent.
-	assertShellReportPair(t, map[string]any{"tool_response": map[string]any{"llmContent": failed}})
+	assertShellReportPair(t, shellReportErr, map[string]any{"tool_response": map[string]any{"llmContent": failed}})
 }
 
 // Only the report comes off: `Error: (none)` goes, a line the command printed
@@ -135,5 +151,28 @@ func TestShellReportKeepsTheCommandsOwnErrorLine(t *testing.T) {
 	want := "npm ERR! code ELIFECYCLE\nError: Cannot find module 'glimwrax'"
 	if got := sources.UnwrapShellReport(report); got != want {
 		t.Fatalf("unwrapped to %q, want %q", got, want)
+	}
+}
+
+// The hook unwrapped gemini's llmContent twice, once reading the response and
+// again before the lookup, so a command whose own output starts with
+// "Output: " lost that too and no longer matched what the index, which
+// unwraps once, stored for it.
+func TestGeminiReportIsUnwrappedOnce(t *testing.T) {
+	errOut := "Output: " + shellReportErr
+	failed := geminiShellSessions(t, errOut)
+	assertShellReportPair(t, errOut, map[string]any{"tool_response": map[string]any{"llmContent": failed}})
+}
+
+// The other half of reading the report: a remedy that exits non-zero without
+// printing an error is a failure too, read off the exit status Qwen reports
+// (#4255), so it is not served as the fix.
+func TestQwenRemedyThatExitsNonZeroIsNotAFix(t *testing.T) {
+	qwenShellSessions(t, "go: creating new go.mod: module example.com/vetdemo", 1)
+	if _, err := captureRunStderr(t, "index"); err != nil {
+		t.Fatal(err)
+	}
+	if fixes := index.FixesFor(os.Getenv("DEJA_INDEX_DIR"), shellReportErr, 5, nil); len(fixes) != 0 {
+		t.Fatalf("a remedy that exited 1 was kept as the fix: %+v", fixes)
 	}
 }

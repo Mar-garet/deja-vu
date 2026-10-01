@@ -289,6 +289,11 @@ func qwenWorkRecords(v any, t time.Time) []model.Message {
 			// (#4256).
 			if name, _ := resp["name"].(string); qwenDialect.isShellTool(name) {
 				out = strings.TrimSpace(UnwrapShellReport(out))
+				// A command that printed nothing and hit no error: `(empty)`
+				// is the report's word for it, not output.
+				if out == "(empty)" {
+					out = ""
+				}
 			}
 			if out != "" {
 				results = append(results, capParsedMessage(out))
