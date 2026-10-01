@@ -329,6 +329,9 @@ type doctorMCPStatus struct {
 	// BinaryMissing is the auto_recall field of the same name: the entry is
 	// wired and names a deja binary that is no longer there (#4177).
 	BinaryMissing bool `json:"binary_missing,omitempty"`
+	// PluginMissing marks a dsh layer that names a deja plugin file that is
+	// gone, which keeps dsh from starting at all (#4292).
+	PluginMissing bool `json:"plugin_missing,omitempty"`
 }
 
 type doctorCommandStatus struct {
@@ -919,6 +922,9 @@ func collectDoctorMCP() []doctorMCPStatus {
 		// same as able to start.
 		if state == "wired" && dejaCommandMissing(config.path) != "" {
 			row.BinaryMissing = true
+		}
+		if state == "wired" && config.name == "deepseek" && len(dshPluginsMissing(config.path)) > 0 {
+			row.PluginMissing = true
 		}
 		out = append(out, row)
 	}
