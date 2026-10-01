@@ -209,3 +209,28 @@ func kiroDBHistory(s *model.Session, raw json.RawMessage) {
 		}
 	}
 }
+
+// KiroDBSessionDir is the directory a data.sqlite3 conversation ran in: the
+// row's key, which kiro-cli sets to the working directory. "" when the row is
+// not there or sqlite3 cannot answer (#4305).
+func KiroDBSessionDir(db, id string) string {
+	if fi, err := os.Stat(db); err != nil || fi.Size() == 0 {
+		return ""
+	}
+	q := `select json_object('key',key) from conversations_v2 where conversation_id = '` +
+		strings.ReplaceAll(id, "'", "''") + `' limit 1`
+	cmd, stop := sqliteReadCmd(db, q)
+	defer stop()
+	dec, err := sqliteRows(cmd)
+	if err != nil {
+		return ""
+	}
+	var r struct {
+		Key string `json:"key"`
+	}
+	if dec.More() && dec.Decode(&r) != nil {
+		r.Key = ""
+	}
+	_ = cmd.Wait()
+	return r.Key
+}

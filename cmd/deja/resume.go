@@ -201,6 +201,9 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// in the current directory and rewrites the session's cwd to it, so
 		// the command runs where the session did (#4305).
 		dir := existingDir(sources.KiroSessionDir(s.Path))
+		if s.Path == sources.KiroDB() {
+			dir = existingDir(sources.KiroDBSessionDir(s.Path, s.ID))
+		}
 		// A `sess_` id is the <workspace>/sess_<uuid> layout, which the IDE
 		// and `kiro-cli --v3` both write. V3 lists its own in session-index
 		// and takes the id back; the IDE's reopen from the app (#4307).
