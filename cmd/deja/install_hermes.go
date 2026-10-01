@@ -334,17 +334,18 @@ func hermesBlockIndent(s string) (string, bool) {
 // stays byte-identical.
 func setHermesPluginEnabled(on bool) error {
 	path := filepath.Join(sources.HermesHome(), "config.yaml")
-	old, err := os.ReadFile(path)
+	if _, err := os.Stat(path); os.IsNotExist(err) && !on {
+		return nil
+	}
+	// readConfig, for the byte order mark: read with it, a `plugins:` on the
+	// first line was not found and a second block was appended after it.
+	old, err := readConfig(path)
 	if err != nil {
-		if os.IsNotExist(err) && !on {
-			return nil
-		}
-		if !os.IsNotExist(err) {
-			return err
-		}
+		return err
 	}
 	s := lfText(old)
-	next, how := editHermesPluginsEnabled(s, on, blockWasAdded(path, "plugins.enabled"))
+	blockAdded := blockWasAdded(path, "plugins")
+	next, how := editHermesPluginsEnabled(s, on, blockAdded || blockWasAdded(path, "plugins.enabled"), blockAdded)
 	switch {
 	case how == hermesPluginsUnreadable && on:
 		return fmt.Errorf("%s: plugins.enabled is not a list deja can edit; add deja to it by hand", path)
@@ -353,16 +354,7 @@ func setHermesPluginEnabled(on bool) error {
 	case !on:
 		s = next
 		forgetBlockAdded(path, "plugins.enabled")
-		// And the block itself, when deja is what put it there. Taking back
-		// only the entry left `plugins:\n  enabled:` behind on every machine
-		// that had no plugins block — an empty key that parses as null — while
-		// the MCP writer one function above already drops what it created
-		// (#2604, #2672). A block the reader wrote stays, empty or not.
-		if blockWasAdded(path, "plugins") {
-			s = strings.Replace(s, "\nplugins:\n  enabled:\n", "\n", 1)
-			s = strings.TrimSuffix(s, "\n\n") + "\n"
-			forgetBlockAdded(path, "plugins")
-		}
+		forgetBlockAdded(path, "plugins")
 	case how == hermesPluginsMissing:
 		if s != "" && !strings.HasSuffix(s, "\n") {
 			s += "\n"
@@ -394,19 +386,27 @@ const (
 // key, which uninstall then left as null (#4249). A flow list stays a flow
 // list, and taking deja out gives back the bytes that were there.
 //
-// keyAdded says deja wrote the `enabled:` key itself, under a plugins block
-// that had none, and so takes it away with its last entry.
-func editHermesPluginsEnabled(s string, on, keyAdded bool) (string, int) {
+// keyAdded says deja wrote the `enabled:` key itself and takes it away with
+// its last entry; blockAdded, that it wrote the whole `plugins:` block, which
+// goes too once nothing else is in it. Taking the block back whole whatever
+// the reader had added to it since hung their `- spotify` off the line above,
+// or left their `disabled:` under no parent at all.
+//
+// A shape deja cannot list itself under is refused rather than guessed at: a
+// mapping or a scalar under `enabled:`, a flow list over several lines, and a
+// second top-level `plugins:` — Hermes reads the last one.
+func editHermesPluginsEnabled(s string, on, keyAdded, blockAdded bool) (string, int) {
 	lines := strings.Split(s, "\n")
 	p := -1
 	for i, line := range lines {
-		if v, ok := hermesYAMLKey(line, "plugins"); ok && yamlIndentWidth(line) == 0 {
-			if v != "" {
-				return s, hermesPluginsUnreadable
-			}
-			p = i
-			break
+		v, ok := hermesYAMLKey(line, "plugins")
+		if !ok || yamlIndentWidth(line) != 0 {
+			continue
 		}
+		if v != "" || p >= 0 {
+			return s, hermesPluginsUnreadable
+		}
+		p = i
 	}
 	if p < 0 {
 		return s, hermesPluginsMissing
@@ -433,8 +433,10 @@ func editHermesPluginsEnabled(s string, on, keyAdded bool) (string, int) {
 	val := ""
 	for i := p + 1; i < end; i++ {
 		if v, ok := hermesYAMLKey(lines[i], "enabled"); ok && lines[i][:yamlIndentWidth(lines[i])] == child {
+			if k >= 0 {
+				return s, hermesPluginsUnreadable
+			}
 			k, val = i, v
-			break
 		}
 	}
 	if k < 0 {
@@ -444,70 +446,142 @@ func editHermesPluginsEnabled(s string, on, keyAdded bool) (string, int) {
 		lines = slices.Insert(lines, p+1, child+"enabled:", child+child+"- deja")
 		return strings.Join(lines, "\n"), hermesPluginsKeyAdded
 	}
-	if val == "" {
-		last, mine, others := k, -1, 0
-		for i := k + 1; i < end; i++ {
-			t := strings.TrimSpace(lines[i])
-			if t == "" || strings.HasPrefix(t, "#") {
-				continue
-			}
-			w := yamlIndentWidth(lines[i])
-			if w < len(child) || w == len(child) && !strings.HasPrefix(t, "-") {
-				break
-			}
-			if !strings.HasPrefix(t, "-") {
-				continue
-			}
-			last = i
-			if hermesYAMLScalar(strings.TrimPrefix(t, "-")) == "deja" {
-				mine = i
-			} else {
-				others++
-			}
-		}
-		switch {
-		case on && mine >= 0, !on && mine < 0:
-			return s, hermesPluginsEdited
-		case on && last == k:
-			lines = slices.Insert(lines, k+1, child+child+"- deja")
-		case on:
-			lines = slices.Insert(lines, last+1, lines[last][:yamlIndentWidth(lines[last])]+"- deja")
-		case keyAdded && others == 0:
-			lines = slices.Delete(lines, mine, mine+1)
-			lines = slices.Delete(lines, k, k+1)
-		default:
-			lines = slices.Delete(lines, mine, mine+1)
-		}
-		return strings.Join(lines, "\n"), hermesPluginsEdited
+	switch strings.ToLower(val) {
+	case "", "null", "~":
+	default:
+		return editHermesFlowList(s, lines, k, val, on)
 	}
+	last, mine, others := k, -1, 0
+	for i := k + 1; i < end; i++ {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		w := yamlIndentWidth(lines[i])
+		if w < len(child) || w == len(child) && !strings.HasPrefix(t, "-") {
+			break
+		}
+		if !strings.HasPrefix(t, "- ") && t != "-" {
+			// A mapping or a scalar under the key, or an item running on
+			// past its line: nothing a `- deja` can be put beside.
+			return s, hermesPluginsUnreadable
+		}
+		last = i
+		if hermesYAMLScalar(strings.TrimPrefix(t, "-")) == "deja" {
+			mine = i
+		} else {
+			others++
+		}
+	}
+	if val != "" && others > 0 {
+		return s, hermesPluginsUnreadable
+	}
+	switch {
+	case on && mine >= 0, !on && mine < 0:
+		return s, hermesPluginsEdited
+	case on:
+		if val != "" {
+			// `null` and `~` are the empty value a bare key is; the key
+			// takes the list the same way and keeps its comment.
+			t := strings.TrimLeft(lines[k], " \t")
+			rest := t[len("enabled:"):]
+			rest = rest[strings.Index(rest, val[:1])+len(val):]
+			lines[k] = child + "enabled:" + rest
+		}
+		indent := child + child
+		if last != k {
+			indent = lines[last][:yamlIndentWidth(lines[last])]
+		}
+		lines = slices.Insert(lines, last+1, indent+"- deja")
+	case others > 0 || !keyAdded:
+		lines = slices.Delete(lines, mine, mine+1)
+	case blockAdded && hermesBlockHoldsOnly(lines, p, end, k, mine):
+		from := p
+		if from > 0 && strings.TrimSpace(lines[from-1]) == "" {
+			from--
+		}
+		lines = slices.Delete(lines, from, mine+1)
+	default:
+		lines = slices.Delete(lines, mine, mine+1)
+		lines = slices.Delete(lines, k, k+1)
+	}
+	return strings.Join(lines, "\n"), hermesPluginsEdited
+}
+
+// hermesBlockHoldsOnly reports whether the plugins block from p to end has
+// nothing in it but the `enabled:` key at k and deja's entry at mine — the
+// block exactly as deja wrote it.
+func hermesBlockHoldsOnly(lines []string, p, end, k, mine int) bool {
+	for i := p + 1; i < end; i++ {
+		if i != k && i != mine && strings.TrimSpace(lines[i]) != "" {
+			return false
+		}
+	}
+	return mine == k+1
+}
+
+// editHermesFlowList does the edit on a flow list, `enabled: [a, b]`, inside
+// its own brackets: deja goes in after the last item, and taking it out takes
+// the comma and space that came with it, so `[ spotify ]` comes back as it
+// was. The brackets and commas are found outside quotes, so an item like
+// 'x]y' does not end the list.
+func editHermesFlowList(s string, lines []string, k int, val string, on bool) (string, int) {
 	if items, flow := yamlFlowItems(val); !flow || items == nil {
 		return s, hermesPluginsUnreadable
 	}
 	line := lines[k]
 	open := strings.Index(line, "[")
-	shut := open + strings.Index(line[open:], "]")
-	inner := line[open+1 : shut]
-	parts := strings.Split(inner, ",")
-	mine := slices.IndexFunc(parts, func(v string) bool { return hermesYAMLScalar(v) == "deja" })
+	// The items as spans of the line, each without the space around it.
+	type span struct{ from, to int }
+	var items []span
+	shut, from, quote := -1, open+1, byte(0)
+	add := func(to int) {
+		f, t := from, to
+		for f < t && (line[f] == ' ' || line[f] == '\t') {
+			f++
+		}
+		for t > f && (line[t-1] == ' ' || line[t-1] == '\t') {
+			t--
+		}
+		if f < t {
+			items = append(items, span{f, t})
+		}
+	}
+	for i := open + 1; i < len(line) && shut < 0; i++ {
+		switch c := line[i]; {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == ',':
+			add(i)
+			from = i + 1
+		case c == ']':
+			add(i)
+			shut = i
+		}
+	}
+	if shut < 0 {
+		return s, hermesPluginsUnreadable
+	}
+	mine := slices.IndexFunc(items, func(sp span) bool { return hermesYAMLScalar(line[sp.from:sp.to]) == "deja" })
 	switch {
 	case on && mine >= 0, !on && mine < 0:
 		return s, hermesPluginsEdited
-	case on && strings.TrimSpace(inner) == "":
-		inner = "deja"
+	case on && len(items) == 0:
+		lines[k] = line[:shut] + "deja" + line[shut:]
 	case on:
-		r := strings.TrimRight(inner, " ")
-		inner = r + ", deja" + inner[len(r):]
-	case len(parts) == 1:
-		inner = ""
+		at := items[len(items)-1].to
+		lines[k] = line[:at] + ", deja" + line[at:]
+	case len(items) == 1:
+		lines[k] = line[:items[0].from] + line[items[0].to:]
+	case mine == 0:
+		lines[k] = line[:items[0].from] + line[items[1].from:]
 	default:
-		lead := parts[mine][:len(parts[mine])-len(strings.TrimLeft(parts[mine], " "))]
-		parts = slices.Delete(parts, mine, mine+1)
-		if mine == 0 {
-			parts[0] = lead + strings.TrimLeft(parts[0], " ")
-		}
-		inner = strings.Join(parts, ",")
+		lines[k] = line[:items[mine-1].to] + line[items[mine].to:]
 	}
-	lines[k] = line[:open+1] + inner + line[shut:]
 	return strings.Join(lines, "\n"), hermesPluginsEdited
 }
 
