@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `deja doctor` says when `~/.dsh/cordis.patch.yml` names a deja plugin file that is gone, which keeps dsh from starting at all, and points at `deja install deepseek-auto` or `deja uninstall deepseek`; the row read `wired` (`plugin_missing` in `--json`). The plugin files no longer call themselves safe to delete (#4292).
+- `deja doctor` says when `~/.dsh/cordis.patch.yml` names a deja plugin file dsh cannot find (gone, a `~/` path dsh does not expand, or a `./` name missing from a profile), which keeps dsh from starting at all, and points at `deja install deepseek-auto` or `deja uninstall deepseek`; the row read `wired` (`plugin_missing` in `--json`). The plugin files no longer call themselves safe to delete (#4292).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).
 - `deja resume` on a Gemini CLI session runs `gemini --resume` in the directory the session ran in, read from `projects.json` / `.project_root`; from anywhere else Gemini answered "No previous sessions found for this project" (#4211).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).

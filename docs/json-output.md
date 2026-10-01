@@ -529,7 +529,7 @@ entry: `untrusted` (codex has never been shown it and runs no hook at all) or
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
 start the server. The `deepseek` row carries `plugin_missing` when
-`cordis.patch.yml` names a deja plugin file that is gone, which keeps dsh from
+`cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh from
 starting at all.
 
 `commands` is the third thing an install writes: the `/deja` a user types, one

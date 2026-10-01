@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1830,14 +1831,61 @@ func dshPluginsMissing(path string) []string {
 		if !inBlock || !ok {
 			continue
 		}
-		name = yamlScalar(strings.TrimSpace(name))
-		// A package name such as '@deepseek-ai/dsh-mcp-client' resolves inside
-		// dsh's own bundle; only a path is a file deja wrote.
-		if filepath.IsAbs(name) && !doctorExists(name) {
-			missing = append(missing, name)
-		}
+		missing = append(missing, dshNameMissing(yamlScalar(strings.TrimSpace(name)))...)
 	}
 	return missing
+}
+
+// dshNameMissing is what one plugin name resolves to that dsh cannot load.
+// The rules are dsh 0.1.1-rc.2's, measured rather than assumed: a name
+// starting with "." is resolved against the directory of the profile being
+// built, not against the layer, so it is checked in every profile there is; a
+// file:// URL is imported as the file; `~/` is never expanded and loads
+// nothing even when the file is there. A package name such as
+// '@deepseek-ai/dsh-mcp-client' resolves inside dsh's own bundle and is not a
+// file deja can check.
+func dshNameMissing(name string) []string {
+	switch {
+	case strings.HasPrefix(name, "~/"):
+		return []string{name}
+	case strings.HasPrefix(name, "file://"):
+		u, err := url.Parse(name)
+		if err != nil {
+			return nil
+		}
+		p := filepath.FromSlash(u.Path)
+		if !doctorExists(p) {
+			return []string{p}
+		}
+	case strings.HasPrefix(name, "."):
+		var out []string
+		for _, dir := range dshProfileDirs() {
+			if p := filepath.Join(dir, filepath.FromSlash(name)); !doctorExists(p) {
+				out = append(out, p)
+			}
+		}
+		return out
+	case filepath.IsAbs(name) && !doctorExists(name):
+		return []string{name}
+	}
+	return nil
+}
+
+// dshProfileDirs are the profiles dsh has generated, one directory each beside
+// the node_modules their plugins load from.
+func dshProfileDirs() []string {
+	root := filepath.Join(sources.DSHHome(), "profiles")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() && e.Name() != "node_modules" && !strings.HasPrefix(e.Name(), ".") {
+			out = append(out, filepath.Join(root, e.Name()))
+		}
+	}
+	return out
 }
 
 // dshLayerNamesMissing reports whether the layer names a plugin file that is gone.
@@ -1863,7 +1911,11 @@ func dshPluginsMissingNote(path string, missing []string) string {
 	for i, m := range missing {
 		names[i] = reportPath(m)
 	}
-	return "names " + strings.Join(names, ", ") + ", which is not there — dsh will not start; `deja install " + target + "` writes it again, or `deja uninstall deepseek` takes deja out of the layer"
+	list, it := names[0], "it"
+	if n := len(names); n > 1 {
+		list, it = strings.Join(names[:n-1], ", ")+" and "+names[n-1], "them"
+	}
+	return "names " + list + ", which dsh cannot find — dsh will not start; `deja install " + target + "` writes " + it + " again, or `deja uninstall deepseek` takes deja out of the layer"
 }
 
 // yamlScalar reads one plain, single- or double-quoted YAML scalar, the three
