@@ -267,16 +267,26 @@ func (c *deepSeekCall) settle(msgs []model.Message, text string) []model.Message
 
 // deepSeekExitCode reads the status off a bash result: the last line is
 // `[exit code: N]` for a nonzero exit, and a clean exit has no marker at all.
-// A result ending in any other marker — killed, timed out, sandbox — is not
-// stamped.
+// A result over dsh's spill cap carries a "(Omitted N bytes. …)" notice after
+// it, which is set aside first. A result ending in a marker that names no exit
+// (timed out, killed, sandbox) or in the persistent shell's reset notice is
+// not stamped; any other last line, bracketed or not, is the command's own.
 func deepSeekExitCode(text string) (string, bool) {
-	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
-	last := lines[len(lines)-1]
+	text = strings.TrimRight(text, "\n")
+	if i := strings.LastIndex(text, "\n"); strings.Contains(text[i+1:], " Full formatted result stored at: ") {
+		text = strings.TrimRight(text[:max(i, 0)], "\n")
+		if text == "" {
+			return "", false
+		}
+	}
+	last := text[strings.LastIndex(text, "\n")+1:]
 	if code, ok := strings.CutPrefix(last, "[exit code: "); ok {
 		return strings.TrimSuffix(code, "]"), strings.HasSuffix(code, "]")
 	}
-	if strings.HasPrefix(last, "[") && strings.HasSuffix(last, "]") {
-		return "", false
+	for _, p := range []string{"[timed out after ", "[killed by signal: ", "[sandbox: ", "[shell ", "The persistent bash shell was reset;"} {
+		if strings.HasPrefix(last, p) {
+			return "", false
+		}
 	}
 	return "0", true
 }

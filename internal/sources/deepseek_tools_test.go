@@ -157,3 +157,38 @@ func TestParseDeepSeekFileKeepsADirectoryViewOutOfFiles(t *testing.T) {
 		t.Errorf("files = %q, want the viewed file and the image, not the directory", got)
 	}
 }
+
+// The exit status is read off the end of dsh's own result text. A long result
+// goes through dsh's spill policy (on at 50 KB by default), which appends a
+// "(Omitted N bytes. …)" notice after the marker, and a clean run's output can
+// end in a bracketed line of its own; the persistent-shell bash ends a timeout
+// or a dead shell with a reset notice instead of a marker (#4291).
+func TestDeepSeekExitCodeReadsDshsMarkers(t *testing.T) {
+	spill := "\n\n(Omitted 81234 bytes. Full formatted result stored at: /home/u/.dsh/spill/session-1/call_9-bash.txt. Use read with offset/limit, or grep this path to search within it.)"
+	reset := "The persistent bash shell was reset; the next bash call starts from the workspace with a fresh current directory and environment."
+	cases := []struct {
+		name, text, code string
+		ok               bool
+	}{
+		{"clean", "ok  \tretry\t0.01s", "0", true},
+		{"nonzero", "FAIL retry\n[exit code: 1]", "1", true},
+		{"marker mid-output", "[exit code: 3]\nthen it went on\n", "0", true},
+		{"spilled failure", "--- FAIL: TestRetry\n[exit code: 1]" + spill, "1", true},
+		{"spilled clean", "PASS\nok retry" + spill, "0", true},
+		{"spill notice alone", strings.TrimLeft(spill, "\n"), "", false},
+		{"truncated clean", "PASS\n[output truncated; full output: /tmp/x]", "0", true},
+		{"json array", "[]", "0", true},
+		{"ninja", "[2/2] Linking CXX executable app", "0", true},
+		{"timed out", "partial\n[timed out after 120000ms]", "", false},
+		{"killed", "partial\n[killed by signal: SIGKILL]", "", false},
+		{"sandbox", "touch: /etc/x: Operation not permitted\n[sandbox: file access denied under workspace-write mode]", "", false},
+		{"persistent timeout", "Your command timed out after 300 seconds or experienced an OOM error. Below is partial output:\npartial\n" + reset, "", false},
+		{"persistent shell died", "partial\n[shell exited: code 1]\n" + reset, "", false},
+	}
+	for _, c := range cases {
+		code, ok := deepSeekExitCode(c.text)
+		if code != c.code || ok != c.ok {
+			t.Errorf("%s: got (%q, %v), want (%q, %v)", c.name, code, ok, c.code, c.ok)
+		}
+	}
+}
