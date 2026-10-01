@@ -270,7 +270,10 @@ func resumeCommand(s model.Session) (string, string, error) {
 		if strings.HasPrefix(s.ID, "cline-task-") {
 			return "", "", fmt.Errorf("legacy Cline VS Code tasks reopen from the extension's history UI, not the terminal")
 		}
-		return "", "cline --id " + s.ID, nil
+		// cline reopens the transcript from anywhere but runs its tools in
+		// the current directory, so the command runs where the session did
+		// (#4318).
+		return existingDir(sources.ClineSessionDir(s.Path)), "cline --id " + s.ID, nil
 	case "roo":
 		// The Roo CLI runs the extension against a VS Code shim and keeps its
 		// tasks in a store of its own, which is the half that reopens from a
@@ -408,8 +411,15 @@ func existingDir(p string) string {
 
 // resumeDirGoneNote says where a session whose directory is gone will run:
 // opencode and Kilo reopen it from anywhere, and their tools then work in the
-// directory the command is run from.
+// directory the command is run from. Cline does the same, and its directory
+// is the manifest's rather than the store path's (#4318).
 func resumeDirGoneNote(s model.Session, dir string) string {
+	if dir == "" && s.Harness == "cline" && s.Path != "" {
+		if d := sources.ClineSessionDir(s.Path); d != "" {
+			return fmt.Sprintf("the directory this session ran in is gone (%s); it reopens in the one you run the command from", d)
+		}
+		return ""
+	}
 	if dir != "" || s.Path == "" || (s.Harness != "opencode" && s.Harness != "kilocode") {
 		return ""
 	}

@@ -33,8 +33,10 @@ not indexed.
   `index.js` under `cline.plugins` makes the directory a plugin package, which
   is the only way Cline loads its `skills/` (#4316). Cline's own hooks cannot
   carry context back, so the plugin is the channel.
-- **Resume**: `cline --id <sessionId>` for modern sessions only; legacy VS
-  Code tasks reopen from the extension UI.
+- **Resume**: `cd <cwd> && cline --id <sessionId>` for modern sessions only;
+  `cline --id` reopens the transcript from anywhere but runs its tools in the
+  current directory, so the command runs in the manifest's `cwd` (#4318).
+  Legacy VS Code tasks reopen from the extension UI.
 - **Handoff**: `cline <prompt>` runs directly.
 
 Specified by the community in
