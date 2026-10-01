@@ -384,6 +384,12 @@ appears only after `deja embed` has built a semantic sidecar. The heatmap grid u
       "name": "claude-code",
       "state": "wired",
       "path": "/home/user/.claude.json"
+    },
+    {
+      "name": "kiro",
+      "state": "wired",
+      "path": "/home/user/.kiro/settings/mcp.json",
+      "switched_off": true
     }
   ],
   "auto_recall": [
@@ -528,7 +534,8 @@ entry: `untrusted` (codex has never been shown it and runs no hook at all) or
 `mcp` rows are `wired`, `not-wired` (the config file is there without a deja
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
-start the server.
+start the server, and `switched_off` when the entry is turned off
+(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not.
 
 `commands` is the third thing an install writes: the `/deja` a user types, one
 row per harness. `state` is `written`, `missing`, `someone else's` for a file
