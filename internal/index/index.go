@@ -353,23 +353,32 @@ import (
 // only the path (#4265).
 //
 // 60 also: a failed Kimi Code command carries its exit status (#4262).
-// chat file is re-read whole only when it changes, so a rebuild. It also
-// brings in a Kiro CLI session's tool calls and results, which were dropped as
-// not text (#4299); a finished transcript is not re-read.
+//
+// 60 also: a Kiro CLI session keeps its tool calls and results, which were
+// dropped as not text (#4299).
+//
 // 60 also: a Cline CLI run_commands or read_files result, written as a list of
-// per-command entries, is indexed as tool output (#4315); a finished
-// transcript is not re-read, so a rebuild.
+// per-command entries, is indexed as tool output (#4315).
+//
 // 60 also: a dsh session gains its command, files, edit and wrote records from
-// its tool/call events (#4291); a finished log is not re-read, so a rebuild.
-// 60 also: an Amp thread keeps its tool calls and each turn's own time (#4356).
-// 60 also: Antigravity commands and files come from the planner's tool_calls (#4358).
-// 60 also: CodeWhale's 0.9.6 read, write and edit tools leave files and edits (#4360).
+// its tool/call events (#4291).
+//
+// 60 also: an Amp thread keeps its tool calls and each turn's own time
+// (#4356).
+//
+// 60 also: Antigravity commands and files come from the planner's tool_calls
+// (#4358).
+//
+// 60 also: CodeWhale's 0.9.6 read, write and edit tools leave files and edits
+// (#4360).
+//
 // 60 also: Command Code's v3 transcripts are read, turns and tool calls both
 // (#4370).
+//
 // 60 also: a Continue session gains its tool calls — commands, files, edit
-// spans, written lines and tool output from toolCallStates (#4373).
-// 60 also: a Continue turn is never dated after its file's mtime; a fork had
-// its last turns in the future (#4376).
+// spans, written lines and tool output from toolCallStates (#4373) — and a
+// turn is never dated after its file's mtime (#4376).
+//
 // 60 also: a Crush edit, multiedit or write carries the replaced span and the
 // written lines (#4377).
 const version = 60
