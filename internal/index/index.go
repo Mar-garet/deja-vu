@@ -331,7 +331,11 @@ import (
 //
 // 59: a failed Gemini CLI command carries its exit status (#4208); a
 // finished chat file is not re-read, so a rebuild.
-const version = 59
+//
+// 60: a Qwen Code or Gemini CLI shell result is indexed without the report
+// around it, so `Error: (none)` no longer reads as a failure and a fix pair is
+// stored under the error itself, not `Output: <error>` (#4256). A rebuild.
+const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an
