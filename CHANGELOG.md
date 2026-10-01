@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Command Code 1.73 sessions are indexed again: the client now writes a session header and one message envelope per line, which deja read as nothing. Commands, files, edits and tool output from `shell_command`, `read_file`, `edit_file` and `write_file` come along, and the project is the session's own directory (#4370).
 - Command Code's tool hooks speak again: `deja hook-tool` and `hook-tool-after` now know its `shell_command`, `edit_file` and `write_file`, which they used to answer with nothing on every call (#4371).
+- The pre-edit and pre-command lines no longer count the session they fire in or quote its own last reply back to it as the history of the file or command (#4380).
 - Resuming a recent session reads the session-start digest from the cache instead of rebuilding it, and keeps doing so after the cache refreshes; a resume took 24-41 ms against 0.1-0.2 ms for a new session (#4224).
 - `deja install codex-auto` that drops a second copy of deja's hook moves the Codex trust pins of your hooks after it along with them, so your hook keeps its approval instead of picking up the dropped copy's pin (#4227).
 - A Claude Code session in a non-ASCII directory whose first transcript had no `cwd` line yet when `deja mcp` first read it is filed under that directory once the line lands, not under its parent until the server restarts (#4225).
