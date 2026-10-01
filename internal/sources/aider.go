@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha1"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,17 +28,25 @@ const aiderHistoryName = ".aider.chat.history.md"
 // warmup unusable).
 func AiderFiles() []string {
 	var out []string
-	seen := map[string]bool{}
+	var infos []os.FileInfo
 	add := func(p string) {
-		if seen[p] {
-			return
-		}
 		// Regular files only: a FIFO at the history path would block the
 		// parser's Open forever (same hang walkFiles guards against).
-		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
-			seen[p] = true
-			out = append(out, p)
+		fi, err := os.Stat(p)
+		if err != nil || !fi.Mode().IsRegular() {
+			return
 		}
+		// One file under two spellings — a symlinked or differently cased
+		// project dir recorded by `deja aider` and also under
+		// DEJA_AIDER_ROOTS — is one history, or every session in it is
+		// indexed twice under two ids.
+		for _, seen := range infos {
+			if os.SameFile(seen, fi) {
+				return
+			}
+		}
+		infos = append(infos, fi)
+		out = append(out, p)
 	}
 	add(filepath.Join(Home(), aiderHistoryName))
 	// aider maps every flag to an env var; --chat-history-file is the
@@ -96,33 +105,73 @@ func aiderProjects() []string {
 	}
 	var out []string
 	for _, l := range strings.Split(string(b), "\n") {
-		if l = strings.TrimSpace(l); l != "" {
+		if l = strings.TrimRight(l, "\r"); l != "" {
 			out = append(out, l)
 		}
 	}
 	return out
 }
 
-// RecordAiderProject adds dir to the list AiderFiles reads, once.
+// RecordAiderProject adds dir to the list AiderFiles reads, once however it is
+// spelled, and drops the projects that have since been deleted: the list is
+// read on every index pass and would otherwise only grow.
 func RecordAiderProject(dir string) error {
-	for _, p := range aiderProjects() {
-		if p == dir {
-			return nil
+	if strings.ContainsAny(dir, "\r\n") {
+		return fmt.Errorf("%q cannot be one line of %s", dir, AiderProjectsPath())
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	listed := aiderProjects()
+	keep := make([]string, 0, len(listed)+1)
+	found := false
+	for _, p := range listed {
+		pi, err := os.Stat(p)
+		if os.IsNotExist(err) {
+			continue
 		}
+		if err == nil && os.SameFile(pi, fi) {
+			found = true
+		}
+		keep = append(keep, p)
 	}
 	path := AiderProjectsPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if len(keep) == len(listed) {
+		if found {
+			return nil
+		}
+		// An append, not a rewrite, so two `deja aider` starting at once
+		// both land.
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		if _, err := f.WriteString(dir + "\n"); err != nil {
+			_ = f.Close()
+			return err
+		}
+		return f.Close()
+	}
+	if !found {
+		keep = append(keep, dir)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".aider-projects-")
 	if err != nil {
 		return err
 	}
-	if _, err := f.WriteString(dir + "\n"); err != nil {
-		_ = f.Close()
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.WriteString(strings.Join(keep, "\n") + "\n"); err != nil {
+		_ = tmp.Close()
 		return err
 	}
-	return f.Close()
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func LoadAider() []model.Session {
