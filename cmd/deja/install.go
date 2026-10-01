@@ -3106,17 +3106,23 @@ func mcpCommandArgs(exe string) (string, []string) {
 
 // installCursor wires the MCP server into Cursor's global config
 // (~/.cursor/mcp.json). Gemini CLI and Antigravity use the identical
-
 // mcpServers shape in their own files.
 func installCursor(exe string, uninstall bool) (installResult, error) {
 	return installMCPJSON(filepath.Join(sources.CursorCLIHome(), "mcp.json"), exe, uninstall)
+}
+
+// copilotMCPConfigPath is where Copilot CLI reads its MCP servers. Doctor reads
+// the same file install writes; it used to read the guidance skill instead and
+// said wired with no server registered (#4232).
+func copilotMCPConfigPath() string {
+	return filepath.Join(sources.Home(), ".copilot", "mcp-config.json")
 }
 
 // installCopilotMCP wires deja into GitHub Copilot CLI's MCP registry
 // (~/.copilot/mcp-config.json). Copilot's schema differs from the common
 // mcpServers shape: entries carry a type and an enabled-tools list.
 func installCopilotMCP(exe string, uninstall bool) (installResult, error) {
-	path := filepath.Join(sources.Home(), ".copilot", "mcp-config.json")
+	path := copilotMCPConfigPath()
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
