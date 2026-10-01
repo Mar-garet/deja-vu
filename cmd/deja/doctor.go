@@ -50,7 +50,7 @@ func defaultDoctorVersionLookup() doctorVersionLookup {
 func countSubagentFiles(seen []string) int {
 	n := 0
 	for _, p := range seen {
-		if sources.IsSubagentPath(p) {
+		if sources.IsSubagentPath(p) || sources.IsPrimeChildPath(p) {
 			n++
 		}
 	}

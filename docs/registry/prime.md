@@ -23,7 +23,9 @@ reads both — a machine that has moved its sessions has moved them for deja too
 `rlm.spawn` writes each child session as its own transcript beside the root,
 under `~/.prime/agent/session-artifacts/<parent-id>/sub-<n>/<child-id>.jsonl`,
 with `parentSession` and an `rlmDepth` above 0 in its header. deja reads those
-too and files each as a subagent of the parent. The `semantic-edges.jsonl` next
+too and files each as a subagent of the parent, read as a Claude Code subagent
+is: the task, what it changed and its last turns. `DEJA_INCLUDE_SUBAGENTS=1`
+takes the whole run, `=0` leaves children out. The `semantic-edges.jsonl` next
 to it is prime's event log, not a transcript.
 
 Older installs kept sessions under `~/.pi/agent/*.jsonl` and in a `--cwd--`

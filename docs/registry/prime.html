@@ -57,7 +57,9 @@
 <p><code>rlm.spawn</code> writes each child session as its own transcript beside the root,</p>
 <p>under <code>~/.prime/agent/session-artifacts/&lt;parent-id&gt;/sub-&lt;n&gt;/&lt;child-id&gt;.jsonl</code>,</p>
 <p>with <code>parentSession</code> and an <code>rlmDepth</code> above 0 in its header. deja reads those</p>
-<p>too and files each as a subagent of the parent. The <code>semantic-edges.jsonl</code> next</p>
+<p>too and files each as a subagent of the parent, read as a Claude Code subagent</p>
+<p>is: the task, what it changed and its last turns. <code>DEJA_INCLUDE_SUBAGENTS=1</code></p>
+<p>takes the whole run, <code>=0</code> leaves children out. The <code>semantic-edges.jsonl</code> next</p>
 <p>to it is prime&#39;s event log, not a transcript.</p>
 <p>Older installs kept sessions under <code>~/.pi/agent/*.jsonl</code> and in a <code>--cwd--</code></p>
 <p>directory beneath this root. prime-agent migrates both into the flat root when</p>
