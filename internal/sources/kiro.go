@@ -167,6 +167,58 @@ func applyKiroCLIHeader(s *model.Session, path string) {
 	}
 }
 
+// KiroSessionDir is the directory a Kiro session ran in, from the metadata
+// beside its transcript: the CLI header's cwd, or the first of a sess_
+// session's workspacePaths. "" when neither names one.
+func KiroSessionDir(path string) string {
+	if kiroUnderSessDir(path) {
+		b, err := os.ReadFile(filepath.Join(filepath.Dir(path), "session.json"))
+		if err != nil {
+			return ""
+		}
+		var header struct {
+			WorkspacePaths []string `json:"workspacePaths"`
+		}
+		if json.Unmarshal(b, &header) != nil || len(header.WorkspacePaths) == 0 {
+			return ""
+		}
+		return header.WorkspacePaths[0]
+	}
+	b, err := os.ReadFile(strings.TrimSuffix(path, ".jsonl") + ".json")
+	if err != nil {
+		return ""
+	}
+	var header struct {
+		CWD string `json:"cwd"`
+	}
+	if json.Unmarshal(b, &header) != nil {
+		return ""
+	}
+	return header.CWD
+}
+
+// KiroV3Session reports whether a sess_ session is one `kiro-cli --v3` lists.
+// V3 writes the same <workspace>/sess_<uuid> layout as the IDE, and also adds
+// the session to session-index/<workspace>.jsonl beside the sessions root;
+// that entry is what tells the two apart (#4307).
+func KiroV3Session(path string) bool {
+	if !kiroUnderSessDir(path) {
+		return false
+	}
+	sess := filepath.Dir(path)
+	ws := filepath.Dir(sess)
+	index := filepath.Join(filepath.Dir(filepath.Dir(ws)), "session-index", filepath.Base(ws)+".jsonl")
+	want := filepath.Base(ws) + "/" + filepath.Base(sess)
+	listed := false
+	_ = scanJSONLFromOffset(index, 0, func(m map[string]any) {
+		if p, _ := m["sessionPath"].(string); filepath.ToSlash(p) == want {
+			op, _ := m["op"].(string)
+			listed = op != "remove" && op != "delete"
+		}
+	})
+	return listed
+}
+
 // kiroContentText pulls the text out of a CLI record's content array, whose
 // parts name their own kind.
 func kiroContentText(v any) string {

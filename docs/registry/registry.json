@@ -858,7 +858,7 @@
         "fixtures/registry/kiro/w-api/sess_00000000-0000-4000-8000-000000000000/messages.jsonl"
       ],
       "parser_source": "internal/sources/kiro.go",
-      "last_verified": "2026-09-17",
+      "last_verified": "2026-10-01",
       "display_name": "Kiro",
       "capabilities": {
         "mcp": true,

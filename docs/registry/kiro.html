@@ -53,14 +53,24 @@
 <p>directory per session under the workspace, holding <code>session.json</code> (id, model,</p>
 <p><code>workspacePaths</code>, timestamps) and <code>messages.jsonl</code>, whose lines carry</p>
 <p><code>payload.type</code> and <code>payload.content</code> with an RFC 3339 <code>timestamp</code>.</p>
-<p><strong>Last verified:</strong> 2026-09-17</p>
+<p><strong>Last verified:</strong> 2026-10-01</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
-<li>Resume: <code>kiro-cli chat --resume-id &lt;sessionId&gt;</code>, which needs Kiro CLI 2.2.0</li>
+<li>Resume: <code>cd &lt;cwd&gt; &amp;&amp; kiro-cli chat --resume-id &lt;sessionId&gt;</code>, which needs</li>
 </ul>
-<p>or newer. The IDE&#39;s sessions carry a <code>sess_</code> id and reopen from the app, so</p>
-<p><code>deja resume</code> refuses those with the reason rather than printing a command</p>
-<p>that would not find them.</p>
+<p>Kiro CLI 2.2.0 or newer. kiro-cli finds a session by id from any directory,</p>
+<p>but runs it in the current one and rewrites the header&#39;s <code>cwd</code> to it, so the</p>
+<p>command runs in the directory the header names (#4305).</p>
+<ul>
+<li><strong><code>sess_</code> is not only the IDE&#39;s.</strong> <code>kiro-cli --v3</code> (2.22.0 ships the V3</li>
+</ul>
+<p>engine behind that flag) writes the same <code>&lt;workspace&gt;/sess_&lt;uuid&gt;</code> layout</p>
+<p>and adds each session to <code>~/.kiro/session-index/&lt;workspace&gt;.jsonl</code>. A</p>
+<p>session listed there resumes with `kiro-cli --v3 chat --resume-id</p>
+<p>sess_&lt;uuid&gt;<code> in its first </code>workspacePaths` directory; one that is not is the</p>
+<p>IDE&#39;s, reopens from the app, and <code>deja resume</code> says so (#4307). V3&#39;s</p>
+<p>assistant and tool records were not seen: with no login the engine stops</p>
+<p>before the model answers.</p>
 <ul>
 <li><strong>A reply arrives in pieces.</strong> Several <code>AssistantMessage</code> records can share</li>
 </ul>

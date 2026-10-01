@@ -16,14 +16,22 @@ directory per session under the workspace, holding `session.json` (id, model,
 `workspacePaths`, timestamps) and `messages.jsonl`, whose lines carry
 `payload.type` and `payload.content` with an RFC 3339 `timestamp`.
 
-**Last verified:** 2026-09-17
+**Last verified:** 2026-10-01
 
 ## Known quirks and drift
 
-- Resume: `kiro-cli chat --resume-id <sessionId>`, which needs Kiro CLI 2.2.0
-  or newer. The IDE's sessions carry a `sess_` id and reopen from the app, so
-  `deja resume` refuses those with the reason rather than printing a command
-  that would not find them.
+- Resume: `cd <cwd> && kiro-cli chat --resume-id <sessionId>`, which needs
+  Kiro CLI 2.2.0 or newer. kiro-cli finds a session by id from any directory,
+  but runs it in the current one and rewrites the header's `cwd` to it, so the
+  command runs in the directory the header names (#4305).
+- **`sess_` is not only the IDE's.** `kiro-cli --v3` (2.22.0 ships the V3
+  engine behind that flag) writes the same `<workspace>/sess_<uuid>` layout
+  and adds each session to `~/.kiro/session-index/<workspace>.jsonl`. A
+  session listed there resumes with `kiro-cli --v3 chat --resume-id
+  sess_<uuid>` in its first `workspacePaths` directory; one that is not is the
+  IDE's, reopens from the app, and `deja resume` says so (#4307). V3's
+  assistant and tool records were not seen: with no login the engine stops
+  before the model answers.
 - **A reply arrives in pieces.** Several `AssistantMessage` records can share
   one `data.message_id`: the CLI appends the answer as it streams, each record
   carrying the next piece rather than the whole answer so far. Read one message
