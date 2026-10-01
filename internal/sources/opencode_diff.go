@@ -17,6 +17,7 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,4 +176,60 @@ func unifiedDiffSpans(file, patch string) []string {
 	}
 	flush()
 	return out
+}
+
+// withOpencodeDiffsFor is withOpencodeDiffs for sessions a pass read on their
+// own: each looks up its own diff file rather than the pass listing them all.
+// The index replaces a session it reads again from the database, so the
+// session has to come back with what its diff gave it (#4207).
+func withOpencodeDiffsFor(ss []model.Session) []model.Session {
+	dir := OpencodeDiffDir()
+	for i := range ss {
+		if !strings.HasPrefix(ss[i].ID, "ses_") {
+			continue
+		}
+		p := filepath.Join(dir, ss[i].ID+".json")
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		parsed, err := ParseOpencodeDiff(p)
+		if err != nil {
+			diagFileError(p, err)
+			continue
+		}
+		for _, d := range parsed {
+			ss[i].Messages = append(ss[i].Messages, d.Messages...)
+		}
+	}
+	return ss
+}
+
+// ParseOpencodeDiffSession reads a changed diff file as its session: the
+// database's copy of it, whole, with the diff folded in — what a full build
+// holds for that id. Handed back on its own, the diff's records were added to
+// the ones a full build had folded in, and a diff whose session the database
+// no longer holds became a session with no conversation in it, which a full
+// build does not keep (#4207).
+func ParseOpencodeDiffSession(path string) ([]model.Session, error) {
+	id := strings.TrimSuffix(filepath.Base(path), ".json")
+	if !strings.HasPrefix(id, "ses_") {
+		return nil, nil
+	}
+	ss, err := ParseOpencodeDBWhere(OpencodeDB(), fmt.Sprintf(" and s.id = '%s'", sqlEscape(id)), 0)
+	if err != nil || len(ss) == 0 {
+		return nil, err
+	}
+	return withOpencodeDiffsFor(ss), nil
+}
+
+// parseOpencodeStore and parseOpencodeStoreSince are the database kind's
+// reads: the sessions they hand back carry their diffs, as Load's do.
+func parseOpencodeStore(db string) ([]model.Session, error) {
+	ss, err := ParseOpencodeDB(db)
+	return withOpencodeDiffsFor(ss), err
+}
+
+func parseOpencodeStoreSince(db string, t time.Time) ([]model.Session, error) {
+	ss, err := ParseOpencodeDBSince(db, t)
+	return withOpencodeDiffsFor(ss), err
 }

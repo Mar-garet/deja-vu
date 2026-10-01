@@ -54,6 +54,9 @@ func ParseZCodeDBSince(db string, t time.Time) ([]model.Session, error) {
 	if t.IsZero() {
 		return ParseZCodeDB(db)
 	}
+	// Never stamped today, so read whole. A store that gets a watermark has to
+	// join rereadsWholeSessions in internal/index: this read returns touched
+	// sessions whole, and appending them would double their turns.
 	return parseOpencodeSchemaDBSince("zcode", db, t)
 }
 

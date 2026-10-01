@@ -3147,6 +3147,11 @@ func readWholeThisPass(r Record) bool {
 	if len(passWholeStores) == 0 {
 		return false
 	}
+	// opencode's records name a project directory or, from older passes, a
+	// diff file; either way the session is the store's, read whole (#4207).
+	if h, _, ok := strings.Cut(r.Key, ":"); ok && h == "opencode" {
+		return passWholeStores[h]
+	}
 	if storeHarness(r.SourcePath) != "" {
 		return passWholeStores[r.SourcePath]
 	}
@@ -3233,7 +3238,9 @@ func storeHarness(p string) string {
 		return "hermes"
 	}
 	switch harnessForPath(p) {
-	case "opencode":
+	case "opencode", "opencode-diff":
+		// A diff file is read as its session from the database (#4207), so it
+		// is that store's as much as the database file is.
 		return "opencode"
 	case "cursor-db":
 		return "cursor"
@@ -3545,6 +3552,12 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	collisions.Store(0)
 	merged.Store(0)
 	lastIngestFiles = len(changed)
+	// The sessions a shared store handed back. Only those may drop a store's
+	// records by key: a per-file transcript under the same id — goose's JSONL
+	// beside its database — says nothing about what the store still holds.
+	// Judged by path after wholeStoresThisPass, which resolves the store paths.
+	storeKeys := map[string]bool{}
+	keysFrom := map[string][]string{}
 	for p, f := range changed {
 		ss, err := parseChangedFile(harness, p, old.Files[p])
 		if err != nil {
@@ -3562,11 +3575,23 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 			}
 			continue
 		}
-		replacements = append(replacements, sources.FilterSessions(filterTombstoned(ss))...)
+		ss = sources.FilterSessions(filterTombstoned(ss))
+		for _, s := range ss {
+			keysFrom[p] = append(keysFrom[p], s.Harness+":"+s.ID)
+		}
+		replacements = append(replacements, ss...)
 		files[p] = f
 	}
 	// First, so everything below reads the same list of stores.
 	wholeStoresThisPass(changed, old.Files)
+	for p, keys := range keysFrom {
+		if storeHarness(p) == "" {
+			continue
+		}
+		for _, k := range keys {
+			storeKeys[k] = true
+		}
+	}
 	// After the loop, because a file whose parse failed is dropped from
 	// `changed` there and keeps what it already held — starting it over would
 	// throw the counts away on the one pass that could not read it.
@@ -3715,13 +3740,13 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		// Shared-store harnesses (opencode, cursor) are parsed since a
 		// watermark, so their untouched sessions are NOT re-emitted on a
 		// change — they must be retained, not dropped, or they vanish.
-		// Superseded sessions are handled by replaceKeys.
+		// Superseded sessions are handled by storeKeys.
 		fromStore := fromDatabase(r)
-		// replaceKeys is scoped to shared stores. A shared store is parsed since
+		// storeKeys is scoped to shared stores. A shared store is parsed since
 		// a watermark, so a superseded session's old record is not re-read and
-		// clause two never reaches it — replaceKeys is what drops it. For a
+		// clause two never reaches it — storeKeys is what drops it. For a
 		// per-file harness, a removed or changed file's old records are already
-		// dropped by the two clauses above, so applying replaceKeys there only
+		// dropped by the two clauses above, so applying a key there only
 		// hurts: two transcripts in different projects can share a filename-derived
 		// id, and dropping by key alone erased the sibling that was never re-read
 		// (#699). The record's own SourcePath decides its fate for those.
@@ -3729,7 +3754,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		// And only when the pass read that store whole: a store read from its
 		// watermark hands back the new turns alone, so dropping the rest by key
 		// would take the earlier turns of every continued session (#2033).
-		if removed[r.SourcePath] || (changed[r.SourcePath].Path != "" && !fromStore) || (fromStore && readWholeThisPass(r) && replaceKeys[r.Key]) {
+		if removed[r.SourcePath] || (changed[r.SourcePath].Path != "" && !fromStore) || (fromStore && readWholeThisPass(r) && storeKeys[r.Key]) {
 			return
 		}
 		recErr = addRec(r)
@@ -3929,6 +3954,11 @@ func canAppendIncremental(changed map[string]FileState, old map[string]FileState
 			if _, ok := kindForPath(p); !ok {
 				return false
 			}
+			// Except a new opencode diff file: it is read as its session, whole,
+			// and that session is already in the index (#4207).
+			if storeHarness(p) == "opencode" {
+				return false
+			}
 			continue
 		}
 		if f.Size <= of.Size {
@@ -3936,8 +3966,8 @@ func canAppendIncremental(changed map[string]FileState, old map[string]FileState
 		}
 		// A store that hands back touched sessions whole has nothing to append:
 		// adding them to what the index holds is the doubling the replacement
-		// path exists to avoid. A database file grows the way a log does often
-		// enough to get here (#4207).
+		// path exists to avoid. Defensive — sqlite rewrites its page count in
+		// the header on growth, so the prefix check below rarely passes (#4207).
 		if rereadsWholeSessions(p) {
 			return false
 		}
@@ -4347,7 +4377,9 @@ func setDatabaseStoreWatermarks(files map[string]FileState, sessions map[string]
 // the harness is the store.
 func sessionInStore(s SessionMeta, harness, db string) bool {
 	if harness == "opencode" {
-		return true
+		// A row the diff files gave carries a file's mtime, which says nothing
+		// about how far the database has been read (#4207).
+		return !isOpencodeDiff(s.Path)
 	}
 	return s.Path == db
 }

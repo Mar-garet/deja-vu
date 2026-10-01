@@ -164,8 +164,15 @@ func ParseOpencodeDBSince(db string, t time.Time) ([]model.Session, error) {
 // Each layout is bounded by its own columns, and a store holding both reads
 // both.
 func parseOpencodeSchemaDBSince(harness, db string, t time.Time) ([]model.Session, error) {
+	// A row can be stamped a moment before the pass that missed it, and the
+	// comparison is a strict >. A session read twice replaces itself, so going
+	// back costs a re-read and nothing else (#4207).
+	t = t.Add(-opencodeSinceSlack)
 	return parseOpencodeLayouts(harness, db, opencodeSinceWhere(db, t), opencodeV2SinceWhere(db, t), 0)
 }
+
+// opencodeSinceSlack is how far before the watermark a since read starts.
+const opencodeSinceSlack = 5 * time.Second
 
 // opencodeSinceWhere picks the sessions touched after the watermark and reads
 // each of them whole. Shared with the other stores in this schema — Kilo's CLI
@@ -179,7 +186,7 @@ func parseOpencodeSchemaDBSince(harness, db string, t time.Time) ([]model.Sessio
 // (rereadsWholeSessions), so the turns it already had are not added twice.
 func opencodeSinceWhere(db string, t time.Time) string {
 	// Each a column of its own, so the subquery reads row headers and never a
-	// blob: 0.14s on a 3.8 GB store, against 9s for the row-level clause.
+	// blob: 3–5 s on a 3.8 GB store, against 9 s for the row-level clause.
 	touched := fmt.Sprintf("select session_id from message where %s or %s union "+
 		"select session_id from part where %s",
 		newerThanEpoch("time_created", t), newerThanEpoch("time_updated", t),

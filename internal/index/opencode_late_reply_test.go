@@ -1,6 +1,7 @@
 package index
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -109,5 +110,214 @@ func TestAGrownWholeSessionStoreIsNotAppendedTo(t *testing.T) {
 	grown := FileState{Path: db, Size: int64(len(body) + 250)}
 	if canAppendIncremental(map[string]FileState{db: grown}, map[string]FileState{db: old}) {
 		t.Error("a grown opencode store went down the append path")
+	}
+}
+
+// opencodeWithDiff is an opencode store holding ses_a's question, and the diff
+// file opencode wrote beside it for that session.
+func opencodeWithDiff(t *testing.T) (db, diff, dir string, run func(string)) {
+	t.Helper()
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 CLI not available")
+	}
+	tmp := t.TempDir()
+	setHome(t, tmp)
+	t.Setenv("DEJA_CLAUDE_ROOT", filepath.Join(tmp, "claude"))
+	t.Setenv("DEJA_CODEX_ROOT", filepath.Join(tmp, "codex"))
+	t.Setenv("DEJA_GOOSE_DB", filepath.Join(tmp, "none-goose.db"))
+	t.Setenv("DEJA_NOTES_FILE", filepath.Join(tmp, "notes.jsonl"))
+	db = filepath.Join(tmp, "opencode", "opencode.db")
+	t.Setenv("DEJA_OPENCODE_DB", db)
+	diff = filepath.Join(tmp, "opencode", "storage", "session_diff", "ses_a.json")
+	if err := os.MkdirAll(filepath.Dir(diff), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run = func(sql string) {
+		t.Helper()
+		if out, err := exec.Command("sqlite3", db, sql).CombinedOutput(); err != nil {
+			t.Fatalf("sqlite3: %v %s", err, out)
+		}
+	}
+	run(`create table session(id text primary key, directory text, title text, time_created integer, time_updated integer);
+create table message(id text primary key, session_id text, time_created integer, time_updated integer, data text);
+create table part(id text primary key, message_id text, session_id text, time_created integer, time_updated integer, data text);
+insert into session values('ses_a','/w/app','pool',1790858248400,1790858248489);
+insert into message values('m1','ses_a',1790858248489,1790858248489,'{"role":"user"}');
+insert into part values('p1','m1','ses_a',1790858248489,1790858248489,'{"type":"text","text":"why does the pool drop connections"}');`)
+	writeOpencodeDiff(t, diff, "old line")
+	dir = filepath.Join(tmp, "index.db")
+	if err := Ensure(dir, "", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	return db, diff, dir, run
+}
+
+func writeOpencodeDiff(t *testing.T, path, removed string) {
+	t.Helper()
+	body := `[{"file":"db/pool.go","status":"modified","additions":1,"deletions":1,"patch":"--- a/db/pool.go\n+++ b/db/pool.go\n@@ -1 +1 @@\n-` + removed + `\n+new line\n"}]`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Before every stamp in the database, so the file's time is not what a
+	// pass is judged by.
+	at := time.UnixMilli(1790858000000)
+	if err := os.Chtimes(path, at, at); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// rolesOf counts ses_a's records by role.
+func rolesOf(t *testing.T, dir string) map[string]int {
+	t.Helper()
+	s, ok, err := FindByIdentity(dir, "opencode", "ses_a")
+	if err != nil || !ok {
+		t.Fatalf("ses_a is not in the index: %v %v", ok, err)
+	}
+	out := map[string]int{}
+	for _, m := range s.Messages {
+		out[m.Role]++
+	}
+	return out
+}
+
+func diffRecords(roles map[string]int) int {
+	n := 0
+	for role, c := range roles {
+		if role != "user" && role != "assistant" {
+			n += c
+		}
+	}
+	return n
+}
+
+// A pass where only the database changed read ses_a again whole and dropped,
+// by its key, the edits its diff file had given it — the diff had not changed,
+// so nothing put them back (#4207).
+func TestAnOpencodeReplyKeepsTheSessionsDiffRecords(t *testing.T) {
+	db, _, dir, run := opencodeWithDiff(t)
+	before := rolesOf(t, dir)
+	if diffRecords(before) == 0 {
+		t.Fatalf("the diff gave ses_a nothing, so this measures nothing: %v", before)
+	}
+	run(`insert into message values('m2','ses_a',1790858250000,1790858252007,'{"role":"assistant"}');
+insert into part values('p2','m2','ses_a',1790858250000,1790858252000,'{"type":"text","text":"the pool is too small"}');
+update session set time_updated=1790858252010 where id='ses_a';`)
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(db, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	after := rolesOf(t, dir)
+	if after["assistant"] != 1 || after["user"] != 1 {
+		t.Errorf("want the two turns once each: %v", after)
+	}
+	if diffRecords(after) != diffRecords(before) {
+		t.Errorf("the session's diff records went from %v to %v", before, after)
+	}
+}
+
+// The other half: a pass where only the diff file changed kept its old records,
+// judged as the database's, and added the new ones beside them.
+func TestAChangedOpencodeDiffIsNotIndexedTwice(t *testing.T) {
+	_, diff, dir, _ := opencodeWithDiff(t)
+	before := rolesOf(t, dir)
+	writeOpencodeDiff(t, diff, "older zephyrine line")
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(diff, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	after := rolesOf(t, dir)
+	if diffRecords(after) != diffRecords(before) || after["user"] != 1 {
+		t.Errorf("the diff changed and its records went from %v to %v", before, after)
+	}
+	s, _, _ := FindByIdentity(dir, "opencode", "ses_a")
+	read := false
+	for _, m := range s.Messages {
+		read = read || strings.Contains(m.Text, "zephyrine")
+	}
+	if !read {
+		t.Error("the changed diff was not read")
+	}
+}
+
+// A diff file's mtime is not a database stamp. Taken as one, it pushed the
+// store's watermark past a row the database had stamped earlier and a pass had
+// not yet seen, and that row was never asked for (#4207).
+func TestAnOpencodeDiffTimeDoesNotMoveTheWatermark(t *testing.T) {
+	db, _, dir, run := opencodeWithDiff(t)
+	// A diff for a session the database does not hold, written two hours after
+	// anything in it.
+	late := filepath.Join(filepath.Dir(db), "storage", "session_diff", "ses_b.json")
+	writeOpencodeDiff(t, late, "old line")
+	at := time.UnixMilli(1790858248489 + 2*3600*1000)
+	if err := os.Chtimes(late, at, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	// A session stamped between the database's newest row and that mtime.
+	run(`insert into session values('ses_c','/w/app','cache',1790858248489+3600000,1790858248489+3600000);
+insert into message values('m3','ses_c',1790858248489+3600000,1790858248489+3600000,'{"role":"user"}');
+insert into part values('p3','m3','ses_c',1790858248489+3600000,1790858248489+3600000,'{"type":"text","text":"warm the quillwort cache"}');`)
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(db, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if hits, err := Search(dir, search.Options{Query: "quillwort", All: true}); err != nil || len(hits) == 0 {
+		t.Errorf("a row stamped before a diff file's mtime was never read (%d hits, %v)", len(hits), err)
+	}
+}
+
+// Pinned, not wanted: a store read by whole sessions starts its counts over on
+// each pass, so doctor's clipped count for opencode covers only what the last
+// pass re-read until the next rebuild. Counting clips per session would keep
+// it; until then this says what a user sees (#4207).
+func TestOpencodeClipCountCoversOnlyTheLastPass(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 CLI not available")
+	}
+	tmp := t.TempDir()
+	setHome(t, tmp)
+	t.Setenv("DEJA_CLAUDE_ROOT", filepath.Join(tmp, "claude"))
+	t.Setenv("DEJA_CODEX_ROOT", filepath.Join(tmp, "codex"))
+	t.Setenv("DEJA_GOOSE_DB", filepath.Join(tmp, "none-goose.db"))
+	t.Setenv("DEJA_NOTES_FILE", filepath.Join(tmp, "notes.jsonl"))
+	db := filepath.Join(tmp, "opencode.db")
+	t.Setenv("DEJA_OPENCODE_DB", db)
+	seedOpencodeSession(t, db, "s1", strings.Repeat("pgbouncer pool timed out and the retry took a second ", 1600), 1767322800000)
+	dir := filepath.Join(tmp, "index.db")
+	if err := Ensure(dir, "", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	clipped := func() int {
+		t.Helper()
+		m, err := readManifest(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m.IngestHealth["opencode"].ClippedMessages
+	}
+	if got := clipped(); got != 1 {
+		t.Fatalf("the build clipped %d messages, so this measures nothing", got)
+	}
+	// Two passes: the first still reads s1 again, the newest session sits
+	// inside the few seconds every read goes back.
+	for i, at := range []int64{1767326400000, 1767330000000} {
+		seedOpencodeSession(t, db, fmt.Sprintf("s%d", i+2), "a short session", at)
+		if err := Ensure(dir, "", false, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := clipped(); got != 0 {
+		t.Errorf("the count after a pass that did not re-read s1 is %d; if it is right now, drop this pin", got)
 	}
 }

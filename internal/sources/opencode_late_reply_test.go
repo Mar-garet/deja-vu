@@ -82,3 +82,29 @@ insert into session_message values('m3','quiet','user',1,1790858000000,179085800
 		})
 	}
 }
+
+// The watermark is a session's own stamp and the comparison is strict, so a row
+// stamped in the same millisecond as it was never asked for. The read starts a
+// few seconds back; a session read twice replaces itself (#4207).
+func TestOpencodeSinceReadsARowStampedAtTheWatermark(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not installed")
+	}
+	db := filepath.Join(t.TempDir(), "opencode.db")
+	script := `create table session(id text primary key, directory text, time_created integer, time_updated integer);
+create table message(id text primary key, session_id text, time_created integer, time_updated integer, data text);
+create table part(id text primary key, message_id text, session_id text, time_created integer, time_updated integer, data text);
+insert into session values('s1','/w/app',1790858248400,1790858252010);
+insert into message values('m1','s1',1790858252010,1790858252010,'{"role":"user"}');
+insert into part values('p1','m1','s1',1790858252010,1790858252010,'{"type":"text","text":"same millisecond"}');`
+	if out, err := exec.Command("sqlite3", db, script).CombinedOutput(); err != nil {
+		t.Fatalf("sqlite: %v %s", err, out)
+	}
+	ss, err := ParseOpencodeDBSince(db, time.UnixMilli(1790858252010))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ss) != 1 {
+		t.Errorf("a row stamped at the watermark came back in %d sessions", len(ss))
+	}
+}

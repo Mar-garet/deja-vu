@@ -141,20 +141,20 @@ func allHarnesses() []Harness {
 				{
 					Name:      "opencode",
 					Match:     func(p string) bool { return p == OpencodeDB() },
-					Parse:     dbParse(ParseOpencodeDB, ParseOpencodeDBSince),
-					ParseFrom: dbParseFrom(ParseOpencodeDB, ParseOpencodeDBSince),
+					Parse:     dbParse(parseOpencodeStore, parseOpencodeStoreSince),
+					ParseFrom: dbParseFrom(parseOpencodeStore, parseOpencodeStoreSince),
 				},
 				{
 					// The per-session diff store beside the database: for most
 					// sessions it is the only record of what they changed
-					// (#3791). Keyed on the same session ids, so what it holds
-					// merges into the session the database gave.
+					// (#3791). Keyed on the same session ids: a changed diff is
+					// read as its session, whole, the way a full build holds it.
 					Name: "opencode-diff",
 					Match: func(p string) bool {
 						return strings.HasPrefix(p, OpencodeDiffDir()+string(filepath.Separator)) &&
 							strings.HasSuffix(p, ".json")
 					},
-					Parse: fullParse(ParseOpencodeDiff),
+					Parse: fullParse(ParseOpencodeDiffSession),
 				},
 			},
 		},
