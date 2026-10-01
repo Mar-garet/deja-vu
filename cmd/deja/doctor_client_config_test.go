@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -110,6 +111,45 @@ func TestNothingWiredCountsThePluginAndClaudeHooks(t *testing.T) {
 		writeKimiPlugin(t, home, true)
 		if nothingWired() {
 			t.Error("the Kimi plugin recalls on every prompt, and the brief says no agent is wired")
+		}
+	})
+	// Codex's hooks.json is codex's own file: one holding only the user's
+	// hooks is not deja's, whatever codex's trust store says about it.
+	for _, trust := range []string{"no config.toml", "untrusted", "trusted"} {
+		t.Run("codex user's own hooks only/"+trust, func(t *testing.T) {
+			hermeticEnv(t)
+			hooks := filepath.Join(sources.CodexHome(), "hooks.json")
+			if err := os.MkdirAll(filepath.Dir(hooks), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			own := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"/usr/local/bin/my-notes --start"}]}]}}`
+			if err := os.WriteFile(hooks, []byte(own), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg := ""
+			switch trust {
+			case "untrusted":
+				cfg = "model = \"luna\"\n"
+			case "trusted":
+				cfg = "[hooks.state." + strconv.Quote(hooks+":session_start:0:0") + "]\ntrusted_hash = \"sha256:abc\"\n"
+			}
+			if cfg != "" {
+				if err := os.WriteFile(filepath.Join(sources.CodexHome(), "config.toml"), []byte(cfg), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if !nothingWired() {
+				t.Error("a codex hooks.json with only the user's own hooks counted as a wired agent")
+			}
+		})
+	}
+	t.Run("codex deja hooks", func(t *testing.T) {
+		hermeticEnv(t)
+		if _, err := installCodexHooks("/usr/local/bin/deja", false); err != nil {
+			t.Fatalf("install codex-auto: %v", err)
+		}
+		if nothingWired() {
+			t.Error("deja's codex hooks are wired, and the brief says no agent is")
 		}
 	})
 	t.Run("claude hooks", func(t *testing.T) {

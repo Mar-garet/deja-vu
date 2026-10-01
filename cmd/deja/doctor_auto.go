@@ -172,8 +172,17 @@ func dejaHookIn(text string) bool {
 // rows doctor prints: Claude Code's and codex's hooks, which live outside the
 // table, and a harness plugin that recalls with nothing in the row's file.
 func nothingWired() bool {
-	for _, st := range []hookWiringState{claudeHookWiringState(), codexHookWiringState()} {
-		if st.state != "missing" {
+	if claudeHookWiringState().state != "missing" {
+		return false
+	}
+	// Codex's row reads hooks.json without asking whether any entry in it is
+	// deja's (#4297), so the brief asks: one of deja's events, or the plugin.
+	codex := codexHookWiringState()
+	if codex.state == "plugin" {
+		return false
+	}
+	for _, h := range codexHookWiring {
+		if hookEventWired(codex.hooks, h.Event, h.Sub) {
 			return false
 		}
 	}
