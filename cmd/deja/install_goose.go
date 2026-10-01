@@ -182,20 +182,31 @@ func removeGooseExtension(s string) string {
 	s = strings.Join(out, "\n")
 	// An extensions key with nothing under it parses as null and Goose then
 	// refuses the config.
-	return strings.Replace(s, "extensions:\n\n", "\n", 1)
+	// Anchored at a line start: a bare Replace also matched the tail of
+	// `my_extensions:` and broke the file.
+	if strings.HasPrefix(s, "extensions:\n\n") {
+		return s[len("extensions:\n"):]
+	}
+	return strings.Replace(s, "\nextensions:\n\n", "\n\n", 1)
 }
 
 // gooseExtensionsBlock returns the text after the extensions key, or "" when
 // there is no block form of it to read an indent from.
 func gooseExtensionsBlock(s string) string {
-	// The key line as the writer finds it, comment and trailing blanks
-	// included: reading only the bare spelling wrote deja's entry at two
-	// spaces over a block at four, and the reader's entries ended up nested
-	// in deja's — and went with it on uninstall (#4289).
+	return yamlKeyBlock(s, "extensions:")
+}
+
+// yamlKeyBlock returns the text after the top-level key's line, or "" when
+// the file has no block form of it. The key line is matched as the writers
+// match it, comment and trailing blanks included: reading only the bare
+// spelling wrote deja's entry at two spaces over a block at four, and the
+// reader's entries ended up nested in deja's — and went with it on uninstall
+// (#4289).
+func yamlKeyBlock(s, key string) string {
 	at := 0
 	for _, line := range strings.SplitAfter(s, "\n") {
 		at += len(line)
-		if yamlIndentWidth(line) == 0 && yamlKeyLine(line, "extensions:") {
+		if yamlIndentWidth(line) == 0 && yamlKeyLine(line, key) {
 			if !strings.HasSuffix(line, "\n") {
 				return ""
 			}

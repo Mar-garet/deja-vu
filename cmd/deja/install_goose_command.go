@@ -51,11 +51,7 @@ func indentLines(s, pad string) string {
 // gooseSlashCommandsBlock returns the text after the slash_commands key, for
 // reading the indent its entries are written at.
 func gooseSlashCommandsBlock(s string) string {
-	i := strings.Index("\n"+s, "\nslash_commands:\n")
-	if i < 0 {
-		return ""
-	}
-	return s[i+len("\nslash_commands:\n")-1:]
+	return yamlKeyBlock(s, "slash_commands:")
 }
 
 // gooseListIndent is the indent the entries of a list are written at, and
@@ -125,10 +121,19 @@ func dropEmptyYAMLKey(s, key string) string {
 			continue
 		}
 		// A comment, even at column 0, is not the end of the block: the
-		// entries under it still belong to the key (#4289).
+		// entries under it still belong to the key (#4289). Only blank lines
+		// go with a key that is dropped — a comment is the reader's.
 		j := i + 1
-		for j < len(lines) && (strings.TrimSpace(lines[j]) == "" || strings.HasPrefix(strings.TrimSpace(lines[j]), "#")) {
+		for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
 			j++
+		}
+		k := j
+		for k < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[k]), "#") {
+			k++
+		}
+		if k > j && k < len(lines) && yamlLineBelongsTo(lines[k], lines[i]) {
+			out = append(out, lines[i])
+			continue
 		}
 		// Nested is "indented further than the key", not "starts with two
 		// spaces": one space is valid YAML and is not two, so a config written
@@ -195,13 +200,16 @@ func installGooseCommand(exe string, uninstall bool) (installResult, error) {
 		if strings.Contains(normaliseGooseNewlines(string(old)), entry) {
 			return installResult{Path: path, Action: "unchanged"}, nil
 		}
-		if i := strings.Index("\n"+next, "\nslash_commands:\n"); i >= 0 {
-			at := i + len("\nslash_commands:\n") - 1
+		if next != "" && !strings.HasSuffix(next, "\n") {
+			next += "\n"
+		}
+		at, err := yamlTopKeyEnd(next, "slash_commands:")
+		if err != nil {
+			return installResult{}, fmt.Errorf("%s: %w", path, err)
+		}
+		if at >= 0 {
 			next = next[:at] + entry + next[at:]
 		} else {
-			if next != "" && !strings.HasSuffix(next, "\n") {
-				next += "\n"
-			}
 			next += "slash_commands:\n" + entry
 		}
 	}

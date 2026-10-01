@@ -144,3 +144,40 @@ func gooseRoundTrip(t *testing.T, cfg string) {
 		t.Fatalf("uninstall did not give the file back:\nwant %q\ngot  %q", cfg, b)
 	}
 }
+
+// Comments under an empty key are the reader's and stay; a key whose name
+// merely ends in "extensions:" is not ours to touch.
+func TestInstallGooseKeepsWhatItDidNotWrite(t *testing.T) {
+	for _, cfg := range []string{
+		"extensions:\n  # nothing yet\nGOOSE_MODEL: x\n",
+		"slash_commands:\n  # none yet\nGOOSE_MODEL: x\n",
+		"my_extensions:\n\nGOOSE_MODEL: x\n",
+		"slash_commands: # mine\n  - command: mine\n    recipe_path: /tmp/r.yaml\n",
+	} {
+		t.Run(cfg, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv("GOOSE_PATH_ROOT", "")
+			path := filepath.Join(gooseConfigDir(), "config.yaml")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range []func(string, bool) (installResult, error){installGoose, installGooseCommand} {
+				if _, err := f("/bin/deja", false); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := f("/bin/deja", true); err != nil {
+					t.Fatal(err)
+				}
+				if b, _ := os.ReadFile(path); string(b) != cfg {
+					t.Fatalf("install and uninstall did not give the file back:\nwant %q\ngot  %q", cfg, b)
+				}
+			}
+		})
+	}
+}
