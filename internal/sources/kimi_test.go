@@ -244,3 +244,39 @@ func TestKimiSessionFilesSkipsSubAgents(t *testing.T) {
 		t.Fatalf("sub-agent wire indexed: %v", files)
 	}
 }
+
+// Records as kimi-code 0.28.1 wrote them: a failed Bash call's result is
+// flagged isError and ends with the tool's own footer (#4262).
+const kimiWireExit = `{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"fix the retry loop"}]},"time":1790870004000}
+{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_02ee5295c2c3","name":"Bash","args":{"command":"go vet ./nonexistent"}},"time":1790870004786}
+{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_e0ddee76d756","name":"Bash","args":{"command":"go build ./..."}},"time":1790870004790}
+{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_5","name":"Bash","args":{"command":"go test ./retry"}},"time":1790870004795}
+{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"call_6","name":"Bash","args":{"command":"make release"}},"time":1790870004796}
+{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_02ee5295c2c3","result":{"output":"go: cannot find main module, but found .git/config in /private/tmp/proj-kimi\n\tto create a module there, run:\n\tgo mod init\nCommand failed with exit code: 1.","isError":true}},"time":1790870004853}
+{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_e0ddee76d756","result":{"output":"printing the footer it would write\nCommand failed with exit code: 2.\n"}},"time":1790870004900}
+{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_5","result":{"output":"--- FAIL: TestRetry [...truncated]\nCommand failed with exit code: 3. Output is truncated to fit in the message.\n\n[Full output saved]\ntask_id: b1\noutput_path: /tmp/b1.log\noutput_size_bytes: 90000\nnext_step: Use Read with output_path to page through the full log.","isError":true}},"time":1790870004950}
+{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"call_6","result":{"output":"building\nCommand killed by timeout (2m)","isError":true}},"time":1790870004960}
+`
+
+func TestKimiFailedCommandCarriesItsExitCode(t *testing.T) {
+	_, wire := kimiFixture(t)
+	if err := os.WriteFile(wire, []byte(kimiWireExit), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseKimiFile(wire)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v %d", err, len(ss))
+	}
+	var cmds []string
+	for _, m := range ss[0].Messages {
+		if m.Role == RoleCommand {
+			cmds = append(cmds, m.Text)
+		}
+	}
+	// The clean run ends on the footer itself but is not flagged isError,
+	// and a timeout carries no exit code: both stay bare.
+	want := []string{"$ go vet ./nonexistent  → exit 1", "$ go build ./...", "$ go test ./retry  → exit 3", "$ make release"}
+	if strings.Join(cmds, "|") != strings.Join(want, "|") {
+		t.Fatalf("commands = %q, want %q", cmds, want)
+	}
+}

@@ -320,7 +320,9 @@ func resumeCommand(s model.Session) (string, string, error) {
 		}
 		return "", "openclaw chat --session " + key, nil
 	case "kimi":
-		return "", "kimi --session " + s.ID, nil
+		// In the directory the session was created in: Kimi Code refuses a
+		// session from anywhere else (#4274).
+		return existingDir(sources.KimiSessionDir(s.Path)), "kimi --session " + s.ID, nil
 	case "goose":
 		return "", "goose session --resume --session-id " + s.ID, nil
 	case "crush":

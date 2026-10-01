@@ -182,6 +182,44 @@ func TestCrushResumeRunsInTheProject(t *testing.T) {
 	}
 }
 
+// Kimi Code refuses a session from any directory but the one it was created
+// in, so the command cds into the workDir state.json records; one that is gone
+// gets no cd (#4274).
+func TestResumeKimiRunsInTheSessionDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	project := filepath.Join(tmp, "proj-kimi")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id := "session_f39de7f4-4831-4734-a289-fc75046cc67e"
+	sessionDir := filepath.Join(tmp, "kimi", "sessions", "wd_proj-kimi_f31a2b2fc330", id)
+	main := filepath.Join(sessionDir, "agents", "main")
+	if err := os.MkdirAll(main, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeState := func(workDir string) {
+		b, _ := json.Marshal(map[string]string{"title": "t", "workDir": workDir})
+		if err := os.WriteFile(filepath.Join(sessionDir, "state.json"), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(main, "wire.jsonl")
+
+	writeState(project)
+	dir, cmd, err := resumeCommand(model.Session{Harness: "kimi", ID: id, Path: path})
+	if err != nil || cmd != "kimi --session "+id {
+		t.Fatalf("kimi resume: %q %v", cmd, err)
+	}
+	if dir != project {
+		t.Fatalf("dir = %q, want the session's workDir %q", dir, project)
+	}
+
+	writeState(filepath.Join(tmp, "gone"))
+	if dir, _, _ := resumeCommand(model.Session{Harness: "kimi", ID: id, Path: path}); dir != "" {
+		t.Fatalf("dir = %q for a workDir that no longer exists, want none", dir)
+	}
+}
+
 // Cursor's CLI transcripts are named after the chat id `--resume` takes, while
 // IDE chats come out of a different store and reopen only in the editor.
 func TestResumeCursorSplitsCLIFromIDE(t *testing.T) {

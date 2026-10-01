@@ -338,6 +338,9 @@ import (
 // 60: a goose edit or write call leaves an edit and a wrote record, not only
 // the path (#4265). A session indexed before keeps only the path until a
 // rebuild.
+// chat file is re-read whole only when it changes, so a rebuild. A failed
+// Kimi Code command carries its exit status (#4262); a finished wire.jsonl is
+// not re-read either.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
