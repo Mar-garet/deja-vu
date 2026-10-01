@@ -183,7 +183,7 @@ func parseGooseFileFromOffset(path string, offset int64) ([]model.Session, error
 		ID:      strings.TrimSuffix(filepath.Base(path), ".jsonl"),
 		Path:    path,
 	}
-	err := scanJSONLWithHeaderFromOffset(path, offset, func(m map[string]any) {
+	err := scanJSONLWithHeaderFromOffset(path, offset, isGooseHeader, func(m map[string]any) {
 		role, hasRole := m["role"].(string)
 		if !hasRole {
 			applyGooseHeader(&s, m)
@@ -210,6 +210,13 @@ func parseGooseFileFromOffset(path string, offset int64) ([]model.Session, error
 		return nil, err
 	}
 	return []model.Session{s}, err
+}
+
+// isGooseHeader tells the session's metadata line from its messages, which
+// all carry a role.
+func isGooseHeader(m map[string]any) bool {
+	_, hasRole := m["role"]
+	return !hasRole
 }
 
 // applyGooseHeader reads the session's own line: the header goose writes first,

@@ -353,6 +353,9 @@ import (
 // only the path (#4265).
 //
 // 60 also: a failed Kimi Code command carries its exit status (#4262).
+//
+// 60 also: an omp session indexed mid-way keeps its header id instead of
+// splitting off the appended turns under the file name (#4406).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

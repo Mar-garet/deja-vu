@@ -47,7 +47,7 @@ func parsePiShaped(path string, offset int64, harness, project string, useHeader
 		Project: project,
 		Path:    path,
 	}
-	err := scanJSONLWithHeaderFromOffset(path, offset, func(m map[string]any) { piShapedLine(&s, m, useHeaderCwd) })
+	err := scanJSONLWithHeaderFromOffset(path, offset, isPiHeader, func(m map[string]any) { piShapedLine(&s, m, useHeaderCwd) })
 	if len(s.Messages) == 0 {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func piShapedLine(s *model.Session, m map[string]any, useHeaderCwd bool) {
 // applyPiHeader reads identity out of the `session` header line, whether it
 // arrived in the scan or was fetched separately because the scan began past it.
 func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
-	if typ, _ := m["type"].(string); typ != "session" {
+	if !isPiHeader(m) {
 		return
 	}
 	if id, _ := m["id"].(string); id != "" {
@@ -106,6 +106,12 @@ func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
 		}
 	}
 	s.Touch(parseTimeAny(m["timestamp"]))
+}
+
+// isPiHeader reports whether a line is the `session` header.
+func isPiHeader(m map[string]any) bool {
+	typ, _ := m["type"].(string)
+	return typ == "session"
 }
 
 // piProjectName derives the project display name from the encoded directory
