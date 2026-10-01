@@ -762,6 +762,11 @@ var qwenHookWiring = []struct{ Event, Sub, Matcher string }{
 	// that stops them repeating outlives them, so without this the memory qwen
 	// just lost is the memory recall refuses to send again.
 	{"PreCompact", "hook-precompact", ""},
+	// The session is over, so its live stamp goes and the next session's MCP
+	// recall can answer with it (#4257). qwen-code 0.20.0 fires it on an
+	// interactive exit and from ACP; a one-shot `qwen -p` does not, so those
+	// still wait out the window.
+	{"SessionEnd", "hook-session-end", ""},
 }
 
 // qwenRetiredEvents are events deja used to write for qwen and no longer does.

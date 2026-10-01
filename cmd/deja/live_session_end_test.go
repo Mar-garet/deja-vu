@@ -179,6 +179,90 @@ func TestGeminiAutoWiresSessionEndAndUninstallRemovesIt(t *testing.T) {
 	}
 }
 
+// Qwen Code: the same hook in settings.json (#4257). qwen-code 0.20.0 fires
+// SessionEnd from the interactive UI's exit cleanup and from ACP, not from a
+// one-shot `qwen -p`, with the payload below. A second install changes nothing,
+// doctor still reads the row as wired, and uninstall gives the file back.
+func TestQwenAutoWiresSessionEndAndUninstallRoundTrips(t *testing.T) {
+	hermeticEnv(t)
+	t.Setenv("DEJA_QWEN_ROOT", "")
+	path := filepath.Join(sources.QwenConfigDir(), "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seed := `{
+  "model": {
+    "name": "qwen3-coder-plus"
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/mine --flush",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
+`
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installTarget("qwen-auto", "/usr/local/bin/deja", false); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hookEventWired(settingsHooks(t, b), "SessionEnd", "hook-session-end") {
+		t.Fatalf("qwen-auto wrote no SessionEnd hook:\n%s", b)
+	}
+	if n := dejaHookCount(settingsHooks(t, b), "SessionEnd", "hook-session-end"); n != 1 {
+		t.Errorf("SessionEnd runs deja %d times, want once:\n%s", n, b)
+	}
+	if !strings.Contains(string(b), "/usr/local/bin/mine --flush") {
+		t.Errorf("install took the reader's own SessionEnd hook:\n%s", b)
+	}
+	if _, err := installTarget("qwen-auto", "/usr/local/bin/deja", false); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := os.ReadFile(path); string(again) != string(b) {
+		t.Errorf("a second install changed the file:\n--- first\n%s\n--- second\n%s", b, again)
+	}
+	for _, a := range autoWirings() {
+		if a.name == "qwen" {
+			if st, _ := autoWiringState(a); st != "wired" {
+				t.Errorf("doctor reads the qwen row as %q after install", st)
+			}
+		}
+	}
+
+	// What qwen sends at /quit clears that session's stamp.
+	dir := t.TempDir()
+	markSessionLive(dir, "2ac6a0d6-qwen")
+	runHookSessionEnd(dir, strings.NewReader(`{"session_id":"2ac6a0d6-qwen","transcript_path":"/h/.qwen/projects/-p/chats/2ac6a0d6-qwen.jsonl","cwd":"/p","hook_event_name":"SessionEnd","reason":"prompt_input_exit"}`))
+	if liveSessionIDs(dir)["2ac6a0d6-qwen"] {
+		t.Errorf("qwen's SessionEnd payload left the session stamped: %v", readLiveSessions(dir))
+	}
+
+	if _, err := installTarget("qwen-auto", "/usr/local/bin/deja", true); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != seed {
+		t.Errorf("uninstall did not give the file back as it was:\n--- got\n%s\n--- want\n%s", after, seed)
+	}
+}
+
 func settingsHooks(t *testing.T, b []byte) map[string]any {
 	t.Helper()
 	var root map[string]any
