@@ -37,6 +37,11 @@ func transcriptGone(s model.Session) bool {
 	if s.Harness == "opencode" || s.Harness == "kilocode" {
 		return sources.OpencodeStoreLacks(s.Harness, s.ID)
 	}
+	// Hermes the same, with Path naming the store: `hermes sessions delete`
+	// leaves `hermes --resume` answering "Session not found" (#4250).
+	if s.Harness == "hermes" {
+		return sources.HermesStoreLacks(s.Path, s.ID)
+	}
 	if s.Path == "" || !isTranscriptFile(s.Path) {
 		return false
 	}

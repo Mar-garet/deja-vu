@@ -274,3 +274,52 @@ func hermesProfile(db string) string {
 	}
 	return name
 }
+
+// HermesResumeProfile is the profile `hermes -p` has to name for a session
+// read from this store to be found, or "" for the root store while no other
+// profile is active. `hermes --resume` looks only in the active profile's
+// store, so a session recorded under `hermes -p work` came back "Session not
+// found" (#4248). A profile's session is always named, so the command does not
+// depend on which one is active; a sticky `hermes profile use work` makes the
+// root store need naming too, as `default`.
+func HermesResumeProfile(db string) string {
+	if filepath.Dir(filepath.Dir(db)) == filepath.Clean(HermesProfilesRoot()) {
+		return filepath.Base(filepath.Dir(db))
+	}
+	b, err := os.ReadFile(filepath.Join(HermesHome(), "active_profile"))
+	if err != nil {
+		return ""
+	}
+	if name := strings.TrimSpace(strings.TrimPrefix(string(b), "\ufeff")); name != "" && name != "default" {
+		return "default"
+	}
+	return ""
+}
+
+// HermesStoreLacks reports whether the Hermes store a session was read from no
+// longer has it — taken out with `hermes sessions delete`, which leaves
+// `hermes --resume` answering "Session not found" (#4250). False whenever that
+// cannot be told: a Postgres store, no file, or a read that fails. The sessions
+// table is what resume looks the id up in; a store from before it is asked
+// through its messages.
+func HermesStoreLacks(db, id string) bool {
+	if IsHermesPGStore(db) || !nonEmptyFile(db) {
+		return false
+	}
+	query := func(q string) (string, bool) {
+		cmd, stop := sqliteReadCmd(db, q)
+		defer stop()
+		b, err := cmd.Output()
+		return strings.TrimSpace(string(b)), err == nil
+	}
+	names, ok := query(`select name from sqlite_master where type='table' and name in ('sessions','messages')`)
+	if !ok || names == "" {
+		return false
+	}
+	q := fmt.Sprintf(`select count(*) from messages where session_id='%s'`, sqlEscape(id))
+	if strings.Contains(" "+strings.Join(strings.Fields(names), " ")+" ", " sessions ") {
+		q = fmt.Sprintf(`select count(*) from sessions where id='%s'`, sqlEscape(id))
+	}
+	n, ok := query(q)
+	return ok && n == "0"
+}

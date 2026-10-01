@@ -200,7 +200,14 @@ func resumeCommand(s model.Session) (string, string, error) {
 		return "", "gjc --resume " + s.ID, nil
 	case "hermes":
 		// Hermes takes the same session ID deja indexes, so this resumes the
-		// exact conversation rather than the most recent one.
+		// exact conversation rather than the most recent one — from the
+		// profile whose store holds it (#4248).
+		if p := sources.HermesResumeProfile(s.Path); p != "" {
+			if !resumeIDPattern.MatchString(p) {
+				return "", "", fmt.Errorf("session %s is in Hermes profile %q, a name deja will not place in a command — `hermes -p <profile> --resume %s` reopens it", digest.Short(s.ID), p, s.ID)
+			}
+			return "", "hermes -p " + p + " --resume " + s.ID, nil
+		}
 		return "", "hermes --resume " + s.ID, nil
 	case "aider":
 		dir := filepath.Dir(s.Path)
