@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 
@@ -103,6 +104,14 @@ func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
 	if useHeaderCwd {
 		if cwd, _ := m["cwd"].(string); cwd != "" {
 			s.Project = claudeProjectName(pathToProjectKey(cwd))
+		}
+	}
+	// A prime-agent rlm.spawn child names its parent's transcript in the
+	// header and sits one or more levels down (#4407).
+	if depth, _ := m["rlmDepth"].(json.Number); depth != "" && depth != "0" {
+		if parent, _ := m["parentSession"].(string); parent != "" {
+			s.Kind = "subagent"
+			s.Parent = strings.TrimSuffix(filepath.Base(parent), ".jsonl")
 		}
 	}
 	s.Touch(parseTimeAny(m["timestamp"]))

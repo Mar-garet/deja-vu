@@ -54,6 +54,11 @@
 <p><code>PRIME_AGENT_SESSION_DIR</code> and <code>PRIME_AGENT_CODING_AGENT_SESSION_DIR</code>, and deja</p>
 <p>reads both — a machine that has moved its sessions has moved them for deja too.</p>
 <p><code>DEJA_PRIME_ROOT</code> overrides all of it.</p>
+<p><code>rlm.spawn</code> writes each child session as its own transcript beside the root,</p>
+<p>under <code>~/.prime/agent/session-artifacts/&lt;parent-id&gt;/sub-&lt;n&gt;/&lt;child-id&gt;.jsonl</code>,</p>
+<p>with <code>parentSession</code> and an <code>rlmDepth</code> above 0 in its header. deja reads those</p>
+<p>too and files each as a subagent of the parent. The <code>semantic-edges.jsonl</code> next</p>
+<p>to it is prime&#39;s event log, not a transcript.</p>
 <p>Older installs kept sessions under <code>~/.pi/agent/*.jsonl</code> and in a <code>--cwd--</code></p>
 <p>directory beneath this root. prime-agent migrates both into the flat root when</p>
 <p>it starts, so the flat layout is what a live install has.</p>

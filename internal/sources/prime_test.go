@@ -72,3 +72,54 @@ func TestPrimeReadsTheAgentsOwnRootVariables(t *testing.T) {
 		t.Errorf("root = %q, want DEJA_PRIME_ROOT to win", got)
 	}
 }
+
+// rlm.spawn writes each child as its own transcript, but beside the session
+// root under session-artifacts/<parent>/sub-<n>/, not in sessions/. Walking the
+// root alone left every child unindexed (#4407).
+func TestPrimeIndexesSpawnedChildrenAsSubagents(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "sessions")
+	t.Setenv("DEJA_PRIME_ROOT", root)
+	parent := "01a0f994-dbc6-75ac-9517-efe6eac2e13e"
+	writePrimeSession(t, root, parent, "/tmp/proj-prime-g")
+	sub := filepath.Join(base, "session-artifacts", parent, "sub-820d576b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	child := filepath.Join(sub, "01a0f994-e172-71c9-b9fd-834f9bd5836e.jsonl")
+	lines := `{"type":"session","version":3,"id":"01a0f994-e172-71c9-b9fd-834f9bd5836e","timestamp":"2026-10-01T22:27:58.000Z","cwd":"/private/tmp/proj-prime-g","parentSession":"~/.prime/agent/sessions/` + parent + `.jsonl","rlmDepth":1}
+{"type":"message","id":"u1","timestamp":"2026-10-01T22:27:59.000Z","message":{"role":"user","content":[{"type":"text","text":"check the config"}]}}
+{"type":"message","id":"t1","timestamp":"2026-10-01T22:28:01.000Z","message":{"role":"toolResult","content":[{"type":"text","text":"BashResult(exit_code=0, output='1:retries = 5\\n', duration=0.25296541582793)\n"}]}}
+`
+	if err := os.WriteFile(child, []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// prime's event log sits beside the child and is not a transcript.
+	edges := `{"type":"session_registered","session_id":"01a0f994-e172-71c9-b9fd-834f9bd5836e","parent_session_id":"` + parent + `"}` + "\n"
+	for _, dir := range []string{sub, filepath.Dir(sub)} {
+		if err := os.WriteFile(filepath.Join(dir, "semantic-edges.jsonl"), []byte(edges), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files := PrimeSessionFiles()
+	if len(files) != 2 {
+		t.Fatalf("files = %v, want the parent and the child", files)
+	}
+	if KindForPath(child) != "prime" {
+		t.Errorf("KindForPath(child) = %q, want prime", KindForPath(child))
+	}
+	var got []string
+	for _, s := range LoadPrime() {
+		got = append(got, s.ID)
+		if s.ID != "01a0f994-e172-71c9-b9fd-834f9bd5836e" {
+			continue
+		}
+		if s.Kind != "subagent" || s.Parent != parent {
+			t.Errorf("child kind/parent = %q/%q, want subagent/%s", s.Kind, s.Parent, parent)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("sessions = %v, want the parent and the child", got)
+	}
+}

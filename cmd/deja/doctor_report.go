@@ -515,7 +515,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 		{"crush", []string{sources.CrushDataHome()}, sources.CrushDBs(), sources.ParseCrushDB},
 		{"pi", []string{sources.PiRoot()}, sources.PiSessionFiles(), sources.ParsePiFile},
 		{"omp", []string{sources.OmpRoot()}, sources.OmpSessionFiles(), sources.ParseOmpFile},
-		{"prime", []string{sources.PrimeRoot()}, sources.PrimeSessionFiles(), sources.ParsePrimeFile},
+		{"prime", sources.PrimeRoots(), sources.PrimeSessionFiles(), sources.ParsePrimeFile},
 		{"amp", []string{sources.AmpRoot()}, sources.AmpThreadFiles(), sources.ParseAmpFile},
 		{"openclaw", []string{sources.OpenClawRoot()}, sources.OpenClawStoreFiles(), parseDoctorOpenClaw},
 		{"copilot", []string{sources.CopilotRoot()}, sources.CopilotSessionFiles(), sources.ParseCopilotFile},

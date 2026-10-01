@@ -58,11 +58,39 @@ func PrimeRoot() string {
 	return filepath.Join(PrimeConfigDir(), "sessions")
 }
 
-// PrimeSessionFiles lists transcript files under the prime-agent session root.
+// PrimeArtifactsRoot is where prime-agent keeps a session's artifacts, beside
+// the session root. rlm.spawn writes each child's transcript there, as
+// session-artifacts/<parent-id>/sub-<n>/<child-id>.jsonl (#4407).
+func PrimeArtifactsRoot() string {
+	return filepath.Join(filepath.Dir(PrimeRoot()), "session-artifacts")
+}
+
+// PrimeRoots are the directories prime-agent transcripts live under.
+func PrimeRoots() []string { return []string{PrimeRoot(), PrimeArtifactsRoot()} }
+
+// PrimeSessionFiles lists transcript files under the prime-agent session root
+// and the spawned children's transcripts under the artifacts root.
 func PrimeSessionFiles() []string {
-	return walkFiles(PrimeRoot(), func(p string) bool {
+	files := walkFiles(PrimeRoot(), func(p string) bool {
 		return strings.HasSuffix(p, ".jsonl")
 	})
+	return append(files, walkFiles(PrimeArtifactsRoot(), isPrimeChildTranscript)...)
+}
+
+// isPrimeChildTranscript is a child's transcript under the artifacts root: a
+// .jsonl in a sub-<n> directory. semantic-edges.jsonl sits beside it and is
+// prime's own event log.
+func isPrimeChildTranscript(p string) bool {
+	return strings.HasSuffix(p, ".jsonl") && filepath.Base(p) != "semantic-edges.jsonl" &&
+		strings.HasPrefix(filepath.Base(filepath.Dir(p)), "sub-")
+}
+
+// isPrimeFile reports whether p is a transcript PrimeSessionFiles would list.
+func isPrimeFile(p string) bool {
+	if strings.HasPrefix(p, PrimeArtifactsRoot()) {
+		return isPrimeChildTranscript(p)
+	}
+	return strings.HasSuffix(p, ".jsonl") && strings.HasPrefix(p, PrimeRoot())
 }
 
 // LoadPrime loads all prime-agent sessions.
