@@ -331,7 +331,10 @@ import (
 //
 // 59: a failed Gemini CLI command carries its exit status (#4208); a
 // finished chat file is not re-read, so a rebuild.
-const version = 59
+//
+// 60: a failed Kimi Code command carries its exit status (#4262); a finished
+// wire.jsonl is not re-read, so a rebuild.
+const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an
