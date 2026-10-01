@@ -353,6 +353,9 @@ import (
 // only the path (#4265).
 //
 // 60 also: a failed Kimi Code command carries its exit status (#4262).
+// chat file is re-read whole only when it changes, so a rebuild. It also
+// brings in a Kiro CLI session's tool calls and results, which were dropped as
+// not text (#4299); a finished transcript is not re-read.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

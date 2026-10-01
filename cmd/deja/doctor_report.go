@@ -562,9 +562,12 @@ func doctorStoreChecks() []doctorStoreCheck {
 }
 
 // doctorProbeKiro reads one Kiro transcript with the reader its path belongs
-// to, so a store written by the IDE is not probed with the CLI's parser and
-// reported empty.
+// to, so a store written by the IDE, or kiro-cli's database, is not probed
+// with the CLI's parser and reported empty.
 func doctorProbeKiro(path string) ([]model.Session, error) {
+	if path == sources.KiroDB() {
+		return sources.ParseKiroDB(path)
+	}
 	if sources.KiroUnderIDE(path) {
 		return sources.ParseKiroIDEFile(path)
 	}

@@ -3,9 +3,10 @@
 - **ID**: `kiro`
 - **Store (CLI)**: `~/.kiro/sessions/cli/<sessionId>.jsonl`, with the header `~/.kiro/sessions/cli/<sessionId>.json` beside it
 - **Store (IDE)**: `~/.kiro/sessions/<workspace>/sess_<uuid>/messages.jsonl`, with `session.json` beside it
-- **Read override**: `DEJA_KIRO_ROOT` replaces the session root
-- **Format**: JSONL, one shape per client
-- **Needs**: nothing
+- **Store (headless CLI)**: `kiro-cli/data.sqlite3` in the local data directory (`~/Library/Application Support` on macOS, `~/.local/share` on Linux, `%LOCALAPPDATA%` on Windows), table `conversations_v2`
+- **Read override**: `DEJA_KIRO_ROOT` replaces the session root, `DEJA_KIRO_DB` the database
+- **Format**: JSONL, one shape per client, and a SQLite row per headless conversation
+- **Needs**: `sqlite3` for the database only
 
 Kiro (kiro.dev) ships a CLI and an IDE — a VS Code fork — and they do not write
 the same file. The CLI stores a pair per session: a header naming the session id
@@ -16,7 +17,13 @@ directory per session under the workspace, holding `session.json` (id, model,
 `workspacePaths`, timestamps) and `messages.jsonl`, whose lines carry
 `payload.type` and `payload.content` with an RFC 3339 `timestamp`.
 
-**Last verified:** 2026-09-17
+`kiro-cli chat --no-interactive` writes neither file. Each conversation is a
+row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
+`history` holds the turns: a `Prompt` or `ToolUseResults` user side, a
+`ToolUse` or `Response` assistant side. `kiro-cli chat --resume-id
+<conversation_id>` reopens a row.
+
+**Last verified:** 2026-10-01
 
 ## Known quirks and drift
 
@@ -37,12 +44,18 @@ directory per session under the workspace, holding `session.json` (id, model,
   `usage_summary`, `turn_end`, `tool_call`. Those are not turns: a record whose
   type is not one is dropped rather than attributed to a role, and a test pins
   that.
+- **Tool calls.** The TUI writes `toolUse` parts inside an
+  `AssistantMessage` and the results as a `ToolResults` record; the database
+  has `tool_uses` and `ToolUseResults`. The TUI names its tools `shell`,
+  `write` and `read` (`content`, `oldStr`, `newStr`, `operations[].path`); the
+  headless path keeps `execute_bash`, `fs_write` and `fs_read` (`file_text`,
+  `old_str`, `new_str`). Both are read into commands, files, edits and tool
+  output (#4299). Only the `Prompt` record carries a timestamp, so the reply
+  and its calls take the prompt's.
 - **Not read yet.** The IDE mirrors chats into its globalStorage
-  (`kiro.kiroagent/<workspace>/*.chat` beside extensionless execution records)
-  and the TUI keeps sessions in `kiro-cli/data.sqlite3`, table
-  `conversations_v2`. No sample of either is in hand — Kiro is not installed on
-  the machine this was written on — and a reader built against a guessed shape
-  is one that drops history without saying so.
+  (`kiro.kiroagent/<workspace>/*.chat` beside extensionless execution records).
+  No sample is in hand, and a reader built against a guessed shape is one that
+  drops history without saying so.
 - Wiring: `deja install kiro` writes the server into
   `~/.kiro/settings/mcp.json`, which the CLI and the IDE both read — the same
   file `kiro-cli mcp add --scope global` writes. One thing the installer
