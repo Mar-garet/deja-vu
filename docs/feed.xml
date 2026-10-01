@@ -63,6 +63,11 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/amp.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>Where Amp writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+    <title>Where Antigravity stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/antigravity.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/antigravity.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>Where Antigravity writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where Claude Code stores its history — session format</title>
