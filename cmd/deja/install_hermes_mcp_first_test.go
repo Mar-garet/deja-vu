@@ -232,3 +232,29 @@ func TestContinueAndGooseKeysWithCommentsRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// goose loads nothing from a file with a key twice, so an inline
+// slash_commands is refused rather than shadowed.
+func TestInstallGooseCommandRefusesAnInlineSlashCommands(t *testing.T) {
+	for _, cfg := range []string{"slash_commands: []\n", "slash_commands: ~\n"} {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("GOOSE_PATH_ROOT", "")
+		path := filepath.Join(gooseConfigDir(), "config.yaml")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := installGooseCommand("/bin/deja", false); err == nil {
+			b, _ := os.ReadFile(path)
+			t.Fatalf("%q: install went ahead:\n%s", cfg, b)
+		}
+		if b, _ := os.ReadFile(path); string(b) != cfg {
+			t.Fatalf("%q: a refused install changed the file:\n%s", cfg, b)
+		}
+	}
+}

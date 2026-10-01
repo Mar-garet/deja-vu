@@ -203,6 +203,13 @@ func installGooseCommand(exe string, uninstall bool) (installResult, error) {
 		if next != "" && !strings.HasSuffix(next, "\n") {
 			next += "\n"
 		}
+		// goose refuses a config that names a key twice and then loads none
+		// of it, so an inline value — even `[]` — cannot be shadowed by a
+		// block written after it, the way Hermes' loader allows. The
+		// extensions writer refuses the same shape.
+		if v := inlineYAMLValue(next, "slash_commands:"); v != "" {
+			return installResult{}, fmt.Errorf("%s: slash_commands: %s is on one line, and deja edits the block form — move it to a block and run this again", path, v)
+		}
 		at, err := yamlTopKeyEnd(next, "slash_commands:")
 		if err != nil {
 			return installResult{}, fmt.Errorf("%s: %w", path, err)
