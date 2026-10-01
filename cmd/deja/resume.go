@@ -246,7 +246,10 @@ func resumeCommand(s model.Session) (string, string, error) {
 		if strings.HasPrefix(s.ID, "cline-task-") {
 			return "", "", fmt.Errorf("legacy Cline VS Code tasks reopen from the extension's history UI, not the terminal")
 		}
-		return "", "cline --id " + s.ID, nil
+		// cline reopens the transcript from anywhere but runs its tools in
+		// the current directory, so the command runs where the session did
+		// (#4318).
+		return existingDir(sources.ClineSessionDir(s.Path)), "cline --id " + s.ID, nil
 	case "roo":
 		// The Roo CLI runs the extension against a VS Code shim and keeps its
 		// tasks in a store of its own, which is the half that reopens from a

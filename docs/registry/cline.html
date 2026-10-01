@@ -69,9 +69,11 @@
 <p><code>deja-history</code> skill bundled in the plugin. Cline&#39;s own hooks cannot carry</p>
 <p>context back, so the plugin is the channel.</p>
 <ul>
-<li><strong>Resume</strong>: <code>cline --id &lt;sessionId&gt;</code> for modern sessions only; legacy VS</li>
+<li><strong>Resume</strong>: <code>cd &lt;cwd&gt; &amp;&amp; cline --id &lt;sessionId&gt;</code> for modern sessions only;</li>
 </ul>
-<p>Code tasks reopen from the extension UI.</p>
+<p><code>cline --id</code> reopens the transcript from anywhere but runs its tools in the</p>
+<p>current directory, so the command runs in the manifest&#39;s <code>cwd</code> (#4318).</p>
+<p>Legacy VS Code tasks reopen from the extension UI.</p>
 <ul>
 <li><strong>Handoff</strong>: <code>cline &lt;prompt&gt;</code> runs directly.</li>
 </ul>
