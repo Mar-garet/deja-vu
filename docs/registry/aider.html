@@ -49,7 +49,7 @@ The query misses the tenant predicate.
 &gt; Applied edit to query.go</code></pre>
 <h2 id="message-mapping">Message mapping</h2>
 <p>Outside fenced code blocks, <code>#### </code> starts or continues a user message. Plain Markdown is assistant output. Lines beginning with <code>&gt; </code> are tool or system output and are not indexed; neither are unprefixed lines directly under one (the rest of that output block), nor anything before the session&#39;s first <code>#### </code> line (the banner and the <code>--verbose</code> dump). A <code>#### </code> line that is one of aider&#39;s own commands (<code>/add</code>, <code>/undo</code>, <code>/clear</code>, …) is dropped; <code>/ask</code> and <code>/code</code> keep their text. Blank lines remain part of the current message.</p>
-<p>The header timestamp uses local time with layout <code>YYYY-MM-DD HH:MM:SS</code>. aider does not store message timestamps, so every message receives the session start. It does not store a session ID; deja derives a stable ID from the history path and the session&#39;s ordinal in that file.</p>
+<p>The header timestamp uses local time with layout <code>YYYY-MM-DD HH:MM:SS</code>. aider does not store message timestamps, so every message receives the session start. It does not store a session ID; deja derives a stable ID from the history path and the session&#39;s start time (<code>aider-&lt;path hash&gt;-&lt;YYYYMMDDTHHMMSS&gt;</code>, with <code>-2</code> and on for a second launch in the same second, and the ordinal in the file when the header does not parse). The ordinal alone was the ID until #4332: a new history at the path of a deleted one restarted it and overwrote the sessions deja kept.</p>
 <h2 id="skills">Skills</h2>
 <p>None, and there is nothing to build on. aider loads instruction files rather</p>
 <p>than offering a catalogue an agent picks from: <code>--read</code> (and a CONVENTIONS.md by</p>
@@ -62,6 +62,7 @@ The query misses the tenant predicate.
 <li><code>&lt;blank&gt;</code> after the user prefix represents an empty line.</li>
 <li>Tool output terminates an assistant block but does not become a message.</li>
 <li>Moving a history file changes deja&#39;s derived session IDs because the path is part of the ID.</li>
+<li>A session that leaves the file — the file was deleted and aider started a new one, or someone cut it by hand — stays in the index, as a deleted transcript does; <code>deja forget &lt;id&gt;</code> drops it.</li>
 </ul>
 <p><strong>Last verified:</strong> 2026-07-27</p>
 

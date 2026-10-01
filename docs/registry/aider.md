@@ -20,7 +20,7 @@ The query misses the tenant predicate.
 
 Outside fenced code blocks, `#### ` starts or continues a user message. Plain Markdown is assistant output. Lines beginning with `> ` are tool or system output and are not indexed; neither are unprefixed lines directly under one (the rest of that output block), nor anything before the session's first `#### ` line (the banner and the `--verbose` dump). A `#### ` line that is one of aider's own commands (`/add`, `/undo`, `/clear`, …) is dropped; `/ask` and `/code` keep their text. Blank lines remain part of the current message.
 
-The header timestamp uses local time with layout `YYYY-MM-DD HH:MM:SS`. aider does not store message timestamps, so every message receives the session start. It does not store a session ID; deja derives a stable ID from the history path and the session's ordinal in that file.
+The header timestamp uses local time with layout `YYYY-MM-DD HH:MM:SS`. aider does not store message timestamps, so every message receives the session start. It does not store a session ID; deja derives a stable ID from the history path and the session's start time (`aider-<path hash>-<YYYYMMDDTHHMMSS>`, with `-2` and on for a second launch in the same second, and the ordinal in the file when the header does not parse). The ordinal alone was the ID until #4332: a new history at the path of a deleted one restarted it and overwrote the sessions deja kept.
 
 ## Skills
 
@@ -36,5 +36,6 @@ already is. A skill here would be the same always-on text under another name.
 - `<blank>` after the user prefix represents an empty line.
 - Tool output terminates an assistant block but does not become a message.
 - Moving a history file changes deja's derived session IDs because the path is part of the ID.
+- A session that leaves the file — the file was deleted and aider started a new one, or someone cut it by hand — stays in the index, as a deleted transcript does; `deja forget <id>` drops it.
 
 **Last verified:** 2026-07-27
