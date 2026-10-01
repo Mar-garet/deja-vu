@@ -341,6 +341,8 @@ import (
 // spans, written lines and tool output from toolCallStates (#4373).
 // 60 also: a Continue turn is never dated after its file's mtime; a fork had
 // its last turns in the future (#4376).
+// 60 also: a Crush edit, multiedit or write carries the replaced span and the
+// written lines (#4377).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

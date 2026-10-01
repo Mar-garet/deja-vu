@@ -180,6 +180,58 @@ func TestCrushSincePassSkipsWhatDidNotMove(t *testing.T) {
 	}
 }
 
+// An edit, a multiedit and a write carry both sides of the change in the
+// call's input, and restore and blame read them from the edit and wrote
+// records. A Crush session that kept only the path had nothing for either
+// (#4377).
+func TestCrushEditsAndWritesLeaveEditAndWroteRecords(t *testing.T) {
+	sql := "insert into sessions values ('s1',null,'retry',3,0,0,0.0,1784282403,1784282400,null,null);\n"
+	call := func(id, name, input string) []any {
+		return []any{map[string]any{"type": "tool_call", "data": map[string]any{"id": id, "name": name, "input": input}}}
+	}
+	sql += crushInsert(t, "m1", "s1", "assistant", 1784282400, call("c1", "edit",
+		`{"file_path": "/w/retry.cfg", "old_string": "retry = 3", "new_string": "retry = 5 # five retries for the upstream"}`))
+	sql += crushInsert(t, "m2", "s1", "assistant", 1784282401, call("c2", "multiedit",
+		`{"file_path": "/w/limits.cfg", "edits": [{"old_string": "max = 1", "new_string": "max = 2 # two parallel uploads at most"}, {"old_string": "min = 0", "new_string": "min = 1 # keep one warm connection", "replace_all": true}]}`))
+	sql += crushInsert(t, "m3", "s1", "assistant", 1784282402, call("c3", "write",
+		`{"file_path": "/w/backoff.txt", "content": "backoff = exponential with jitter for the retry loop\nshort\n"}`))
+	// A view names a file and changes nothing: it must not read as an edit.
+	sql += crushInsert(t, "m4", "s1", "assistant", 1784282403, call("c4", "view",
+		`{"file_path": "/w/notes.txt", "old_string": "not an edit"}`))
+
+	ss, err := ParseCrushDB(crushStore(t, "demo", sql))
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v, %d sessions", err, len(ss))
+	}
+	var edits, wrote []string
+	for _, m := range ss[0].Messages {
+		switch m.Role {
+		case RoleEdit:
+			edits = append(edits, m.Text)
+		case RoleWrote:
+			wrote = append(wrote, m.Text)
+		}
+	}
+	wantEdits := []string{"/w/retry.cfg\nretry = 3", "/w/limits.cfg\nmax = 1", "/w/limits.cfg\nmin = 0"}
+	if strings.Join(edits, "|") != strings.Join(wantEdits, "|") {
+		t.Errorf("edit records = %q, want %q", edits, wantEdits)
+	}
+	wantWrote := []string{
+		WroteRecord("/w/retry.cfg", "retry = 5 # five retries for the upstream"),
+		WroteRecord("/w/limits.cfg", "max = 2 # two parallel uploads at most"),
+		WroteRecord("/w/limits.cfg", "min = 1 # keep one warm connection"),
+		WroteRecord("/w/backoff.txt", "backoff = exponential with jitter for the retry loop\nshort\n"),
+	}
+	for _, w := range wantWrote {
+		if w == "" {
+			t.Fatal("a wanted wrote record is empty: the fixture's lines are too short to be evidence")
+		}
+	}
+	if strings.Join(wrote, "|") != strings.Join(wantWrote, "|") {
+		t.Errorf("wrote records = %q, want %q", wrote, wantWrote)
+	}
+}
+
 // Crush spawns subagent sessions, and the row naming the parent is the only
 // place that edge exists. Without it a subagent's turns look like a separate
 // piece of work by someone else.
