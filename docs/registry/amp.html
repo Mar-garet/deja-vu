@@ -54,11 +54,16 @@
 <p>If that working-directory URI is absent or not a file URI, the project falls</p>
 <p>back to the title.</p>
 <p>A thread&#39;s <code>messages</code> are retained only for <code>user</code> and <code>assistant</code> roles. Within</p>
-<p>each message, blocks with <code>type: &#34;text&#34;</code> are joined in order; other block types</p>
-<p>are ignored. Amp does not write per-message timestamps, so every retained</p>
-<p>message uses the thread&#39;s <code>created</code> Unix-millisecond timestamp. This is an</p>
-<p>intentional approximation for ordering and recency, not an inferred message</p>
-<p>time.</p>
+<p>each message, blocks with <code>type: &#34;text&#34;</code> are joined in order. <code>tool_use</code> blocks</p>
+<p>become work records: <code>Bash</code> (<code>cmd</code>) a command, <code>Read</code>, <code>edit_file</code> and</p>
+<p><code>create_file</code> (<code>path</code>) the files touched, <code>edit_file</code>&#39;s <code>old_str</code>/<code>new_str</code> an</p>
+<p>edit span and the written side, <code>create_file</code>&#39;s <code>content</code> the written side. A</p>
+<p><code>tool_result</code> block holds a <code>run</code>; its <code>result.output</code> (or a string result, or</p>
+<p>the run&#39;s error) is kept as tool output.</p>
+<p>A user message is stamped with <code>meta.sentAt</code> (Unix milliseconds) and an</p>
+<p>assistant message with <code>usage.timestamp</code> (ISO 8601). A message with neither,</p>
+<p>such as a user turn holding only tool results, takes the previous message&#39;s</p>
+<p>time, and the first one the thread&#39;s <code>created</code> time.</p>
 <p>A malformed or truncated JSON file is reported as a per-file ingestion error</p>
 <p>and skipped by discovery/load and index rebuilds; it does not prevent other</p>
 <p>thread files from being indexed. Amp thread files are not append-only, so deja</p>
@@ -67,7 +72,7 @@
 <p><a href="../../fixtures/registry/amp/thread.json"><code>fixtures/registry/amp/thread.json</code></a></p>
 <p>is a minimal conformance sample with deterministic IDs, paths, and timestamps.</p>
 <p>It contains no personal data or credentials.</p>
-<p><strong>Last verified:</strong> 2026-09-02</p>
+<p><strong>Last verified:</strong> 2026-10-01</p>
 
 <hr>
 <p>deja reads this format and thirty-four others, and turns what it finds into memory your

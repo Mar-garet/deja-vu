@@ -58,6 +58,13 @@
     <summary>deja search syntax: exact and phrase queries, natural language with stop words, fuzzy typo tolerance, confidence tiers, and optional local semantic recall.</summary>
   </entry>
   <entry>
+    <title>Where Amp stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/amp.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/amp.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>Where Amp writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>Where Claude Code stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/claude-code.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/claude-code.html"></link>
@@ -341,12 +348,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/getting-started.html"></link>
     <updated>2026-09-30T00:00:00Z</updated>
     <summary>Install deja and index your coding-agent history in one command, then search it and wire it into your agents over MCP.</summary>
-  </entry>
-  <entry>
-    <title>Claude Code lost your context: how to get it back — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/lost-context.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/lost-context.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>A crash, a cleared window or a restart takes the agent&#39;s context but not the transcript — how to get the work back and stop paying for it next time.</summary>
   </entry>
 </feed>

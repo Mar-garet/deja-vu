@@ -361,6 +361,7 @@ import (
 // transcript is not re-read, so a rebuild.
 // 60 also: a dsh session gains its command, files, edit and wrote records from
 // its tool/call events (#4291); a finished log is not re-read, so a rebuild.
+// 60 also: an Amp thread keeps its tool calls and each turn's own time (#4356).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
