@@ -76,22 +76,76 @@ func LoadGemini() []model.Session {
 }
 
 // A session resumed from an old .json gets rewritten as .jsonl — keep the
-// jsonl (richer, current) when both exist.
+// jsonl (richer, current) when both exist, whatever it holds: a rewind can
+// leave it shorter than the stale .json. Two files of the same format are both
+// kept: resuming a .jsonl session leaves a second .jsonl under the same id
+// holding only the preamble, and keeping the later one dropped the whole
+// conversation (#4213). The index decides which of those owns the row. A .json
+// named after no .jsonl is weighed against the largest .jsonl of its id and
+// replaces it only with more messages; weighing it against the first one read
+// let it replace a resume stub and sit beside the real transcript. Decided per
+// id over every file, so the answer does not depend on read order.
 func dedupeGeminiSessions(ss []model.Session) []model.Session {
-	best := map[string]int{}
-	var out []model.Session
-	for _, s := range ss {
+	byKey := map[string][]int{}
+	for i, s := range ss {
 		key := s.Harness + ":" + s.ID
-		if i, ok := best[key]; ok {
-			if strings.HasSuffix(s.Path, ".jsonl") {
-				out[i] = s
-			}
+		byKey[key] = append(byKey[key], i)
+	}
+	drop := map[int]bool{}
+	for _, idx := range byKey {
+		if len(idx) < 2 {
 			continue
 		}
-		best[key] = len(out)
-		out = append(out, s)
+		paths := map[string]bool{}
+		for _, i := range idx {
+			paths[ss[i].Path] = true
+		}
+		bestJ, bestN := -1, -1
+		var jsons []int
+		for _, i := range idx {
+			if strings.HasSuffix(ss[i].Path, ".jsonl") {
+				if bestJ < 0 || larger(ss[i], ss[bestJ]) {
+					bestJ = i
+				}
+				continue
+			}
+			if paths[ss[i].Path+"l"] {
+				// Its own rewrite is held.
+				drop[i] = true
+				continue
+			}
+			jsons = append(jsons, i)
+			if bestN < 0 || larger(ss[i], ss[bestN]) {
+				bestN = i
+			}
+		}
+		if bestJ < 0 {
+			continue
+		}
+		for _, i := range jsons {
+			drop[i] = true
+		}
+		if bestN >= 0 && len(ss[bestN].Messages) > len(ss[bestJ].Messages) {
+			drop[bestN] = false
+			drop[bestJ] = true
+		}
+	}
+	out := make([]model.Session, 0, len(ss))
+	for i, s := range ss {
+		if !drop[i] {
+			out = append(out, s)
+		}
 	}
 	return out
+}
+
+// larger orders two files of one id by message count, then by path, so the
+// pick does not depend on which was read first.
+func larger(a, b model.Session) bool {
+	if len(a.Messages) != len(b.Messages) {
+		return len(a.Messages) > len(b.Messages)
+	}
+	return a.Path < b.Path
 }
 
 func ParseGeminiFile(path string) ([]model.Session, error) {
@@ -342,21 +396,94 @@ var geminiExit = regexp.MustCompile(`^Exit Code: (\d+)$`)
 // output — Exit Code (only when non-zero), then Signal, Background PIDs and
 // the process group — so a line the command printed itself is not taken for
 // it. 0 when the footer carries none.
+//
+// Qwen writes the same footer, Exit Code and process group always, at the end
+// of a block that starts "Command: " (or "Tool output was too large…" when it
+// truncated the block, keeping its tail). After it, past a blank line, come
+// notes — a hint for a long foreground run, an attribution warning on git
+// commit — and the context deja's own failure hook adds, in any number of
+// paragraphs (#4255). So on Qwen's block every paragraph under the footer is
+// skipped. Anywhere else — Gemini, or a Qwen timeout or cancel, which have no
+// footer — the footer is the tail or there is none, and one the command
+// printed further up is its output.
 func geminiExitCode(out string) int {
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	lines := strings.Split(out, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	qwenBlock := false
+	for _, l := range lines {
+		if l == "" || l == "<untrusted_context>" {
+			continue
+		}
+		qwenBlock = strings.HasPrefix(l, "Command: ") || strings.HasPrefix(l, qwenTruncatedPrefix)
+		break
+	}
 	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
-		if m := geminiExit.FindStringSubmatch(l); m != nil {
-			code, _ := strconv.Atoi(m[1])
-			return code
+		l := lines[i]
+		if l == "" || l == "</untrusted_context>" || l == qwenSaveFailedNote {
+			continue
 		}
-		footer := l == "" || l == "</untrusted_context>"
-		for _, label := range []string{"Signal: ", "Background PIDs: ", "Process Group PGID: "} {
-			footer = footer || strings.HasPrefix(l, label)
+		if !qwenBlock {
+			if geminiFooterRank(l) < 0 {
+				return 0
+			}
+			return geminiFooterExit(lines[:i+1])
 		}
-		if !footer {
+		if strings.HasPrefix(l, "Process Group PGID: ") {
+			return geminiFooterExit(lines[:i+1])
+		}
+		// Not the footer's last line: skip this paragraph.
+		for i > 0 && lines[i-1] != "" {
+			i--
+		}
+	}
+	return 0
+}
+
+// qwenTruncatedPrefix opens a shell result Qwen cut down to its head and tail.
+const qwenTruncatedPrefix = "Tool output was too large and has been truncated"
+
+// qwenSaveFailedNote is the line Qwen puts straight under a truncated result
+// when it could not save the whole output to a file.
+const qwenSaveFailedNote = "[Note: Could not save full output to file]"
+
+// geminiFooterOrder is the order the footer's lines are written in.
+var geminiFooterOrder = []string{"Exit Code: ", "Signal: ", "Background PIDs: ", "Process Group PGID: "}
+
+// geminiFooterRank is a line's place in geminiFooterOrder, -1 when it is not
+// a footer line.
+func geminiFooterRank(l string) int {
+	if geminiExit.MatchString(l) {
+		return 0
+	}
+	for r, label := range geminiFooterOrder[1:] {
+		if strings.HasPrefix(l, label) {
+			return r + 1
+		}
+	}
+	return -1
+}
+
+// geminiFooterExit reads the footer that ends lines: walking up, each line
+// must come earlier in the written order than the one below it, so a line of
+// output that happens to look like a footer line is not taken into it.
+func geminiFooterExit(lines []string) int {
+	below := len(geminiFooterOrder)
+	for i := len(lines) - 1; i >= 0; i-- {
+		r := geminiFooterRank(lines[i])
+		if r < 0 || r >= below {
 			return 0
 		}
+		if r == 0 {
+			m := geminiExit.FindStringSubmatch(lines[i])
+			code, err := strconv.Atoi(m[1])
+			if err != nil {
+				return 0
+			}
+			return code
+		}
+		below = r
 	}
 	return 0
 }

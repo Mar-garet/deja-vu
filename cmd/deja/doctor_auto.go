@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -96,16 +97,100 @@ func autoWirings() []autoWiring {
 	}
 }
 
-// nothingWired reports whether no harness on this machine has an auto-recall
-// file. It is a stat per harness and no index read, which is what the brief can
-// afford — that screen has to feel instant.
+// autoInClientConfig names the rows whose file is the client's own config
+// rather than one deja writes whole. Those exist whether deja ever wrote to
+// them or not, so the file being there says nothing about deja (#4275).
+var autoInClientConfig = map[string]bool{
+	"cursor": true, "qwen": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+}
+
+// autoUnwired reports whether a row's file holds no deja wiring at all: it is
+// not there, or it is the client's own config with no entry of deja's in it.
+// Either is a machine that was never wired, not one whose wiring went stale.
+func autoUnwired(a autoWiring, b []byte, err error) bool {
+	if err != nil {
+		return true
+	}
+	return autoInClientConfig[a.name] && !strings.Contains(string(b), a.marker) && !dejaHookIn(string(b))
+}
+
+// dejaHookIn reports whether a config carries an entry of deja's: Kimi's
+// marked block, or any string that runs one of deja's hook subcommands — the
+// MCP server entry runs `mcp` and is not one. A file that is not JSON is read
+// line by line, its escapes undone: TOML spells a quoted Windows path
+// `"\"C:/Program Files/deja/deja.exe\" hook-prompt"`.
+func dejaHookIn(text string) bool {
+	if strings.Contains(text, kimiHookMarker) {
+		return true
+	}
+	runsDeja := func(s string) bool {
+		for name := range hookNames {
+			if isDejaHookCommand(s, "deja "+name) {
+				return true
+			}
+		}
+		return false
+	}
+	var root any
+	if json.Unmarshal([]byte(jsoncToJSON(strings.TrimPrefix(text, string(utf8BOM)))), &root) != nil {
+		for _, l := range strings.Split(text, "\n") {
+			if runsDeja(quotedPathUnescape.Replace(l)) {
+				return true
+			}
+		}
+		return false
+	}
+	var walk func(v any) bool
+	walk = func(v any) bool {
+		switch v := v.(type) {
+		case string:
+			return runsDeja(v)
+		case []any:
+			for _, e := range v {
+				if walk(e) {
+					return true
+				}
+			}
+		case map[string]any:
+			for _, e := range v {
+				if walk(e) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return walk(root)
+}
+
+// nothingWired reports whether no harness on this machine has auto-recall
+// wired. It reads one small file per harness and no index, which is what the
+// brief can afford — that screen has to feel instant.
 //
 // Auto-recall alone is the question worth asking here. An MCP server is a tool
 // the agent may call; these files are what make memory arrive without anyone
-// asking, which is the thing someone thinks they installed.
+// asking, which is the thing someone thinks they installed. So it reads the
+// rows doctor prints: Claude Code's and codex's hooks, which live outside the
+// table, and a harness plugin that recalls with nothing in the row's file.
 func nothingWired() bool {
+	if claudeHookWiringState().state != "missing" {
+		return false
+	}
+	// Codex counts with one of deja's events in hooks.json or the plugin
+	// enabled, asked here rather than read off the row: hooks.json also holds
+	// the user's own hooks, and the row says plugin only without the file.
+	if codexPluginInstalled() {
+		return false
+	}
+	codex := codexHookWiringState()
+	for _, h := range codexHookWiring {
+		if hookEventWired(codex.hooks, h.Event, h.Sub) {
+			return false
+		}
+	}
 	for _, a := range autoWirings() {
-		if _, err := os.Stat(a.path()); err == nil {
+		b, err := os.ReadFile(a.path())
+		if !autoUnwired(a, b, err) || harnessPluginCarriesRecall(a.name) {
 			return false
 		}
 	}
@@ -157,7 +242,7 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	switch {
 	case harnessPluginCarriesRecall(a.name) && (err != nil || !strings.Contains(string(b), a.marker)):
 		state = "plugin"
-	case err != nil:
+	case autoUnwired(a, b, err):
 		state = "missing"
 	case a.marker != "" && !strings.Contains(string(b), a.marker):
 		state = "stale"
@@ -212,6 +297,11 @@ func doctorAutoRecall(w io.Writer) {
 		switch {
 		case err != nil:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "missing", reportPath(path), note)
+		case autoUnwired(a, b, err):
+			// The client's config is there and deja never wrote its hook into
+			// it: the MCP install writes this same file, and only the -auto
+			// target writes the hook (#3313, #4275).
+			fmt.Fprintf(w, "  %-12s %-11s %s  (no deja hook — `deja install %s-auto`)\n", a.name, "missing", reportPath(path), a.name)
 		case a.marker != "" && !strings.Contains(string(b), a.marker):
 			// "reinstall" was the advice, and for the common way to get here
 			// it cannot work: the MCP install writes this same file, and only
@@ -271,13 +361,6 @@ func doctorContinueWired(path string) bool {
 	return removeContinueItem(string(b), "mcpServers", "deja") != string(b)
 }
 
-// yamlHasChildKey reports whether a key sits directly under a top-level parent.
-//
-// The indent is whatever the reader wrote the block at, and asking for exactly
-// two called a goose deja had just wired at four unwired — while the writer
-// itself follows the block (#2614, #2727). "Anywhere below the top level" was
-// the other end of the same mistake: `deja:` in another server's env, or in a
-// comment-shaped example under `notes:`, then read as a wired server (#2730).
 // yamlKeyLine reports whether line is the mapping key `key` (with its colon)
 // and nothing else — a trailing comment or blanks allowed, as YAML allows
 // them. An exact match missed `mcp_servers:  # mine` (#4289).
@@ -357,6 +440,13 @@ func yamlTopKeyEnd(doc, key string) (int, error) {
 	return found, nil
 }
 
+// yamlHasChildKey reports whether a key sits directly under a top-level parent.
+//
+// The indent is whatever the reader wrote the block at, and asking for exactly
+// two called a goose deja had just wired at four unwired — while the writer
+// itself follows the block (#2614, #2727). "Anywhere below the top level" was
+// the other end of the same mistake: `deja:` in another server's env, or in a
+// comment-shaped example under `notes:`, then read as a wired server (#2730).
 func yamlHasChildKey(path, parent, key string) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -391,48 +481,27 @@ func yamlHasChildKey(path, parent, key string) bool {
 	return false
 }
 
-// codexHasSeenItsHook reports whether codex has recorded any opinion about the
-// session-start hook. Until it has, codex runs nothing — and in `codex exec`
-// there is no interface in which to approve it, which is how scripted runs end
-// up with no memory while every file on disk looks correctly installed.
+// codexHasSeenItsHook reports whether codex has recorded any opinion about
+// deja's session-start hook. Until it has, codex runs nothing — and in `codex
+// exec` there is no interface in which to approve it, which is how scripted
+// runs end up with no memory while every file on disk looks correctly
+// installed.
 func codexHasSeenItsHook() bool {
 	cfg, err := os.ReadFile(filepath.Join(sources.CodexHome(), "config.toml"))
 	if err != nil {
 		return true // nothing to read: do not raise an alarm we cannot support
 	}
-	return codexHookTrustSection(string(cfg)) != ""
-}
-
-// codexHookTrustSection returns the block of codex's config that records what
-// it thinks of our session-start hook, or "" when there is none.
-//
-// Codex keys its trust store per hook rather than per file —
-// `[hooks.state."<path>/hooks.json:session_start:0:0"]` — and the block ends at
-// the next table header. Reading to the end of the file instead, which is what
-// this did, lets an `enabled = false` belonging to some unrelated table decide
-// what deja reports about ours.
-//
-// It deliberately does not check the recorded hash. deja cannot reproduce it:
-// on codex 0.142.4 the pin for a hook whose command is one line long is not the
-// sha256 of the hook file, of the command, of the handler object in any
-// serialisation, or of any combination of the two with the matcher, the event
-// or the key — checked. Comparing the file's own sha256 against it, which is
-// what this did, therefore called every working install untrusted. Presence of
-// a pin is what deja can honestly read: it means codex has been shown this hook
-// and kept an opinion about it.
-func codexHookTrustSection(cfg string) string {
-	i := strings.Index(cfg, "hooks.json:session_start")
-	if i < 0 {
-		return ""
+	path := filepath.Join(sources.CodexHome(), "hooks.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return true
 	}
-	rest := cfg[i:]
-	// Past the key's own line, so the header we stop at is the next one.
-	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-		if end := strings.Index(rest[nl:], "\n["); end >= 0 {
-			return rest[:nl+end]
-		}
+	var root map[string]any
+	if json.Unmarshal(b, &root) != nil {
+		return true
 	}
-	return rest
+	hooks, _ := root["hooks"].(map[string]any)
+	return codexPrimaryPin(codexDejaPins(string(cfg), path, hooks)) != ""
 }
 
 // opencodePluginShapeStale reports whether the installed plugin is written for

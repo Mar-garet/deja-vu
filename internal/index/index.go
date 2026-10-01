@@ -335,6 +335,24 @@ import (
 // 60: a resumed Gemini CLI session keeps the prompts deja's recall was
 // prepended to; Gemini's own resume history leaves them out (#4214). The
 // chat file is re-read whole only when it changes, so a rebuild.
+//
+// 60 also: Qwen Code — an `edit` or `write_file` call leaves files, wrote and
+// edit records (#4254), a failed command carries its exit status (#4255), and
+// a session in a non-ASCII directory takes its project from the recorded cwd
+// (#4258). Gemini CLI reads through the same dialect, so its `write_file`
+// leaves a wrote record too.
+//
+// 60 also: a Qwen Code or Gemini CLI shell result is indexed without the
+// report around it, so `Error: (none)` no longer reads as a failure and a fix
+// pair is stored under the error itself, not `Output: <error>` (#4256).
+//
+// 60 also: a Hermes session keeps its tool calls and results — commands,
+// files, edits and tool output (#4242).
+//
+// 60 also: a goose edit or write call leaves an edit and a wrote record, not
+// only the path (#4265).
+//
+// 60 also: a failed Kimi Code command carries its exit status (#4262).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
@@ -527,6 +545,12 @@ type SessionMeta struct {
 	// before it existed decodes with it zero and ranking falls back to what it
 	// can see.
 	Words int `json:",omitempty"`
+	// NoText marks a row whose transcript had nothing left to index once
+	// plumbing was stripped, so a transcript holding the conversation under
+	// the same id takes the row instead of being reported as a clash (#4213).
+	// Words cannot say it: a row of emoji has text and no words. Additive: an
+	// older manifest decodes with it false, the answer it always gave.
+	NoText bool `json:",omitempty"`
 	// Counted is how many of this session's messages the derived fields above
 	// already include, and LastMsg fingerprints the newest of them.
 	//
