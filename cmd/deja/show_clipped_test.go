@@ -76,7 +76,8 @@ func TestShowClippedNoteStaysOnTheSessionThatHoldsIt(t *testing.T) {
 	sql := "create table threads (id text primary key, summary text not null, updated_at text not null, " +
 		"data_type text not null, data blob not null, parent_id text, folder_paths text, folder_paths_order text, created_at text);\n" +
 		row("33333333-0000-4000-8000-000000000003", huge, "that log ends in a timeout") +
-		row("44444444-0000-4000-8000-000000000004", "fix the retry loop", "the loop now stops after three tries")
+		row("44444444-0000-4000-8000-000000000004", "fix the retry loop", "the loop now stops after three tries") +
+		row("55555555-0000-4000-8000-000000000005", strings.Repeat("a", 64*1024), "a paste exactly at the cap, kept whole")
 	db := filepath.Join(tmp, "threads.db")
 	cmd := exec.Command("sqlite3", db)
 	cmd.Stdin = strings.NewReader(sql)
@@ -95,5 +96,11 @@ func TestShowClippedNoteStaysOnTheSessionThatHoldsIt(t *testing.T) {
 	_, errOut = captureBoth(t, "show", "4444")
 	if strings.Contains(errOut, "stored short") {
 		t.Errorf("a whole two-message thread was told it was stored short:\n%s", errOut)
+	}
+	// A message exactly at the cap was stored whole; its length alone cannot
+	// tell it from one the cap cut.
+	_, errOut = captureBoth(t, "show", "5555")
+	if strings.Contains(errOut, "stored short") {
+		t.Errorf("a thread whose message fits the cap exactly was told it was stored short:\n%s", errOut)
 	}
 }

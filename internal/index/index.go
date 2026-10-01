@@ -679,6 +679,10 @@ type FileIngest struct {
 	// the same reason as the other two: a pass that reads one transcript must
 	// not speak for what another one holds (#2022).
 	Clipped int `json:"clipped,omitempty"`
+	// ClippedSessions splits Clipped by session id. Zed keeps every thread in
+	// one threads.db, so the file's count alone put the note on every thread
+	// in it (#4340). Kept out of the JSON: the contract is the per-file count.
+	ClippedSessions map[string]int `json:"-"`
 }
 
 type manifestCore struct {

@@ -782,7 +782,7 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 // what the transcript holds. deja records the count per file at ingest, and a
 // store like Zed's threads.db keeps every session in one file, so the file's
 // count put the note on every session in it (#4340). The file says a clip
-// happened; the session's own messages at the cap say which ones it holds.
+// happened; the per-session split says which of its sessions holds it.
 func clippedMessageNote(dir string, s model.Session) string {
 	if s.Path == "" {
 		return ""
@@ -792,13 +792,11 @@ func clippedMessageNote(dir string, s model.Session) string {
 	if !ok || e.Clipped == 0 {
 		return ""
 	}
-	n := 0
-	for _, m := range s.Messages {
-		if index.StoredShort(m.Text) {
-			n++
-		}
+	n := e.ClippedSessions[s.ID]
+	if e.ClippedSessions == nil {
+		// A store built before the split: the file's count is all there is.
+		n = e.Clipped
 	}
-	n = min(n, e.Clipped)
 	if n == 0 {
 		return ""
 	}
