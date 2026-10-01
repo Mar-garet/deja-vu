@@ -191,7 +191,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 // alone said wired while aider loaded nothing, and the entry alone said missing
 // — the word for never installed — while every start printed an error (#4327).
 func aiderWiring(fileThere bool) string {
-	b, _ := os.ReadFile(aiderConfPath())
+	// readConfig, for the byte order mark install writes back.
+	b, _ := readConfig(aiderConfPath())
 	named := aiderConfReadsContext(string(b))
 	switch {
 	case named && !fileThere:

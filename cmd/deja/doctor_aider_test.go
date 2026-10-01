@@ -76,3 +76,25 @@ func TestDoctorAiderRowReadsTheConfig(t *testing.T) {
 		}
 	}
 }
+
+// A config saved with a byte order mark — PowerShell's default, and install
+// writes it back — still has its read: entry on the first line.
+func TestDoctorAiderReadsAConfigWithABOM(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	ctx := aiderContextPath()
+	if err := os.MkdirAll(filepath.Dir(ctx), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ctx, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(aiderConfPath(), []byte("\xef\xbb\xbfread:\n  - "+ctx+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := aiderWiring(true); got != "" {
+		t.Errorf("a wired config with a BOM reads as %q", got)
+	}
+}
