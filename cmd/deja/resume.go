@@ -199,14 +199,17 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "kimchi":
 		// Kimchi's own argument parser rewrites `--resume <selector>` to
 		// `--session <id>` (src/cli-args.ts), so the id deja indexes is the
-		// selector it takes.
-		return "", "kimchi --session " + s.ID, nil
+		// selector it takes. It finds the session from anywhere, but outside
+		// its project asks to fork it, so the command runs in the directory
+		// the header records (#4400).
+		return existingDir(resumeRecordedDir(s)), "kimchi --session " + s.ID, nil
 	case "gjc":
 		// gjc's session-operations doc: `--resume <id|path>` at startup opens
-		// an existing session. A session from another project forks into the
-		// current one there, so no working directory is printed rather than
-		// one deja would be guessing at.
-		return "", "gjc --resume " + s.ID, nil
+		// an existing session. From another project 0.18 refuses it or forks
+		// it into the current one, so the command runs in the directory the
+		// header records — no guess, the same cwd gjc's scope file names
+		// (#4395).
+		return existingDir(resumeRecordedDir(s)), "gjc --resume " + s.ID, nil
 	case "hermes":
 		// Hermes takes the same session ID deja indexes, so this resumes the
 		// exact conversation rather than the most recent one — from the
@@ -398,17 +401,35 @@ func existingDir(p string) string {
 	return ""
 }
 
+// resumeRecordedDir is the directory a session recorded running in, for the
+// harnesses whose resume command goes there when it still exists: opencode and
+// Kilo keep it as the session's path, gjc and Kimchi in the transcript header.
+func resumeRecordedDir(s model.Session) string {
+	switch s.Harness {
+	case "opencode", "kilocode":
+		return s.Path
+	case "gjc", "kimchi":
+		return sources.PiHeaderCwd(s.Path)
+	}
+	return ""
+}
+
 // resumeDirGoneNote says where a session whose directory is gone will run:
 // opencode and Kilo reopen it from anywhere, and their tools then work in the
-// directory the command is run from.
+// directory the command is run from; gjc and Kimchi offer to fork it there
+// instead.
 func resumeDirGoneNote(s model.Session, dir string) string {
-	if dir != "" || s.Path == "" || (s.Harness != "opencode" && s.Harness != "kilocode") {
+	recorded := resumeRecordedDir(s)
+	if dir != "" || recorded == "" {
 		return ""
 	}
-	if _, err := os.Stat(s.Path); !os.IsNotExist(err) {
+	if _, err := os.Stat(recorded); !os.IsNotExist(err) {
 		return ""
 	}
-	return fmt.Sprintf("the directory this session ran in is gone (%s); it reopens in the one you run the command from", s.Path)
+	if s.Harness == "gjc" || s.Harness == "kimchi" {
+		return fmt.Sprintf("the directory this session ran in is gone (%s); from any other directory %s offers to fork it rather than reopen it", recorded, s.Harness)
+	}
+	return fmt.Sprintf("the directory this session ran in is gone (%s); it reopens in the one you run the command from", recorded)
 }
 
 // claudeProjectDirFor recovers the original working directory from the

@@ -20,7 +20,9 @@ too, and then the header's `cwd` is what names the project.
 - Resume: `kimchi --session <id>`. Its own argument parser rewrites
   `--resume <selector>` to `--session <id>` (`src/cli-args.ts`), so the id
   deja indexes is the selector Kimchi takes — `deja resume` prints that
-  command rather than handing over a paste.
+  command rather than handing over a paste. It runs in the directory the
+  header's `cwd` names: Kimchi 1.5 finds a session from anywhere, but outside
+  its project asks to fork it instead of reopening it (#4400).
 - A session file directly under the root has no encoded project directory to
   read a name from, so the header line's `cwd` names the project there — the
   same choice omp and prime-agent make (#3678).

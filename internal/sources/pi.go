@@ -108,6 +108,18 @@ func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
 	s.Touch(parseTimeAny(m["timestamp"]))
 }
 
+// PiHeaderCwd is the working directory a pi-shaped transcript's `session`
+// header records, or "" when it records none. gjc and Kimchi reopen a session
+// only from that directory, so resume runs there (#4395, #4400).
+func PiHeaderCwd(path string) string {
+	m, _ := firstJSONLRecord(path)
+	if typ, _ := m["type"].(string); typ != "session" {
+		return ""
+	}
+	cwd, _ := m["cwd"].(string)
+	return cwd
+}
+
 // piProjectName derives the project display name from the encoded directory
 // name. pi uses the same "--" encoding as Claude Code.
 func piProjectName(path string) string {
