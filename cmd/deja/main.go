@@ -649,6 +649,10 @@ func cmdHookContext(dir string, rest []string) error {
 		// line and keeps the context (see hook_strict.go).
 		case "--strict", "-strict":
 			strictHookOutput = true
+		// --copilot answers in Copilot CLI's flat shape, the only one it reads
+		// (see hook_strict.go).
+		case "--copilot", "-copilot":
+			copilotHookOutput = true
 		// --notes is for a host that shows a person nothing from its hooks —
 		// dsh and OpenClaw put the plain digest in front of the model only. It
 		// prints the notes meant for the person, and nothing else, for the
@@ -4078,7 +4082,7 @@ Usage:
   deja wip [--json]
   deja handoff [--to <agent>] [id-prefix] [--exec]
   deja hook-prompt [--plain]  (UserPromptSubmit hook: relevance recall per prompt)
-  deja hook-context [--plain] [--once] [--strict] [--notes]  (session start: the project digest, once per session)
+  deja hook-context [--plain] [--once] [--strict] [--copilot] [--notes]  (session start: the project digest, once per session)
   deja hook-antigravity (Antigravity PreInvocation hook: inject on first turn)
   deja hook-plan     (PreToolUse ExitPlanMode hook: factual plan/history co-occurrences)
   deja hook-tool [--plain] [--crush]  (PreToolUse Bash/Edit hook: one line on what this command or file already has)

@@ -602,6 +602,11 @@
       "path": "<tmp>/home/.grok/hooks/deja.json"
     },
     {
+      "name": "copilot",
+      "state": "missing",
+      "path": "<tmp>/home/.copilot/settings.json"
+    },
+    {
       "name": "zcode",
       "state": "missing",
       "path": "<tmp>/home/.zcode/cli/config.json"

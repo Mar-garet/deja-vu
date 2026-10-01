@@ -262,7 +262,7 @@ aider &middot; Amp &middot; Antigravity &middot; Claude Code &middot; Cline &mid
 | Claude Code | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Cline | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Codex CLI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Copilot CLI | ✅ | ✕ | ✅ | ✅ | ✅ | ✅ | — |
+| Copilot CLI | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | VS Code Copilot Chat | ✅ | ✕ | ✅ | ✅ | ✕ | paste | — |
 | Cursor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | sqlite3 (IDE chats, CLI tool output) |
 | DeepSeek Harness | ✅ | ✅ | ✅ | ✅ | ✕ | paste | zstd |

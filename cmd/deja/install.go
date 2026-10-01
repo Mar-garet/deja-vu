@@ -901,6 +901,8 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return wroteAll(hooks, mcp), nil
 	case "copilot":
 		return installCopilotMCP(exe, uninstall)
+	case "copilot-auto":
+		return installCopilotAuto(exe, uninstall)
 	case "vscode", "copilot-chat":
 		mcp, err := installVSCodeMCP(exe, uninstall)
 		if err != nil {
@@ -3107,10 +3109,10 @@ func installCursor(exe string, uninstall bool) (installResult, error) {
 }
 
 // installCopilotMCP wires deja into GitHub Copilot CLI's MCP registry
-// (~/.copilot/mcp-config.json). Copilot's schema differs from the common
+// (~/.copilot/mcp-config.json, or under COPILOT_HOME). Copilot's schema differs from the common
 // mcpServers shape: entries carry a type and an enabled-tools list.
 func installCopilotMCP(exe string, uninstall bool) (installResult, error) {
-	path := filepath.Join(sources.Home(), ".copilot", "mcp-config.json")
+	path := filepath.Join(copilotHome(), "mcp-config.json")
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -4472,7 +4474,7 @@ func installTargetNames() []string {
 		"cline", "cline-auto",
 		"goose", "goose-auto",
 		"crush", "crush-auto",
-		"grok", "grok-auto", "copilot", "roo", "kilocode", "cherrystudio", "kiro", "senpi", "senpi-auto", "kimchi", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
+		"grok", "grok-auto", "copilot", "copilot-auto", "roo", "kilocode", "cherrystudio", "kiro", "senpi", "senpi-auto", "kimchi", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
 		// Continue keeps the server and the slash command in one assistant
 		// config, and its skill in the folder beside it; there is no hook to
 		// wire, so there is nothing an -auto target would add (#3062).
@@ -4595,7 +4597,7 @@ func existingTargetChecks() map[string]string {
 		"cursor":      sources.CursorCLIHome(),
 		"gemini":      filepath.Join(sources.GeminiHome(), "settings.json"),
 		"antigravity": antigravityConfigHome(),
-		"copilot":     filepath.Join(homeDir(), ".copilot"),
+		"copilot":     copilotHome(),
 		"grok":        sources.GrokRoot(),
 		"qwen":        sources.QwenConfigDir(),
 		"kimi":        sources.KimiConfigDir(),

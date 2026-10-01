@@ -31,6 +31,8 @@ func hermeticEnv(t *testing.T) string {
 	// with HERMES_HOME exported never has a test read or write their Hermes.
 	t.Setenv("HERMES_HOME", "")
 	t.Setenv("REASONIX_HOME", "")
+	// Copilot CLI moves its home with COPILOT_HOME, and deja follows it.
+	t.Setenv("COPILOT_HOME", "")
 	t.Setenv("REASONIX_STATE_HOME", "")
 	t.Setenv("DEJA_REASONIX_ROOT", "")
 	// Windows resolvers read APPDATA rather than the home directory — goose's

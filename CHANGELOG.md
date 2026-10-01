@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `deja install copilot-auto` adds a `sessionStart` hook to Copilot CLI, so a new or resumed session starts with the project digest, as it does in Claude Code and Gemini CLI. The hook goes under `hooks` in `~/.copilot/settings.json` (or in `config.json` while your own hooks are still there, since Copilot moves them over on start), and uninstall gives the file back byte for byte (#4231).
+
 ### Fixed
 
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).

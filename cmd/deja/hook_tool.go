@@ -106,6 +106,8 @@ const (
 	hookToolClaude hookToolShape = iota
 	hookToolPlain
 	hookToolCrush
+	// Copilot CLI's flat {"additionalContext": …}; see hook_strict.go.
+	hookToolCopilot
 )
 
 func hookToolShapeOf(rest []string) hookToolShape {

@@ -27,8 +27,12 @@ already name every file.
   `~/.copilot/mcp-config.json`.
 - **Skill**: `~/.copilot/skills/deja-history/SKILL.md`, loaded on demand;
   Copilot invokes a skill by name, so it is also the `/deja-history` command.
-- **Auto-recall**: none. Copilot CLI exposes no hook that can inject context,
-  so MCP plus the skill is the whole install.
+- **Auto-recall**: `deja install copilot-auto` adds a `sessionStart` command
+  hook (`deja hook-context --copilot`) under `hooks` in
+  `~/.copilot/settings.json`. Copilot puts the `additionalContext` it prints in
+  front of the first request as its own message and keeps it for the session;
+  the payload names the session as `sessionId` and sends `source: "resume"`
+  on `copilot --resume`. `COPILOT_HOME` moves all of these files.
 - **Resume**: `copilot --resume=<sessionId>`.
 - **Handoff**: exec.
 
@@ -40,8 +44,17 @@ already name every file.
   capitalises, and the edit argument is `old_str` rather than `old_string`.
 - A session directory can outlive its `events.jsonl`; the discovery walk only
   picks up files that exist.
+- Since 1.0.79 user settings live in `settings.json` and `config.json` is
+  managed by the CLI. On each start it moves user keys still in `config.json`
+  across, and a `hooks` key there replaces the one in `settings.json` whole, so
+  while the reader's hooks are still in `config.json` deja writes its entry
+  beside them.
+- A hook answer in Claude Code's `hookSpecificOutput` envelope is run and
+  logged as a success, and its context reaches nobody: Copilot reads only a
+  top-level `additionalContext`.
 
 Specified in [#655](https://github.com/vshulcz/deja-vu/issues/655), work
-records added in [#1231](https://github.com/vshulcz/deja-vu/pull/1231).
+records added in [#1231](https://github.com/vshulcz/deja-vu/pull/1231),
+auto-recall in [#4231](https://github.com/vshulcz/deja-vu/issues/4231).
 
-**Last verified:** 2026-08-14
+**Last verified:** 2026-10-01
