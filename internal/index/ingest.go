@@ -89,6 +89,7 @@ func IngestFilesReport(dir string) map[string]FileIngest {
 // file rewritten without its bad line must be able to clear its own count
 // (#2015). The per-harness map every reader asks for is the sum.
 func mergeIngestDiag(m *Manifest) {
+	reasons := sources.DiagReasons()
 	malformed, failed := sources.DiagSnapshot()
 	if m.IngestFiles == nil {
 		m.IngestFiles = map[string]FileIngest{}
@@ -107,6 +108,11 @@ func mergeIngestDiag(m *Manifest) {
 	for p, n := range malformed {
 		e := m.IngestFiles[p]
 		e.Malformed += n
+		m.IngestFiles[p] = e
+	}
+	for p, r := range reasons {
+		e := m.IngestFiles[p]
+		e.Reason = r
 		m.IngestFiles[p] = e
 	}
 	for p, msg := range failed {

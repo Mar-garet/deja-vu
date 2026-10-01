@@ -679,6 +679,9 @@ type FileIngest struct {
 	// the same reason as the other two: a pass that reads one transcript must
 	// not speak for what another one holds (#2022).
 	Clipped int `json:"clipped,omitempty"`
+	// Reason says why the last unusable record was skipped, for a store whose
+	// records are rows rather than lines a reader can go and look at (#4341).
+	Reason string `json:"reason,omitempty"`
 }
 
 type manifestCore struct {

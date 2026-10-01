@@ -558,7 +558,9 @@ every one of them.
 `ingest_files` is where those counts came from, keyed by file path: `malformed`
 lines, `clipped` messages, and `error` when nothing from that path is in the
 index at all — it would not open, or it is one document that would not parse,
-as a cline or roo task is. It
+as a cline or roo task is. A database store counts each row it could not
+decode under `malformed` and adds `reason`, which says why the last one was
+skipped (Zed: `thread <id>: zed: unknown data_type "brotli"`). It
 is sparse — a file with nothing to report is not in it — and absent when no file
 has anything to report. The per-harness numbers above are the sum of the files
 deja can attribute to a harness, so a path it cannot place is here and in no

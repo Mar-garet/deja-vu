@@ -10,10 +10,22 @@ import "sync"
 var diagMu sync.Mutex
 var diagMalformed = map[string]int{}
 var diagFailed = map[string]string{}
+var diagReasons = map[string]string{}
 
 func diagMalformedLine(path string) {
 	diagMu.Lock()
 	diagMalformed[path]++
+	diagMu.Unlock()
+}
+
+// diagUnusableRecord counts one record a store holds and deja could not use,
+// with why. A JSONL line explains itself by its position; a row in a database
+// does not, and "unknown data_type brotli" is the difference between a bad row
+// and a format deja has not learned yet (#4341).
+func diagUnusableRecord(path, reason string) {
+	diagMu.Lock()
+	diagMalformed[path]++
+	diagReasons[path] = reason
 	diagMu.Unlock()
 }
 
@@ -53,6 +65,19 @@ func DiagFailedPaths() map[string]string {
 	return out
 }
 
+// DiagReasons returns why the last unusable record of each store was skipped,
+// without clearing them. Only stores whose records carry no line of their own
+// to point at report one.
+func DiagReasons() map[string]string {
+	diagMu.Lock()
+	defer diagMu.Unlock()
+	out := make(map[string]string, len(diagReasons))
+	for p, r := range diagReasons {
+		out[p] = r
+	}
+	return out
+}
+
 // DiagSnapshot returns and clears the counters accumulated since the last
 // snapshot: malformed JSONL lines per file, and files whose parse failed
 // outright with the error text.
@@ -62,5 +87,6 @@ func DiagSnapshot() (malformed map[string]int, failed map[string]string) {
 	malformed, failed = diagMalformed, diagFailed
 	diagMalformed = map[string]int{}
 	diagFailed = map[string]string{}
+	diagReasons = map[string]string{}
 	return malformed, failed
 }
