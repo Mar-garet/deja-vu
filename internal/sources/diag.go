@@ -1,6 +1,9 @@
 package sources
 
-import "sync"
+import (
+	"maps"
+	"sync"
+)
 
 // Ingest diagnostics are a side channel, not a parser API change: scanners and
 // file loaders report what they skipped, the index aggregates it per harness
@@ -11,6 +14,7 @@ var diagMu sync.Mutex
 var diagMalformed = map[string]int{}
 var diagFailed = map[string]string{}
 var diagReasons = map[string]string{}
+var diagRecords = map[string]map[string]string{}
 
 func diagMalformedLine(path string) {
 	diagMu.Lock()
@@ -22,11 +26,29 @@ func diagMalformedLine(path string) {
 // with why. A JSONL line explains itself by its position; a row in a database
 // does not, and "unknown data_type brotli" is the difference between a bad row
 // and a format deja has not learned yet (#4341).
-func diagUnusableRecord(path, reason string) {
+//
+// The id is kept too: a store read from its watermark hands back only the rows
+// changed since, so the index carries the ids of the rows it skipped before
+// rather than forgetting them on the next pass.
+func diagUnusableRecord(path, id, reason string) {
 	diagMu.Lock()
 	diagMalformed[path]++
 	diagReasons[path] = reason
+	if diagRecords[path] == nil {
+		diagRecords[path] = map[string]string{}
+	}
+	diagRecords[path][id] = reason
 	diagMu.Unlock()
+}
+
+// SkippedNoun names the unit a harness's skip count is in. The JSONL readers
+// skip lines; Zed skips threads, rows of one database, and "2 lines skipped"
+// sent the reader looking for lines that do not exist (#4341).
+func SkippedNoun(harness string) string {
+	if harness == "zed" {
+		return "thread"
+	}
+	return "line"
 }
 
 func diagFileError(path string, err error) {
@@ -78,6 +100,18 @@ func DiagReasons() map[string]string {
 	return out
 }
 
+// DiagUnusableRecords returns the ids of the records each store could not use,
+// with why, without clearing them.
+func DiagUnusableRecords() map[string]map[string]string {
+	diagMu.Lock()
+	defer diagMu.Unlock()
+	out := make(map[string]map[string]string, len(diagRecords))
+	for p, recs := range diagRecords {
+		out[p] = maps.Clone(recs)
+	}
+	return out
+}
+
 // DiagSnapshot returns and clears the counters accumulated since the last
 // snapshot: malformed JSONL lines per file, and files whose parse failed
 // outright with the error text.
@@ -88,5 +122,6 @@ func DiagSnapshot() (malformed map[string]int, failed map[string]string) {
 	diagMalformed = map[string]int{}
 	diagFailed = map[string]string{}
 	diagReasons = map[string]string{}
+	diagRecords = map[string]map[string]string{}
 	return malformed, failed
 }

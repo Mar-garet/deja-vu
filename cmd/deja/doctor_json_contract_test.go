@@ -61,7 +61,7 @@ func TestDoctorJSONKeysMatchTheDocumentedContract(t *testing.T) {
 		// index.HarnessIngest
 		"malformed_lines": true, "clipped_messages": true,
 		// index.FileIngest
-		"malformed": true, "clipped": true,
+		"malformed": true, "clipped": true, "reason": true,
 		"failed_files": true, "last_error": true,
 		// doctorAutoStatus
 		"auto_recall": true, "binary_missing": true,

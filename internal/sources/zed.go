@@ -265,12 +265,12 @@ func zedSession(db string, r zedRow) (model.Session, bool) {
 	}
 	doc, err := zedBody(r.DataType, r.Data)
 	if err != nil {
-		diagUnusableRecord(db, fmt.Sprintf("thread %s: %v", r.ID, err))
+		diagUnusableRecord(db, r.ID, fmt.Sprintf("thread %s: %v", r.ID, err))
 		return model.Session{}, false
 	}
 	var th zedThread
 	if err := json.Unmarshal(doc, &th); err != nil {
-		diagUnusableRecord(db, fmt.Sprintf("thread %s: zed: thread body is not JSON: %v", r.ID, err))
+		diagUnusableRecord(db, r.ID, fmt.Sprintf("thread %s: zed: thread body is not JSON: %v", r.ID, err))
 		return model.Session{}, false
 	}
 	updated := zedTime(r.UpdatedAt)

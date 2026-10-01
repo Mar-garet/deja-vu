@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -90,16 +91,24 @@ func IngestFilesReport(dir string) map[string]FileIngest {
 // (#2015). The per-harness map every reader asks for is the sum.
 func mergeIngestDiag(m *Manifest) {
 	reasons := sources.DiagReasons()
+	records := sources.DiagUnusableRecords()
 	malformed, failed := sources.DiagSnapshot()
 	if m.IngestFiles == nil {
 		m.IngestFiles = map[string]FileIngest{}
 	}
 	// Whatever this pass read, it read whole: its files start from nothing and
-	// take what the parsers just reported.
+	// take what the parsers just reported. A database store read from its
+	// watermark is the exception for the rows it skipped before: they are
+	// still in the store, just older than the stamp (#4341).
+	carried := map[string]FileIngest{}
 	for p := range passParsed {
+		e, ok := m.IngestFiles[p]
+		if ok && len(e.Unusable) > 0 && passFromWatermark[p] {
+			carried[p] = e
+		}
 		// The clip count for this pass was recorded during redaction, which
 		// runs before this fold, so it is not something to start over.
-		if e, ok := m.IngestFiles[p]; ok && e.Clipped > 0 {
+		if ok && e.Clipped > 0 {
 			m.IngestFiles[p] = FileIngest{Clipped: e.Clipped}
 			continue
 		}
@@ -113,6 +122,25 @@ func mergeIngestDiag(m *Manifest) {
 	for p, r := range reasons {
 		e := m.IngestFiles[p]
 		e.Reason = r
+		e.Unusable = records[p]
+		m.IngestFiles[p] = e
+	}
+	for p, old := range carried {
+		e := m.IngestFiles[p]
+		merged := maps.Clone(e.Unusable)
+		if merged == nil {
+			merged = map[string]string{}
+		}
+		for id, r := range old.Unusable {
+			if _, again := merged[id]; !again {
+				merged[id] = r
+				e.Malformed++
+			}
+		}
+		e.Unusable = merged
+		if e.Reason == "" {
+			e.Reason = old.Reason
+		}
 		m.IngestFiles[p] = e
 	}
 	for p, msg := range failed {
@@ -1293,7 +1321,7 @@ func harnessNarration(name string, ss []model.Session, skipped string, unreadabl
 	}
 	line := fmt.Sprintf("deja: %s: %d session%s, %d message%s", label, len(ss), pluralS(len(ss)), msgs, pluralS(msgs))
 	if unreadable > 0 {
-		line += fmt.Sprintf(" — %d line%s skipped, deja could not read %s", unreadable, pluralS(unreadable), pluralThem(unreadable))
+		line += fmt.Sprintf(" — %d %s%s skipped, deja could not read %s", unreadable, sources.SkippedNoun(name), pluralS(unreadable), pluralThem(unreadable))
 	}
 	// A file deja could not read at all is the third fact of this kind, beside
 	// the refused lines and the missing tool. Without it a store that gave up
@@ -1322,7 +1350,7 @@ func nothingReadableNarration(name string, unreadable, refused int) string {
 	// line" about three thousand turns (#2232).
 	var what []string
 	if unreadable > 0 {
-		what = append(what, fmt.Sprintf("%d line%s", unreadable, pluralS(unreadable)))
+		what = append(what, fmt.Sprintf("%d %s%s", unreadable, sources.SkippedNoun(name), pluralS(unreadable)))
 	}
 	if refused > 0 {
 		what = append(what, fmt.Sprintf("%d path%s", refused, pluralS(refused)))
@@ -3165,6 +3193,12 @@ func readWholeThisPass(r Record) bool {
 // directory lock.
 var passWholeStores map[string]bool
 
+// passFromWatermark names the database stores this pass read from their
+// watermark, so only rows changed since came back. passWholeStores cannot say
+// it: zed is in there on every pass, because the threads it does hand back
+// come whole (#4341).
+var passFromWatermark map[string]bool
+
 // wholeStoresThisPass records them, under both the store path and the harness:
 // a record names the first where it can and the second otherwise.
 //
@@ -3174,6 +3208,7 @@ var passWholeStores map[string]bool
 // read the store whole may drop one because its key came back.
 func wholeStoresThisPass(changed, old map[string]FileState) {
 	passWholeStores = map[string]bool{}
+	passFromWatermark = map[string]bool{}
 	// Rebuilt here rather than kept: a store that appeared since the last pass
 	// is one the walk has to see.
 	passStores = resolveStorePaths()
@@ -3181,6 +3216,9 @@ func wholeStoresThisPass(changed, old map[string]FileState) {
 		harness := storeHarness(p)
 		if harness == "" {
 			continue
+		}
+		if old[p].LastUpdated != 0 {
+			passFromWatermark[p] = true
 		}
 		if old[p].LastUpdated == 0 || rereadsWholeSessions(p) {
 			passWholeStores[harness] = true
@@ -3317,6 +3355,7 @@ func beginPass() {
 	passParsed = nil
 	passRead = nil
 	passWholeStores = nil
+	passFromWatermark = nil
 }
 
 // passParsed is the set of files the pass in progress re-read. Package state

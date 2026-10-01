@@ -2309,8 +2309,8 @@ func doctorIndex(w io.Writer, idx doctorIndexReport, dir string) {
 			clipped = fmt.Sprintf(", %d message%s stored short of the transcript (over 64 KB)",
 				e.ClippedMessages, pluralS(e.ClippedMessages))
 		}
-		fmt.Fprintf(w, "  ingest   %s: %d unusable line%s skipped, %d path%s unreadable%s — see `deja doctor --json`\n",
-			h, e.MalformedLines, pluralS(e.MalformedLines), e.FailedFiles, pluralS(e.FailedFiles), clipped)
+		fmt.Fprintf(w, "  ingest   %s: %d unusable %s%s skipped, %d path%s unreadable%s — see `deja doctor --json`\n",
+			h, e.MalformedLines, sources.SkippedNoun(h), pluralS(e.MalformedLines), e.FailedFiles, pluralS(e.FailedFiles), clipped)
 	}
 	reportFutureDated(w, dir)
 }
