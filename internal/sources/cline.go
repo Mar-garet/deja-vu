@@ -459,9 +459,10 @@ func clineTurnToolOutput(raw json.RawMessage, ts time.Time) []model.Message {
 	return out
 }
 
-// clineToolResults reads what a call printed. The content is a string on the
-// shapes observed, and results are kept whether or not the call succeeded —
-// the error a command hit is what a later search reaches for.
+// clineToolResults reads what a call printed. The content is a string, text
+// blocks, or Cline CLI's list of per-command entries, and results are kept
+// whether or not the call succeeded — the error a command hit is what a later
+// search reaches for.
 func clineToolResults(blocks []any) []string {
 	var out []string
 	for _, it := range blocks {
@@ -474,15 +475,39 @@ func clineToolResults(blocks []any) []string {
 		}
 		body := strings.TrimSpace(contentText(m["content"]))
 		if body == "" {
-			if s, _ := m["content"].(string); s != "" {
-				body = strings.TrimSpace(s)
-			}
+			body = clineResultEntries(m["content"])
 		}
 		if body != "" {
 			out = append(out, body)
 		}
 	}
 	return out
+}
+
+// clineResultEntries reads the list Cline CLI writes for run_commands and
+// read_files: one {query, result, error, success} entry per command or file.
+// The result carries the stderr; the error is added when the result does not
+// already say it, and stands alone when the command never started (#4315).
+func clineResultEntries(v any) string {
+	list, _ := v.([]any)
+	var parts []string
+	for _, it := range list {
+		e, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		r, _ := e["result"].(string)
+		r = strings.TrimSpace(r)
+		// The error is usually already in the result ("[Command exited with
+		// code 1]"); one that says something else, like a timeout, is kept too.
+		if er, _ := e["error"].(string); strings.TrimSpace(er) != "" && !strings.Contains(r, strings.TrimSpace(er)) {
+			r = strings.TrimSpace(r + "\n" + strings.TrimSpace(er))
+		}
+		if r != "" {
+			parts = append(parts, r)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 // clineContentText extracts plain text from either a string content or a

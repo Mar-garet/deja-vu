@@ -356,6 +356,9 @@ import (
 // chat file is re-read whole only when it changes, so a rebuild. It also
 // brings in a Kiro CLI session's tool calls and results, which were dropped as
 // not text (#4299); a finished transcript is not re-read.
+// 60 also: a Cline CLI run_commands or read_files result, written as a list of
+// per-command entries, is indexed as tool output (#4315); a finished
+// transcript is not re-read, so a rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

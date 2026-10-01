@@ -11,7 +11,11 @@
 `type:"text"` blocks; thinking, images, compaction artifacts and non-lead agents
 are skipped by design. Tool calls are read as well: `run_commands` becomes a
 command record, the file tools a files record, and the editor's two sides the
-replaced span and the hashed written lines. The legacy extension's store takes
+replaced span and the hashed written lines. A tool result is indexed as tool
+output whether it is a string or the CLI's list of
+`{query, result, error, success}` entries that `run_commands` and
+`read_files` write; an error the result does not already carry is kept with
+it (#4315). The legacy extension's store takes
 the Roo path for those, since its tools are Roo's — see
 [Roo Code](roo.md) for the SEARCH/REPLACE shape and the workspace-relative
 paths. The legacy `<task>...</task>` user envelope is unwrapped so the tags are
