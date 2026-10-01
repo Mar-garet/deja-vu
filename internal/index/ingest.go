@@ -3828,7 +3828,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	for key := range replaceKeys {
 		dropped[key] = true
 	}
-	buildCommandFailsFromIndex(tmp, carriedCommandFailState(dir, old, tmp, m.Generation), dropped)
+	buildCommandFailsFromIndex(tmp, carriedCommandFailState(dir, old, tmp, m.Generation, dropped), dropped)
 	buildSessionFactsFromIndex(tmp)
 	return swapIndexDir(dir, tmp)
 }

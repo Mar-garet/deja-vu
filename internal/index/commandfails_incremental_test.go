@@ -83,6 +83,18 @@ func (c *cfStore) appendTurn(project string, i, k int, cmd, out string) {
 	}
 }
 
+func (c *cfStore) appendRaw(project string, i int, text string) {
+	c.t.Helper()
+	f, err := os.OpenFile(c.path(project, i), os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := f.WriteString(text); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
 func countOutputsRead(t *testing.T) *int {
 	n := new(int)
 	commandFailOutputRead = func() { *n++ }
@@ -135,6 +147,21 @@ func TestACommandFailureUpdateReadsOnlyWhatChanged(t *testing.T) {
 		t.Errorf("replacing one session read %d tool outputs, want that session's, at most 3", *read)
 	}
 
+	// A pass with nothing for this table to read does not run it, so the state
+	// stops short of the log; the next rewrite still reads only its session.
+	c.appendRaw("app", 4, c.prompt("app", 4, "just talking"))
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	*read = 0
+	c.write("app", 5, "fix the store test 5, take two")
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if *read == 0 || *read > 3 {
+		t.Errorf("a rewrite after a prompt-only append read %d tool outputs, want that session's, at most 3", *read)
+	}
+
 	// Without the state, the walk is whole again.
 	if err := os.Remove(commandFailStatePath(dir)); err != nil {
 		t.Fatal(err)
@@ -168,7 +195,7 @@ func TestACommandFailureUpdateEndsWhereAFullBuildDoes(t *testing.T) {
 	if err := Ensure(dir, "", true, nil); err != nil {
 		t.Fatal(err)
 	}
-	check := func(step string) {
+	checkWalk := func(step string) {
 		t.Helper()
 		got := ReadCommandFails(dir)
 		if len(got) == 0 {
@@ -177,6 +204,11 @@ func TestACommandFailureUpdateEndsWhereAFullBuildDoes(t *testing.T) {
 		if want := commandFailsByFullWalk(t, dir); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: the update left\n%+v\na full walk of the same index gives\n%+v", step, got, want)
 		}
+	}
+	check := func(step string) {
+		t.Helper()
+		checkWalk(step)
+		got := ReadCommandFails(dir)
 		fresh := filepath.Join(t.TempDir(), "index.db")
 		if err := Ensure(fresh, "", true, nil); err != nil {
 			t.Fatal(err)
@@ -248,6 +280,41 @@ func TestACommandFailureUpdateEndsWhereAFullBuildDoes(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("append after the rest")
+
+	// One pass that rewrites a session and brings new ones: the new sessions
+	// lost nothing, and only being re-read gets their runs counted.
+	c.write("app", 0, "rewritten again")
+	cargo := func(project string, i int) {
+		c.appendTurn(project, i, 30, "cargo build", "error[E0425]: cannot find value `x` in this scope")
+	}
+	for _, i := range []int{50, 51} {
+		c.write("web", i, "a new rust session")
+		cargo("web", i)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	check("a rewrite with new sessions")
+
+	// One id in two projects (#699), its cargo failure only in aaa's copy.
+	// Removing aaa leaves the row on the key, so only dropping the records
+	// that went takes it back.
+	c.write("mmm", 60, "the same id here")
+	c.write("aaa", 60, "and here")
+	cargo("aaa", 60)
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	check("a shared id")
+	if err := os.RemoveAll(filepath.Dir(c.path("aaa", 60))); err != nil {
+		t.Fatal(err)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Against the walk only: a full build of these transcripts holds a session
+	// the update dropped, which is older than this table.
+	checkWalk("a shared id losing one copy")
 }
 
 // commandFailsByFullWalk is the table a walk of every record in the index

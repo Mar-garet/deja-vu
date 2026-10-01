@@ -368,22 +368,32 @@ func readCommandFailState(dir string) *commandFailState {
 }
 
 // carriedCommandFailState is dir's state for an update rebuilt into tmp,
-// which writes every record it keeps again. It holds only if it covered dir's
-// log exactly; it then covers all of tmp's, less the sessions the update
-// dropped records of or read again, which the caller hands over as redo.
-func carriedCommandFailState(dir string, old Manifest, tmp, generation string) *commandFailState {
+// which writes every record it keeps again. It then covers all of tmp's log,
+// less the sessions in redo: the ones the update dropped records of or read
+// again, which the caller puts there, and the ones with a command or an output
+// in dir's log past where the state stopped. A pass with nothing for this
+// table does not run it, so a prompt-only append leaves that tail behind, and
+// refusing the state over it walked everything on the next rewrite.
+func carriedCommandFailState(dir string, old Manifest, tmp, generation string, redo map[string]bool) *commandFailState {
 	st := readCommandFailState(dir)
 	if st == nil || st.Generation != old.Generation {
 		return nil
 	}
-	if fi, err := os.Stat(filepath.Join(dir, "records.bin")); err != nil || fi.Size() != st.Size {
+	path := filepath.Join(dir, "records.bin")
+	fi, err := os.Stat(path)
+	if err != nil || fi.Size() < st.Size {
 		return nil
 	}
-	fi, err := os.Stat(filepath.Join(tmp, "records.bin"))
+	if fi.Size() > st.Size {
+		if _, err := eachCommandAndOutputFrom(path, old, st.Size, nil, func(r Record) { redo[r.Key] = true }); err != nil {
+			return nil
+		}
+	}
+	nfi, err := os.Stat(filepath.Join(tmp, "records.bin"))
 	if err != nil {
 		return nil
 	}
-	st.Generation, st.Size = generation, fi.Size()
+	st.Generation, st.Size = generation, nfi.Size()
 	return st
 }
 
