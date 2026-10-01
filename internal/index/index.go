@@ -335,7 +335,11 @@ import (
 // 60: a resumed Gemini CLI session keeps the prompts deja's recall was
 // prepended to; Gemini's own resume history leaves them out (#4214). The
 // chat file is re-read whole only when it changes, so a rebuild.
-const version = 60
+//
+// 61: an aider session carries the files aider added and edited and the
+// commands it ran, and an /ask question is kept once (#4324, #4325). The
+// history is append-only and a finished session is not re-read, so a rebuild.
+const version = 61
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an

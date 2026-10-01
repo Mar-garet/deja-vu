@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- aider sessions carry the files aider added and edited and the commands it ran (`/run`, `!`, `/test`, `/git`), so a launch that only ran a command is no longer dropped; an `/ask`, `/code` or `/context` question is indexed once instead of twice and no longer titles the session with the command; and a project started as `deja aider` is indexed without setting DEJA_AIDER_ROOTS. The index rebuilds once (#4324, #4325, #4326).
 - `deja index` no longer says "no agent history was found" when the transcript it just reported deleted is still held and searchable (#4221).
 - `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).
 - A VS Code Copilot Chat session stays in the index while VS Code is writing its last line; a half-written tail used to drop the whole chat from search and `show` until the next pass (#4229).

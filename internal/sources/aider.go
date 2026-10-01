@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -20,9 +21,10 @@ import (
 
 const aiderHistoryName = ".aider.chat.history.md"
 
-// AiderFiles returns history files to index: $HOME plus any directories
-// listed in DEJA_AIDER_ROOTS (colon-separated, scanned two levels deep —
-// scanning all of $HOME would make warmup unusable).
+// AiderFiles returns history files to index: $HOME, every project `deja aider`
+// has started aider in, plus any directories listed in DEJA_AIDER_ROOTS
+// (colon-separated, scanned two levels deep — scanning all of $HOME would make
+// warmup unusable).
 func AiderFiles() []string {
 	var out []string
 	seen := map[string]bool{}
@@ -42,6 +44,12 @@ func AiderFiles() []string {
 	// documented way to move the history off the default name.
 	if p := os.Getenv("AIDER_CHAT_HISTORY_FILE"); p != "" {
 		add(p)
+	}
+	// aider writes the history at the git root it runs in, so $HOME holds one
+	// only for a launch from $HOME. The projects `deja aider` was started in
+	// are read without anyone listing them (#4326).
+	for _, dir := range aiderProjects() {
+		add(filepath.Join(dir, aiderHistoryName))
 	}
 	for _, root := range filepath.SplitList(os.Getenv("DEJA_AIDER_ROOTS")) {
 		if root == "" {
@@ -71,6 +79,52 @@ func AiderFiles() []string {
 	return out
 }
 
+// AiderProjectsPath is the list of directories `deja aider` has started aider
+// in, one per line.
+func AiderProjectsPath() string {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		base = filepath.Join(Home(), ".config")
+	}
+	return filepath.Join(base, "deja", "aider-projects")
+}
+
+func aiderProjects() []string {
+	b, err := os.ReadFile(AiderProjectsPath())
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// RecordAiderProject adds dir to the list AiderFiles reads, once.
+func RecordAiderProject(dir string) error {
+	for _, p := range aiderProjects() {
+		if p == dir {
+			return nil
+		}
+	}
+	path := AiderProjectsPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteString(dir + "\n"); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
 func LoadAider() []model.Session {
 	return parseFiles(AiderFiles(), ParseAiderFile)
 }
@@ -78,18 +132,73 @@ func LoadAider() []model.Session {
 const aiderSessionMark = "# aider chat started at "
 
 // aiderCommands are aider's own inputs, which it records in the transcript the
-// same way it records a question. Only the ones that take no prose, or whose
-// argument is a path or a shell line rather than something the person said —
-// `/ask` and `/code` carry a real question and stay.
+// same way it records a question. None of them is something the person said:
+// most take no prose or a path, `/run`, `/test` and `/git` are shell lines
+// (kept as commands, see aiderShellCommand), and `/ask`, `/code`, `/context`
+// and `/architect` hand their question to a sub-coder, which logs it again as
+// its own `#### ` line — kept, the question was indexed twice and the session
+// was titled with the command (#4325).
 var aiderCommands = map[string]bool{
-	"add": true, "architect": true, "chat-mode": true, "clear": true, "clipboard": true,
-	"code": false, "commit": true, "copy": true, "diff": true, "drop": true,
-	"editor": true, "exit": true, "git": true, "help": true, "lint": true, "load": true,
-	"ls": true, "map": true, "map-refresh": true, "model": true, "models": true,
-	"multiline-mode": true, "paste": true, "quit": true, "read-only": true, "report": true,
-	"reset": true, "run": true, "save": true, "settings": true, "test": true,
-	"tokens": true, "undo": true, "voice": true, "web": true,
+	"add": true, "architect": true, "ask": true, "chat-mode": true, "clear": true,
+	"clipboard": true, "code": true, "commit": true, "context": true, "copy": true,
+	"copy-context": true, "diff": true, "drop": true, "edit": true, "editor": true,
+	"editor-model": true, "exit": true, "git": true, "help": true, "lint": true,
+	"load": true, "ls": true, "map": true, "map-refresh": true, "model": true,
+	"models": true, "multiline-mode": true, "paste": true, "quit": true,
+	"read-only": true, "reasoning-effort": true, "report": true, "reset": true,
+	"run": true, "save": true, "settings": true, "test": true, "think-tokens": true,
+	"tokens": true, "undo": true, "voice": true, "weak-model": true, "web": true,
 }
+
+// aiderShellCommand returns the shell line an input ran: `!cmd` and `/run cmd`
+// run it, `/test cmd` runs it as the test command, and `/git args` is git.
+func aiderShellCommand(line string) (string, bool) {
+	t := strings.TrimSpace(line)
+	if rest, ok := strings.CutPrefix(t, "!"); ok {
+		return strings.TrimSpace(rest), true
+	}
+	if !strings.HasPrefix(t, "/") {
+		return "", false
+	}
+	name, rest, _ := strings.Cut(t[1:], " ")
+	rest = strings.TrimSpace(rest)
+	switch strings.ToLower(name) {
+	case "run", "test":
+		return rest, true
+	case "git":
+		if rest == "" {
+			return "", true
+		}
+		return "git " + rest, true
+	}
+	return "", false
+}
+
+// aiderOutputFile returns the file an output line says aider added or edited:
+// "Applied edit to x", "Added x to the chat", "Added x to the chat (read-only)."
+// and "Added x to read-only files.". "Added 3 lines of output to the chat." is
+// not a file.
+func aiderOutputFile(out string) string {
+	out = strings.TrimSuffix(out, ".")
+	if f, ok := strings.CutPrefix(out, "Applied edit to "); ok {
+		return f
+	}
+	f, ok := strings.CutPrefix(out, "Added ")
+	if !ok {
+		return ""
+	}
+	for _, tail := range []string{" to the chat (read-only)", " to the chat", " to read-only files"} {
+		if g, ok := strings.CutSuffix(f, tail); ok {
+			if aiderOutputLines.MatchString(g) {
+				return ""
+			}
+			return g
+		}
+	}
+	return ""
+}
+
+var aiderOutputLines = regexp.MustCompile(`^\d+ lines? of output$`)
 
 // aiderSlashCommand reports that a line is one of aider's own commands rather
 // than something the person asked.
@@ -118,7 +227,14 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 	defer func() { _ = f.Close() }()
 
 	project := projectName(filepath.Dir(path))
+	// aider names files relative to its git root, which is where the history
+	// sits unless it was moved with --chat-history-file.
+	fileRoot := ""
+	if filepath.Base(path) == aiderHistoryName {
+		fileRoot = filepath.Dir(path)
+	}
 	var out []model.Session
+	var seenFiles map[string]bool
 	var cur *model.Session
 	var role string
 	var buf []string
@@ -175,6 +291,7 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 			ts, _ := time.ParseInLocation("2006-01-02 15:04:05", strings.TrimSpace(strings.TrimPrefix(line, aiderSessionMark)), time.Local)
 			id := aiderSessionID(path, idx)
 			cur = &model.Session{Harness: "aider", ID: id, Project: project, Path: path, Started: ts, Updated: ts}
+			seenFiles = map[string]bool{}
 			inFence = false
 			afterOutput, seenUser = false, false
 			continue
@@ -200,6 +317,14 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 			afterOutput = false
 			seenUser = true
 			t := strings.TrimPrefix(line, "#### ")
+			// A shell line is what ran, not what was asked (#4324).
+			if cmd, ok := aiderShellCommand(t); ok {
+				flush()
+				if cmd != "" && IndexCommands() && worthIndexing(cmd) {
+					cur.Messages = append(cur.Messages, model.Message{Role: RoleCommand, Text: cmd, Time: cur.Started})
+				}
+				continue
+			}
 			// aider logs its own commands the same way — `/undo`, `/clear`,
 			// `/add x` — and they are not the person's question; a message
 			// that merely opens with a path ("/etc/hosts is wrong") is (#3248).
@@ -217,9 +342,23 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 			}
 			buf = append(buf, t)
 		case strings.HasPrefix(line, "> "), line == ">":
-			// tool/system output: ends any assistant block, not indexed as a message
+			// tool/system output: ends any assistant block, not indexed as a
+			// message. What it says aider added, edited or ran is kept as the
+			// record the JSONL harnesses write for the same thing (#4324).
 			flush()
 			afterOutput = true
+			out := strings.TrimSpace(strings.TrimPrefix(line, ">"))
+			if f := aiderOutputFile(out); f != "" && IndexToolPaths() && !strings.ContainsAny(f, "\n\r") {
+				if fileRoot != "" && !filepath.IsAbs(f) {
+					f = filepath.Join(fileRoot, f)
+				}
+				if !seenFiles[f] {
+					seenFiles[f] = true
+					cur.Messages = append(cur.Messages, model.Message{Role: RoleFiles, Text: f, Time: cur.Started})
+				}
+			} else if cmd, ok := strings.CutPrefix(out, "Running "); ok && IndexCommands() && worthIndexing(cmd) {
+				cur.Messages = append(cur.Messages, model.Message{Role: RoleCommand, Text: cmd, Time: cur.Started})
+			}
 		case strings.TrimSpace(line) == "":
 			afterOutput = false
 			buf = append(buf, "")

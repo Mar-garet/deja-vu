@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/index"
+	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
 // aider has neither an MCP client nor hooks, but read-only files are re-read
@@ -229,6 +230,18 @@ func cmdAider(dir string, rest []string, sourceInstance string) error {
 	// an editor the user did not ask for.
 	if len(rest) == 0 {
 		return cmdSearch(dir, []string{"aider"}, sourceInstance)
+	}
+	// aider writes its history at the git root it runs in, where nothing
+	// else would look for it: note the project so the next index reads it
+	// (#4326).
+	if wd, err := os.Getwd(); err == nil {
+		root := gitRootOf(filepath.Join(wd, ".aider.chat.history.md"))
+		if root == "" {
+			root = wd
+		}
+		if err := sources.RecordAiderProject(root); err != nil {
+			fmt.Fprintf(os.Stderr, "deja: could not note this project for indexing: %v\n", err)
+		}
 	}
 	if err := refreshAiderContext(dir); err != nil {
 		// A failed recall is not a reason to keep the user out of their editor.
