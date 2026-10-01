@@ -117,23 +117,29 @@ func parseHermesDBWhere(db, where string) ([]model.Session, error) {
 	}
 	// json_object rather than the shell's -json mode, which is quadratic in
 	// what it escapes — see sqliteRows.
+	cols := hermesColumns(db)
+	// Rewind takes turns back with active=0; compaction archives the turns it
+	// summarised with active=0 and compacted=1, and Hermes' own search still
+	// reads those. A store with active alone has only the first.
+	live, archived := "", ""
+	switch {
+	case cols["active"] && cols["compacted"]:
+		live = " and (active = 1 or compacted = 1)"
+		archived = `,'compacted',compacted`
+	case cols["active"]:
+		live = " and active = 1"
+	}
 	q := `select json_object('session_id',cast(session_id as text),'role',cast(role as text),` +
-		`'content',cast(content as text),'timestamp',timestamp) from messages ` +
-		`where role in ('user','assistant') and content is not null and content <> ''` + where +
+		`'content',cast(content as text),'timestamp',timestamp` + archived + `) from messages ` +
+		`where role in ('user','assistant') and content is not null and content <> ''` + live + where +
 		` order by session_id,timestamp,id`
-	if cols := hermesColumns(db); cols["tool_calls"] && cols["tool_call_id"] && cols["tool_name"] {
+	if cols["tool_calls"] && cols["tool_call_id"] && cols["tool_name"] {
 		// A tool-call row has no content, only tool_calls, and the result lands
 		// on a `tool` row; both carry the session's work (#4242).
-		live := ""
-		if cols["active"] && cols["compacted"] {
-			// What Hermes' own search reads: live rows and the ones compaction
-			// archived. active=0 with compacted=0 is a turn rewound away.
-			live = " and (active = 1 or compacted = 1)"
-		}
 		q = `select json_object('session_id',cast(session_id as text),'role',cast(role as text),` +
 			`'content',cast(content as text),'timestamp',timestamp,` +
 			`'tool_calls',cast(tool_calls as text),'tool_call_id',cast(tool_call_id as text),` +
-			`'tool_name',cast(tool_name as text)) from messages ` +
+			`'tool_name',cast(tool_name as text)` + archived + `) from messages ` +
 			`where role in ('user','assistant','tool') and ((content is not null and content <> '')` +
 			` or (tool_calls is not null and tool_calls <> ''))` + live + where +
 			` order by session_id,timestamp,id`

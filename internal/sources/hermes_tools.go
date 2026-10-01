@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,32 +30,67 @@ type hermesSession struct {
 	// commandAt is which messages hold the commands a call ran, by call id, so
 	// the exit code on the `tool` row lands on its command.
 	commandAt map[string][]int
-	// Compaction writes the kept tail again under the same call ids, its
-	// results replaced by stubs; the first call and result under an id are
-	// the real ones.
-	seenCall, seenResult map[string]bool
-	dropped              bool
+	// In-place compaction archives the session's rows (compacted=1) and
+	// writes the kept head and tail again as live rows, under the same call
+	// ids and with results replaced by stubs. A live row that repeats an
+	// archived one is that copy. Within one side an id can repeat honestly:
+	// with no provider id Hermes derives one from the call's name and
+	// arguments, so the same command run twice carries the same id.
+	archivedCall, archivedResult, archivedProse map[string]bool
+	dropped                                     bool
 }
 
 func newHermesSession(s model.Session) *hermesSession {
-	return &hermesSession{s: s, commandAt: map[string][]int{}, seenCall: map[string]bool{}, seenResult: map[string]bool{}}
+	return &hermesSession{s: s, commandAt: map[string][]int{},
+		archivedCall: map[string]bool{}, archivedResult: map[string]bool{}, archivedProse: map[string]bool{}}
 }
+
+// hermesCompactionSummary opens the message compaction writes between the
+// head and tail it keeps (agent/context_compressor.py SUMMARY_PREFIX).
+const hermesCompactionSummary = "[CONTEXT COMPACTION"
 
 func (h *hermesSession) row(r map[string]any) {
 	t := hermesTime(r["timestamp"])
 	role := str(r["role"])
 	txt := hermesText(str(r["content"]))
+	archived := fmt.Sprint(r["compacted"]) == "1"
 	if role == "tool" {
-		h.result(txt, str(r["tool_name"]), str(r["tool_call_id"]), t)
+		h.result(txt, str(r["tool_name"]), str(r["tool_call_id"]), archived, t)
 		return
+	}
+	if txt != "" {
+		key := role + "\x00" + txt
+		switch {
+		case strings.HasPrefix(txt, hermesCompactionSummary):
+			// A restatement of turns the store still holds, kept where
+			// `--role summary` reaches it and ordinary search does not.
+			role = RoleSummary
+		case archived:
+			h.archivedProse[key] = true
+		case h.archivedProse[key]:
+			txt = ""
+		}
 	}
 	if txt != "" {
 		h.s.Touch(t)
 		h.s.Messages = append(h.s.Messages, model.Message{Role: role, Text: capParsedMessage(txt), Time: t})
 	}
 	if role == "assistant" {
-		h.calls(str(r["tool_calls"]), t)
+		h.calls(str(r["tool_calls"]), archived, t)
 	}
+}
+
+// repeat reports whether a call or result id is compaction's copy of an
+// archived one, and notes the archived ones.
+func repeat(seen map[string]bool, id string, archived bool) bool {
+	if id == "" {
+		return false
+	}
+	if archived {
+		seen[id] = true
+		return false
+	}
+	return seen[id]
 }
 
 // done hands the session back without the command records of runs that never
@@ -74,7 +111,7 @@ func (h *hermesSession) done() model.Session {
 // calls turns an assistant row's OpenAI-style tool_calls into work records.
 // The column is json.dumps of what the caller passed, so a single call can be
 // an object rather than a list (hermes_state.py append_message).
-func (h *hermesSession) calls(raw string, t time.Time) {
+func (h *hermesSession) calls(raw string, archived bool, t time.Time) {
 	if raw == "" {
 		return
 	}
@@ -91,11 +128,8 @@ func (h *hermesSession) calls(raw string, t time.Time) {
 		if m, ok := c.(map[string]any); ok {
 			id, _ = m["id"].(string)
 		}
-		if id != "" {
-			if h.seenCall[id] {
-				continue
-			}
-			h.seenCall[id] = true
+		if repeat(h.archivedCall, id, archived) {
+			continue
 		}
 		blocks := reasonixToolUses([]any{c})
 		if len(blocks) == 0 {
@@ -136,23 +170,21 @@ func (h *hermesSession) calls(raw string, t time.Time) {
 	}
 }
 
-// result records a `tool` row. Every Hermes tool answers in JSON, and what it
-// says is in output (terminal), content (read_file), diff (patch),
-// matches_text (search_files) or error; the rest is bookkeeping, and keys
-// starting with _ are hints to the model. A result with none of those — a
-// write_file's byte count — is not kept.
+// result records a `tool` row. Every Hermes tool answers in JSON. What it
+// says is usually in output (terminal), content (read_file), diff (patch),
+// matches_text (search_files) or error, and then the rest is bookkeeping;
+// other tools nest it — search_files' files, web_search's data, the results
+// of web_extract and delegate_task — and then every string in it is kept.
+// Keys starting with _ are hints to the model and never kept.
 //
 // terminal's exit_code rides on the command it answers. -1 is a command that
 // never ran — denied, blocked, waiting on approval, invalid, failed to start
 // (tools/terminal_tool.py) — so its command record is dropped: kept, it reads
 // as a run that happened, and `→ exit -1` is not a status the index reads.
 // Why it did not run stays in the tool output.
-func (h *hermesSession) result(txt, tool, callID string, t time.Time) {
-	if callID != "" {
-		if h.seenResult[callID] {
-			return
-		}
-		h.seenResult[callID] = true
+func (h *hermesSession) result(txt, tool, callID string, archived bool, t time.Time) {
+	if repeat(h.archivedResult, callID, archived) {
+		return
 	}
 	if txt == "" || hermesCompressorStub(txt, tool) {
 		return
@@ -174,14 +206,16 @@ func (h *hermesSession) result(txt, tool, callID string, t time.Time) {
 }
 
 func (h *hermesSession) exit(callID string, code int) {
-	if code == 0 || callID == "" {
+	// Other negative codes are a process killed by a signal after it started
+	// (tools/environments/base.py); it ran, and the marker reads digits only.
+	if code == 0 || callID == "" || (code < 0 && code != -1) {
 		return
 	}
 	for _, i := range h.commandAt[callID] {
 		if i >= len(h.s.Messages) || h.s.Messages[i].Role != RoleCommand {
 			continue
 		}
-		if code < 0 {
+		if code == -1 {
 			h.s.Messages[i].Role = ""
 			h.dropped = true
 			continue
@@ -196,11 +230,44 @@ var hermesResultKeys = []string{"output", "content", "diff", "matches_text", "er
 func hermesResultText(res map[string]any) string {
 	var parts []string
 	for _, k := range hermesResultKeys {
-		if v, _ := res[k].(string); strings.TrimSpace(v) != "" {
-			parts = append(parts, strings.TrimSpace(v))
-		}
+		parts = hermesLeaves(res[k], true, parts)
+	}
+	if len(parts) == 0 {
+		parts = hermesLeaves(res, false, nil)
 	}
 	return strings.Join(parts, "\n")
+}
+
+// hermesLeaves appends the strings in v, in key order so a record reads the
+// same on every parse. Numbers count only where the key says the value is
+// the result — {"output": 42} — and not as the counts and indexes beside it.
+func hermesLeaves(v any, numbers bool, out []string) []string {
+	switch e := v.(type) {
+	case string:
+		if s := strings.TrimSpace(e); s != "" {
+			out = append(out, s)
+		}
+	case float64:
+		if numbers {
+			out = append(out, strconv.FormatFloat(e, 'f', -1, 64))
+		}
+	case []any:
+		for _, it := range e {
+			out = hermesLeaves(it, numbers, out)
+		}
+	case map[string]any:
+		keys := make([]string, 0, len(e))
+		for k := range e {
+			if !strings.HasPrefix(k, "_") {
+				keys = append(keys, k)
+			}
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			out = hermesLeaves(e[k], numbers, out)
+		}
+	}
+	return out
 }
 
 // hermesCompressorStub reports text Hermes' context compressor wrote in place
@@ -288,21 +355,28 @@ func hermesPatchRecords(block any, t time.Time) []model.Message {
 		}
 	}
 	lines := strings.Split(patch, "\n")
+	// After Delete File and Move File the parser has no current file and
+	// passes over every line up to the next header, so those lines belong
+	// to no file here either.
+	orphan := false
 	for i, line := range lines {
 		switch {
 		case hermesPatchHeader.MatchString(line):
 			m := hermesPatchHeader.FindStringSubmatch(line)
 			file(m[2])
 			lines[i] = "*** " + m[1] + " File: " + strings.TrimSpace(m[2])
+			orphan = m[1] == "Delete"
 		case hermesPatchMove.MatchString(line):
 			m := hermesPatchMove.FindStringSubmatch(line)
 			file(m[1])
 			file(m[2])
-			// A move carries no hunks; a header of its own ends the file
-			// before it, so its lines are not read as the move's.
+			// A header of its own ends the file before it.
 			lines[i] = "*** Delete File: " + strings.TrimSpace(m[1])
+			orphan = true
 		case hermesPatchEnd.MatchString(line):
 			lines[i] = "*** End Patch"
+		case orphan:
+			lines[i] = ""
 		}
 	}
 	patch = strings.Join(lines, "\n")

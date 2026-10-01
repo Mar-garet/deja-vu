@@ -49,14 +49,21 @@
 <p>as REAL epoch seconds. An assistant row that calls tools has no <code>content</code> and an</p>
 <p>OpenAI-style <code>tool_calls</code> array instead; the result lands on a <code>tool</code> row under the</p>
 <p>same <code>tool_call_id</code>. Calls to <code>terminal</code> become commands: a non-zero <code>exit_code</code> from</p>
-<p>the result rides on the command, and <code>-1</code>, which Hermes returns for a command it never</p>
-<p>ran (denied, blocked, waiting on approval), drops the command record. <code>read_file</code>,</p>
+<p>the result rides on the command. <code>-1</code>, which Hermes returns for a command it never</p>
+<p>ran (denied, blocked, waiting on approval), drops the command record; any other</p>
+<p>negative code is a process killed by a signal after it started, so the command stays. <code>read_file</code>,</p>
 <p><code>write_file</code> and <code>patch</code> name the files, and <code>patch</code> and <code>write_file</code> give the edit and</p>
 <p>written sides — <code>patch</code> in its V4A mode as Hermes&#39; own parser reads it, <code>Move File</code></p>
-<p>included. A <code>tool</code> row is kept as tool output by what it says (<code>output</code>, <code>content</code>,</p>
-<p><code>diff</code>, <code>matches_text</code>, <code>error</code>); bookkeeping such as a byte count is not. Rows</p>
-<p>rewound away (<code>active = 0</code>, <code>compacted = 0</code>) are skipped, a call compaction wrote again</p>
-<p>counts once, and its compressor stubs are dropped. Multimodal content, stored as</p>
+<p>included, with the lines after a move or delete belonging to no file. A <code>tool</code> row is</p>
+<p>kept as tool output by its <code>output</code>, <code>content</code>, <code>diff</code>, <code>matches_text</code> or <code>error</code>, or,</p>
+<p>when none holds text, by every string in it (<code>search_files</code> in files mode,</p>
+<p><code>web_search</code>, <code>delegate_task</code>); keys starting with <code>_</code> and a bare byte count are not</p>
+<p>kept. Rows rewound away (<code>active = 0</code>, <code>compacted = 0</code>, or <code>active = 0</code> on a store</p>
+<p>without <code>compacted</code>) are skipped. In-place compaction archives the turns it summarises</p>
+<p>and writes the kept head and tail again as live rows: a live call, result or message</p>
+<p>that repeats an archived one is that copy and counts once, the compressor&#39;s stubs are</p>
+<p>dropped, and the <code>[CONTEXT COMPACTION — REFERENCE ONLY]</code> summary is kept under the</p>
+<p><code>summary</code> role. Multimodal content, stored as</p>
 <p><code>\x00json:</code> and a list of parts, keeps its text parts and not the image (#4242). The</p>
 <p>Postgres path still reads prose only. A <code>sessions</code> table beside it carries <code>id</code>, <code>cwd</code>,</p>
 <p><code>git_repo_root</code> and <code>title</code>; the <code>cwd</code> is where the work happened and is what names</p>

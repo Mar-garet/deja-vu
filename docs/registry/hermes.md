@@ -11,14 +11,21 @@ A flat `messages` table, grouped by `session_id`: `role`, `content`, and `timest
 as REAL epoch seconds. An assistant row that calls tools has no `content` and an
 OpenAI-style `tool_calls` array instead; the result lands on a `tool` row under the
 same `tool_call_id`. Calls to `terminal` become commands: a non-zero `exit_code` from
-the result rides on the command, and `-1`, which Hermes returns for a command it never
-ran (denied, blocked, waiting on approval), drops the command record. `read_file`,
+the result rides on the command. `-1`, which Hermes returns for a command it never
+ran (denied, blocked, waiting on approval), drops the command record; any other
+negative code is a process killed by a signal after it started, so the command stays. `read_file`,
 `write_file` and `patch` name the files, and `patch` and `write_file` give the edit and
 written sides — `patch` in its V4A mode as Hermes' own parser reads it, `Move File`
-included. A `tool` row is kept as tool output by what it says (`output`, `content`,
-`diff`, `matches_text`, `error`); bookkeeping such as a byte count is not. Rows
-rewound away (`active = 0`, `compacted = 0`) are skipped, a call compaction wrote again
-counts once, and its compressor stubs are dropped. Multimodal content, stored as
+included, with the lines after a move or delete belonging to no file. A `tool` row is
+kept as tool output by its `output`, `content`, `diff`, `matches_text` or `error`, or,
+when none holds text, by every string in it (`search_files` in files mode,
+`web_search`, `delegate_task`); keys starting with `_` and a bare byte count are not
+kept. Rows rewound away (`active = 0`, `compacted = 0`, or `active = 0` on a store
+without `compacted`) are skipped. In-place compaction archives the turns it summarises
+and writes the kept head and tail again as live rows: a live call, result or message
+that repeats an archived one is that copy and counts once, the compressor's stubs are
+dropped, and the `[CONTEXT COMPACTION — REFERENCE ONLY]` summary is kept under the
+`summary` role. Multimodal content, stored as
 `\x00json:` and a list of parts, keeps its text parts and not the image (#4242). The
 Postgres path still reads prose only. A `sessions` table beside it carries `id`, `cwd`,
 `git_repo_root` and `title`; the `cwd` is where the work happened and is what names
