@@ -13,11 +13,12 @@ import (
 // what it can when one frame is bad (#4294).
 //
 // A log still being appended, or one whose writer died mid-frame, ends in a
-// torn frame. zstd says "premature end" and has written every complete frame
-// before it to stdout, so that output is kept. Any other failure is a frame
-// that is complete and does not decode, and zstd stops there with good frames
-// possibly after it; the file is then split into frames and each decoded on its
-// own. Every frame lost either way counts as one unusable line in the ingest
+// torn frame; a damaged one has a frame that does not decode, with good frames
+// possibly after it. zstd stops at either, so on any failure the file is split
+// at its frame headers. The whole frames are decoded in one run, and only when
+// that fails is each decoded on its own. zstd's stderr is not trusted to tell
+// the two apart: a corrupt block size reads as "premature end" in the middle of
+// a file. Every frame lost counts as one unusable line in the ingest
 // diagnostics, which names the file instead of the store. Only a file nothing
 // decodes from is an error.
 func zstdDecodeFile(path, harness string, raw []byte) ([]byte, error) {
@@ -25,23 +26,24 @@ func zstdDecodeFile(path, harness string, raw []byte) ([]byte, error) {
 	if err == nil {
 		return out, nil
 	}
-	if strings.Contains(stderr, "premature end") && len(out) > 0 {
-		diagMalformedLine(path)
-		return out, nil
-	}
 	frames, rest := zstdSplitFrames(raw)
 	var kept []byte
-	for _, f := range frames {
-		dec, _, ferr := zstdRun(f)
-		if ferr != nil {
-			diagMalformedLine(path)
-			continue
+	if len(frames) > 0 {
+		var ferr error
+		if kept, _, ferr = zstdRun(bytes.Join(frames, nil)); ferr != nil {
+			kept = nil
+			for _, f := range frames {
+				dec, _, ferr := zstdRun(f)
+				if ferr != nil {
+					diagMalformedLine(path)
+					continue
+				}
+				kept = append(kept, dec...)
+			}
 		}
-		kept = append(kept, dec...)
 	}
 	if len(rest) > 0 {
-		// A torn last frame: what zstd decodes of it before the cut is kept,
-		// as on the fast path.
+		// A torn last frame: what zstd decodes of it before the cut is kept.
 		dec, _, _ := zstdRun(rest)
 		kept = append(kept, dec...)
 		diagMalformedLine(path)
@@ -63,14 +65,21 @@ func zstdRun(in []byte) (out []byte, stderr string, err error) {
 }
 
 // zstdSplitFrames cuts a stream at its frame boundaries by reading the frame
-// and block headers (RFC 8878 §3.1), without decoding anything. rest is what
-// follows the last frame that is whole: a torn frame, or bytes that are not a
-// frame at all.
+// and block headers (RFC 8878 §3.1), without decoding anything. Where the
+// headers do not add up to a whole frame, the cut moves to the next frame
+// magic, so a corrupt header loses its own frame, not the rest of the file.
+// rest is what follows when no frame magic does: a torn frame, or bytes that
+// are not a frame at all.
 func zstdSplitFrames(raw []byte) (frames [][]byte, rest []byte) {
+	magic := []byte{0x28, 0xB5, 0x2F, 0xFD}
 	for len(raw) > 0 {
 		n := zstdFrameLen(raw)
 		if n <= 0 {
-			return frames, raw
+			next := bytes.Index(raw[1:], magic)
+			if next < 0 {
+				return frames, raw
+			}
+			n = next + 1
 		}
 		frames = append(frames, raw[:n])
 		raw = raw[n:]

@@ -181,3 +181,67 @@ func TestOpenClawKeepsTheFramesBeforeATornOne(t *testing.T) {
 		t.Errorf("the torn archive is not named in the ingest diagnostics")
 	}
 }
+
+// A corrupt frame header, not just a corrupt block, desynced the split: the
+// frames after it were lost with it, and a raw block whose size grew past the
+// next frame made zstd say "premature end" and spill that frame's bytes into
+// the output as if the file were torn.
+func TestZstdDecodeFileResyncsAfterACorruptHeader(t *testing.T) {
+	if !ZstdAvailable() {
+		t.Skip("zstd CLI not installed")
+	}
+	a, b, c := zstdFrame(t, "aaaa line one\n"), zstdFrame(t, "bbbb line two\n"), zstdFrame(t, "cccc line three\n")
+	for name, corrupt := range map[string]func([]byte){
+		"magic":      func(f []byte) { f[0] ^= 0xff },
+		"block size": func(f []byte) { f[7] ^= 0x40 },
+	} {
+		bad := append([]byte{}, b...)
+		corrupt(bad)
+		path := filepath.Join(t.TempDir(), "session.jsonl.zstd")
+		got, err := zstdDecodeFile(path, "deepseek", bytes.Join([][]byte{a, bad, c}, nil))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if string(got) != "aaaa line one\ncccc line three\n" {
+			t.Errorf("%s: decoded %q, want the frames on both sides of the bad one", name, got)
+		}
+		if DiagMalformedCounts()[path] != 1 {
+			t.Errorf("%s: malformed = %d, want 1", name, DiagMalformedCounts()[path])
+		}
+	}
+}
+
+// The splitter reads lengths from untrusted headers: none of these may loop,
+// panic, or claim more bytes than it was given.
+func TestZstdFrameLenOnHostileHeaders(t *testing.T) {
+	magic := []byte{0x28, 0xB5, 0x2F, 0xFD}
+	frame := func(b ...byte) []byte { return append(append([]byte{}, magic...), b...) }
+	cases := map[string][]byte{
+		"empty":               nil,
+		"magic only":          magic,
+		"truncated header":    frame(0xC0, 0x00, 0x01),
+		"huge content size":   frame(0xE0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x00),
+		"dictionary id":       frame(0x23, 0x01, 0x02, 0x03, 0x04, 0x05, 0x01, 0x00, 0x00),
+		"checksum, cut":       frame(0x24, 0x05, 0x01, 0x00, 0x00, 0xAA),
+		"zero-length block":   frame(0x20, 0x00, 0x01, 0x00, 0x00),
+		"block past the end":  frame(0x20, 0x00, 0xF9, 0xFF, 0x0F, 0x00),
+		"reserved block type": frame(0x20, 0x00, 0x07, 0x00, 0x00),
+		"never-last blocks":   frame(0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
+		"skippable, huge":     {0x50, 0x2A, 0x4D, 0x18, 0xFF, 0xFF, 0xFF, 0xFF, 0x00},
+		"skippable, empty":    {0x5F, 0x2A, 0x4D, 0x18, 0x00, 0x00, 0x00, 0x00},
+	}
+	want := map[string]int{"zero-length block": 9, "skippable, empty": 8, "dictionary id": 13, "huge content size": 16}
+	for name, raw := range cases {
+		if n := zstdFrameLen(raw); n != want[name] {
+			t.Errorf("%s: zstdFrameLen = %d, want %d", name, n, want[name])
+		}
+		frames, rest := zstdSplitFrames(raw)
+		n := len(rest)
+		for _, f := range frames {
+			n += len(f)
+		}
+		if n != len(raw) {
+			t.Errorf("%s: split covers %d of %d bytes", name, n, len(raw))
+		}
+	}
+}
