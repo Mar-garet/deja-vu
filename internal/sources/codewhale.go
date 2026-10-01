@@ -150,6 +150,24 @@ type codeWhaleSession struct {
 	} `json:"messages"`
 }
 
+// CodeWhaleWorkspace is the workspace a saved session was worked in, from its
+// metadata. "" when the file names none (#4362).
+func CodeWhaleWorkspace(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var doc struct {
+		Metadata struct {
+			Workspace string `json:"workspace"`
+		} `json:"metadata"`
+	}
+	if json.Unmarshal(b, &doc) != nil {
+		return ""
+	}
+	return doc.Metadata.Workspace
+}
+
 func LoadCodeWhale() []model.Session {
 	return parseFiles(CodeWhaleSessionFiles(), ParseCodeWhaleFile)
 }
