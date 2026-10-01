@@ -3396,10 +3396,26 @@ func inOpencodeSchemaDB(h, p string) bool {
 		return true
 	}
 	// opencode's diff files, Kilo's task files and ZCode's transcripts carry
-	// the same harness name, and their path names the kind; anything else is
-	// a project directory. A diff record still counts as the database's
-	// through storeHarness, which files the diff path under that store.
-	return sources.HarnessForKind(harnessForPath(p)) != h
+	// the same harness name; anything else is a project directory. A diff
+	// record still counts as the database's through storeHarness, which files
+	// the diff path under that store.
+	return !opencodeSchemaOwnFile(h, p)
+}
+
+// opencodeSchemaOwnFile reports whether p is one of harness h's own files
+// rather than its database or a project directory. Named, for the reason
+// isGooseStore gives, and because fromDatabase asks it of every record held:
+// asking the registry what a project directory was cost ~68 µs a record.
+func opencodeSchemaOwnFile(h, p string) bool {
+	switch h {
+	case "opencode":
+		return isOpencodeDiff(p)
+	case "kilocode":
+		return strings.EqualFold(filepath.Base(p), "api_conversation_history.json")
+	case "zcode":
+		return strings.EqualFold(filepath.Ext(p), ".jsonl")
+	}
+	return false
 }
 
 func resolveStorePaths() map[string]string {
