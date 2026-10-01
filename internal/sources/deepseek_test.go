@@ -185,3 +185,23 @@ func TestDeepSeekSessionFilesFindsBothEncodings(t *testing.T) {
 		t.Fatalf("LoadDeepSeek = %d sessions", len(got))
 	}
 }
+
+// dsh takes an empty DSH_HOME as unset and expands a leading ~, so deja has to
+// read the same two values the same way or it looks for sessions and profiles
+// in a directory dsh never writes (#4390).
+func TestDSHHomeReadsDSHHomeTheWayDshDoes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, c := range []struct{ value, want string }{
+		{"", filepath.Join(home, ".dsh")},
+		{"~", home},
+		{"~/.dsh-alt", filepath.Join(home, ".dsh-alt")},
+		{filepath.Join(home, "elsewhere"), filepath.Join(home, "elsewhere")},
+	} {
+		t.Setenv("DSH_HOME", c.value)
+		if got := DSHHome(); got != c.want {
+			t.Errorf("DSH_HOME=%q: DSHHome = %q, want %q", c.value, got, c.want)
+		}
+	}
+}

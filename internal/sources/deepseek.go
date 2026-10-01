@@ -48,9 +48,11 @@ import (
 // answered, called a tool, and failed before answering.
 
 // DSHHome is the harness's own home directory, following its DSH_HOME variable.
+// dsh expands a leading ~ in it, so deja does too: taken literally,
+// DSH_HOME=~/.dsh-alt sent deja to ./~/.dsh-alt (#4390).
 func DSHHome() string {
 	if p := os.Getenv("DSH_HOME"); p != "" {
-		return p
+		return expandTilde(p)
 	}
 	return filepath.Join(Home(), ".dsh")
 }

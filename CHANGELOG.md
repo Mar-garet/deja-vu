@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A `DSH_HOME` that starts with `~` is expanded the way dsh expands it, so deja finds dsh's sessions and writes its layer under `$HOME/...` instead of a literal `./~/...` directory (#4390).
 - `go test ./internal/sources` no longer writes into the XDG data, config or cache directory your shell exports; a test that saved a note put `deja/notes.jsonl` in the real `XDG_DATA_HOME`. No behaviour change (#4405).
 - A CodeWhale `edit_file` call written with `search` and `replace`, CodeWhale's own names for the two sides, leaves an edit and a wrote record, so `deja restore` and blame see it; only `old_string`/`new_string` was read. The other spellings CodeWhale accepts there are read too. The index rebuilds once (#4404).
 - With `deja install reasonix-auto`, a file's history arrives on Reasonix's `read_file`, before the edit. It came only on the `edit_file` or `write_file` result, after the file had changed, and Reasonix refuses an edit on a file the session has not read, so the read is the last step where it can still matter (#4410).
