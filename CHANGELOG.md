@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `deja doctor` reports a Kimi, Qwen, Cursor, Crush, ZCode or Command Code hook row as `missing` when the client's own config holds no deja hook, instead of `stale`; those configs exist whether deja wrote to them or not, and `stale` is now kept for deja's own entry gone wrong. The brief's "no agent wired yet" line reads them the same way (#4275).
+- `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).
+- A VS Code Copilot Chat session stays in the index while VS Code is writing its last line; a half-written tail used to drop the whole chat from search and `show` until the next pass (#4229).
 - A resumed Gemini CLI session keeps the prompts deja's per-prompt recall was attached to. Gemini leaves those turns out of the history it writes back on `--resume`, and deja dropped them with it. The index rebuilds once (#4214).
 - `deja resume` on a Gemini CLI session runs `gemini --resume` in the directory the session ran in, read from `projects.json` / `.project_root`; from anywhere else Gemini answered "No previous sessions found for this project" (#4211).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).
