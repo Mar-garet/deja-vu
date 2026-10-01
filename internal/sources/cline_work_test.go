@@ -118,7 +118,10 @@ func TestParseClineReadsListToolResults(t *testing.T) {
 {"role":"user","content":[{"type":"tool_result","tool_use_id":"c2","name":"read_files","content":[
   {"query":"/w/retry.py","result":"1 | def retry(n):","success":true}]}],"ts":1767225603000},
 {"role":"user","content":[{"type":"tool_result","tool_use_id":"c3","name":"run_commands","content":[
-  {"query":"make","error":"spawn make ENOENT","success":false}]}],"ts":1767225604000}
+  {"query":"make","error":"spawn make ENOENT","success":false}]}],"ts":1767225604000},
+{"role":"user","content":[{"type":"tool_result","tool_use_id":"c4","name":"run_commands","content":[
+  {"query":"npm test","result":"PASS a.test.js\n","error":"Command timed out after 30s","success":false},
+  {"query":"true","result":"","success":false}]}],"ts":1767225605000}
 ]}`
 	dir := filepath.Join(t.TempDir(), "s_list")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -139,12 +142,15 @@ func TestParseClineReadsListToolResults(t *testing.T) {
 		}
 	}
 	all := strings.Join(out, "\n")
-	for _, want := range []string{"?? retry.py", "NameError: name 'attempt' is not defined", "def retry(n)", "spawn make ENOENT"} {
+	for _, want := range []string{"?? retry.py", "NameError: name 'attempt' is not defined", "def retry(n)", "spawn make ENOENT", "PASS a.test.js", "Command timed out after 30s"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("tool output %q is missing %q", out, want)
 		}
 	}
-	if len(out) != 3 {
+	if strings.Count(all, "Command exited with code 1") != 1 {
+		t.Errorf("an error already in the result is repeated: %q", out)
+	}
+	if len(out) != 4 {
 		t.Errorf("got %d tool outputs, want one per tool_result: %q", len(out), out)
 	}
 }

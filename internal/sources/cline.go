@@ -486,8 +486,8 @@ func clineToolResults(blocks []any) []string {
 
 // clineResultEntries reads the list Cline CLI writes for run_commands and
 // read_files: one {query, result, error, success} entry per command or file.
-// The result carries the stderr; the error alone is kept when there is no
-// result, as when the command never started (#4315).
+// The result carries the stderr; the error is added when the result does not
+// already say it, and stands alone when the command never started (#4315).
 func clineResultEntries(v any) string {
 	list, _ := v.([]any)
 	var parts []string
@@ -497,10 +497,13 @@ func clineResultEntries(v any) string {
 			continue
 		}
 		r, _ := e["result"].(string)
-		if strings.TrimSpace(r) == "" {
-			r, _ = e["error"].(string)
+		r = strings.TrimSpace(r)
+		// The error is usually already in the result ("[Command exited with
+		// code 1]"); one that says something else, like a timeout, is kept too.
+		if er, _ := e["error"].(string); strings.TrimSpace(er) != "" && !strings.Contains(r, strings.TrimSpace(er)) {
+			r = strings.TrimSpace(r + "\n" + strings.TrimSpace(er))
 		}
-		if r = strings.TrimSpace(r); r != "" {
+		if r != "" {
 			parts = append(parts, r)
 		}
 	}
