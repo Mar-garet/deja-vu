@@ -435,6 +435,7 @@ func resolveEncodedPath(base string) string {
 	if len(parts) == 0 || len(parts) > 24 {
 		return ""
 	}
+	listed := map[string][]os.DirEntry{}
 	var try func(done, seg string, i int) string
 	try = func(done, seg string, i int) string {
 		// An empty segment is a character the encoding blanked, not a
@@ -447,16 +448,11 @@ func resolveEncodedPath(base string) string {
 			return try(done, seg+"-"+parts[i], i+1)
 		}
 		if i == len(parts) {
-			p := done + string(filepath.Separator) + seg
-			if fi, err := os.Stat(p); err == nil && fi.IsDir() {
-				return p
-			}
-			return ""
+			return encodedChild(done, seg, listed)
 		}
 		// close the current segment with "/" first (most path characters are
 		// separators), pruning when the prefix does not exist
-		p := done + string(filepath.Separator) + seg
-		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+		if p := encodedChild(done, seg, listed); p != "" {
 			if r := try(p, parts[i], i+1); r != "" {
 				return r
 			}
@@ -468,6 +464,40 @@ func resolveEncodedPath(base string) string {
 		return ""
 	}
 	return try(root, parts[0], 1)
+}
+
+// encodedChild is the directory under dir that the encoded segment seg names,
+// or "". The encoding blanks every character that is not a letter or digit to
+// "-", so a segment with a "-" in it may stand for "_", "." or a space as well
+// as a hyphen: on a miss the directory is listed and its entries are compared
+// encoded (#4402). listed keeps each listing for the rest of one resolve.
+func encodedChild(dir, seg string, listed map[string][]os.DirEntry) string {
+	p := dir + string(filepath.Separator) + seg
+	if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+		return p
+	}
+	if !strings.Contains(seg, "-") {
+		return ""
+	}
+	list := dir
+	if list == "" {
+		list = string(filepath.Separator)
+	}
+	entries, ok := listed[list]
+	if !ok {
+		entries, _ = os.ReadDir(list)
+		listed[list] = entries
+	}
+	for _, e := range entries {
+		if claudeEncodePath(e.Name()) != seg {
+			continue
+		}
+		p := dir + string(filepath.Separator) + e.Name()
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			return p
+		}
+	}
+	return ""
 }
 
 // splitEncodedWindowsDrive recognises the "C--Users-x-app" form Claude Code
