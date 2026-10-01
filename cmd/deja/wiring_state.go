@@ -651,6 +651,18 @@ func blockWasAdded(path, name string) bool {
 	return slices.Contains(readWiringState().Blocks, key)
 }
 
+// blocksAddedWithPrefix lists the names deja recorded for this file that
+// start with prefix — for a record that carries a value after its name.
+func blocksAddedWithPrefix(path, prefix string) []string {
+	var names []string
+	for _, key := range append(append([]string(nil), blocksAddedThisRun...), readWiringState().Blocks...) {
+		if name, ok := strings.CutPrefix(key, blockKey(path, prefix)); ok && !blocksForgottenThisRun[key] {
+			names = append(names, prefix+name)
+		}
+	}
+	return names
+}
+
 func forgetBlockAdded(path, name string) {
 	key := blockKey(path, name)
 	blocksForgottenThisRun[key] = true

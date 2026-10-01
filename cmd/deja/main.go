@@ -4358,15 +4358,20 @@ func emptyIndexHint(what string) string {
 }
 
 // deniedStoreCount reports how many harness stores exist but cannot be opened.
+// Opened, not parsed: the probe stops before doctor's parser (#4272).
 func deniedStoreCount() int {
 	n := 0
-	for _, check := range doctorStoreChecks() {
-		if store, _ := inspectDoctorStore(check); store.State == "denied" {
+	for _, check := range deniedStoreChecks() {
+		if store, _, _ := probeDoctorStore(check); store.State == "denied" {
 			n++
 		}
 	}
 	return n
 }
+
+// deniedStoreChecks is doctorStoreChecks, swappable so a test can count what
+// the probe parses.
+var deniedStoreChecks = doctorStoreChecks
 
 // noAgentHistoryFound reports whether the stores themselves are empty, as
 // opposed to an index that merely has not been built yet.
