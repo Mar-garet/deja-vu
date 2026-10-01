@@ -229,6 +229,7 @@ func codeWhaleWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 	if json.Unmarshal(raw, &blocks) != nil {
 		return nil
 	}
+	codeWhaleFoldEdits(blocks)
 	var out []model.Message
 	if IndexToolPaths() {
 		if p := toolPathsIn(blocks, codeWhaleDialect); p != "" {
@@ -256,6 +257,34 @@ func codeWhaleWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 		}
 	}
 	return out
+}
+
+// codeWhaleFoldEdits puts an edit call into the one shape the dialect reads,
+// the way CodeWhale's prepare_contract_edit_input does before it runs one: an
+// edits array sent as a JSON string is decoded, and a top-level
+// oldText/newText pair joins edits. The transcript keeps what the model sent,
+// so either shape left the edit with no span and nothing written (#4360).
+func codeWhaleFoldEdits(blocks []any) {
+	for _, it := range blocks {
+		name, in, ok := toolPart(it, codeWhaleDialect)
+		if !ok || name != "edit" {
+			continue
+		}
+		if encoded, ok := in["edits"].(string); ok {
+			var decoded []any
+			if json.Unmarshal([]byte(encoded), &decoded) == nil {
+				in["edits"] = decoded
+			}
+		}
+		oldText, okOld := in["oldText"].(string)
+		newText, okNew := in["newText"].(string)
+		if okOld && okNew {
+			edits, _ := in["edits"].([]any)
+			in["edits"] = append(edits, map[string]any{"oldText": oldText, "newText": newText})
+			delete(in, "oldText")
+			delete(in, "newText")
+		}
+	}
 }
 
 // isCodeWhaleSession reports whether a path is one of CodeWhale's transcripts:

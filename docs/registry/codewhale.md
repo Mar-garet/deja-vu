@@ -21,7 +21,8 @@ a different program with a different store, which is why both entries exist.
 Claude readers already do applies here: a call becomes a command or a file
 record, a `tool_result` becomes tool output, error runs included. Since 0.9.6
 new turns use `read`, `write`, `edit` and `bash`, where `edit` takes
-`edits[{oldText,newText}]`; the older `read_file`, `write_file` and `edit_file`
+`edits[{oldText,newText}]` (also sent as a JSON string, or as one top-level
+`oldText`/`newText` pair, both read the same way); the older `read_file`, `write_file` and `edit_file`
 names are still read for sessions saved before.
 
 `thinking` blocks are dropped. So are the `system` and `developer` roles:

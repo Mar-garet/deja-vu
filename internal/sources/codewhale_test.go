@@ -270,3 +270,44 @@ func TestCodeWhaleSkipsTheBootOwnersLedger(t *testing.T) {
 		t.Errorf("sidecars = %v, want the ledger placed", got)
 	}
 }
+
+// edit takes its edits the way models send them, and CodeWhale folds two
+// shapes onto edits[] before running: the array as a JSON string, and a single
+// top-level oldText/newText. The transcript keeps what the model sent, so
+// reading only the array lost those edits (#4360).
+func TestCodeWhaleReadsAnEditInEveryShapeItRuns(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DEJA_CODEWHALE_ROOT", root)
+	path := filepath.Join(root, "0d70.json")
+	body := `{"metadata":{"id":"0d70","title":"retry","created_at":"2026-09-30T10:00:00Z","workspace":"/tmp/proj"},
+"messages":[
+ {"role":"user","content":[{"type":"text","text":"fix the retry loop"}]},
+ {"role":"assistant","content":[
+  {"type":"tool_use","id":"call_1","name":"edit","input":{"path":"/tmp/proj/client.go","edits":"[{\"oldText\":\"i <= max\",\"newText\":\"for attempt := 0; attempt < maxRetries; attempt++\"},{\"oldText\":\"sleep(1)\",\"newText\":\"time.Sleep(backoff * time.Duration(attempt))\"}]"}},
+  {"type":"tool_use","id":"call_2","name":"edit","input":{"path":"/tmp/proj/server.go","oldText":"retries := 0","newText":"retries := defaultRetriesForServer"}}
+ ]}
+]}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseCodeWhaleFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v, %d sessions", err, len(ss))
+	}
+	var edits, wrote []string
+	for _, m := range ss[0].Messages {
+		switch m.Role {
+		case RoleEdit:
+			edits = append(edits, m.Text)
+		case RoleWrote:
+			wrote = append(wrote, m.Text)
+		}
+	}
+	want := []string{"/tmp/proj/client.go\ni <= max", "/tmp/proj/client.go\nsleep(1)", "/tmp/proj/server.go\nretries := 0"}
+	if len(edits) != len(want) || edits[0] != want[0] || edits[1] != want[1] || edits[2] != want[2] {
+		t.Errorf("edits = %q, want %q", edits, want)
+	}
+	if len(wrote) != 3 {
+		t.Errorf("wrote = %q, want one per edit", wrote)
+	}
+}
