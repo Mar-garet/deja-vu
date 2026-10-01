@@ -64,3 +64,17 @@ func TestClineManifestRenameIsIndexed(t *testing.T) {
 		t.Fatalf("manifest-only rename was not indexed: %#v err=%v", recent, err)
 	}
 }
+
+// The state has to follow the manifest the reader opens, which is named after
+// the session directory whatever the transcript beside it is called.
+func TestClineMetadataFileIsTheReadersManifest(t *testing.T) {
+	dir := filepath.Join("r", "sessions", "1790000000000_abcde")
+	for _, name := range []string{"1790000000000_abcde.messages.json", "teammate.messages.json"} {
+		if got, want := metadataFileFor("cline-sdk", filepath.Join(dir, name)), filepath.Join(dir, "1790000000000_abcde.json"); got != want {
+			t.Errorf("%s: metadata file %q, want %q", name, got, want)
+		}
+	}
+	if got := metadataFileFor("codex", filepath.Join("r", "x", "abc.messages.json")); got != "" {
+		t.Errorf("another harness's file got a manifest: %q", got)
+	}
+}

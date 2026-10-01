@@ -4627,9 +4627,10 @@ func metadataFileFor(kind, p string) string {
 	case "grok":
 		return filepath.Join(filepath.Dir(p), "summary.json")
 	case "cline-sdk":
-		if id, ok := strings.CutSuffix(filepath.Base(p), ".messages.json"); ok {
-			return filepath.Join(filepath.Dir(p), id+".json")
-		}
+		// Named after the session directory, the one the reader opens for
+		// every transcript in it, not after the transcript.
+		dir := filepath.Dir(p)
+		return filepath.Join(dir, filepath.Base(dir)+".json")
 	}
 	return ""
 }
