@@ -26,7 +26,7 @@ seconds) and `content` blocks (`type: text` only for v1). SQLite: `sessions` joi
   marked block in `~/.config/goose/AGENTS.md` at session start and the MOIM file
   per prompt. `.goosehints` is where the block used to go; what deja wrote there
   is cleared, and anything else in that file is left alone.
-- **Resume**: `goose session --resume --session-id <id>`.
+- **Resume**: `goose session --resume --session-id <id>`. A session no longer in `sessions.db` (deleted in goose) is refused with a pointer to `deja show`.
 - **Handoff**: exec, `goose run -t`.
 - **Prerequisite**: the per-prompt half needs `GOOSE_MOIM_MESSAGE_FILE`, which
   the `deja goose` wrapper sets.

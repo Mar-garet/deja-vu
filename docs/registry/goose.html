@@ -70,7 +70,7 @@
 <p>per prompt. <code>.goosehints</code> is where the block used to go; what deja wrote there</p>
 <p>is cleared, and anything else in that file is left alone.</p>
 <ul>
-<li><strong>Resume</strong>: <code>goose session --resume --session-id &lt;id&gt;</code>.</li>
+<li><strong>Resume</strong>: <code>goose session --resume --session-id &lt;id&gt;</code>. A session no longer in <code>sessions.db</code> (deleted in goose) is refused with a pointer to <code>deja show</code>.</li>
 <li><strong>Handoff</strong>: exec, <code>goose run -t</code>.</li>
 <li><strong>Prerequisite</strong>: the per-prompt half needs <code>GOOSE_MOIM_MESSAGE_FILE</code>, which</li>
 </ul>

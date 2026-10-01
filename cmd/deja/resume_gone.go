@@ -37,6 +37,12 @@ func transcriptGone(s model.Session) bool {
 	if s.Harness == "opencode" || s.Harness == "kilocode" {
 		return sources.OpencodeStoreLacks(s.Harness, s.ID)
 	}
+	// goose >= 1.10 the same, with Path naming its sessions.db; a legacy
+	// .jsonl session is a file of its own and goes through the check below
+	// (#4271).
+	if s.Harness == "goose" && !isTranscriptFile(s.Path) {
+		return sources.GooseStoreLacks(s.Path, s.ID)
+	}
 	if s.Path == "" || !isTranscriptFile(s.Path) {
 		return false
 	}

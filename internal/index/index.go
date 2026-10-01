@@ -335,6 +335,9 @@ import (
 // 60: a resumed Gemini CLI session keeps the prompts deja's recall was
 // prepended to; Gemini's own resume history leaves them out (#4214). The
 // chat file is re-read whole only when it changes, so a rebuild.
+// 60: a goose edit or write call leaves an edit and a wrote record, not only
+// the path (#4265). A session indexed before keeps only the path until a
+// rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
