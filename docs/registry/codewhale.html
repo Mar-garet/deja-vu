@@ -56,7 +56,10 @@
 <p><code>{role, content}</code>, where content is the block list Anthropic&#39;s API uses —</p>
 <p><code>text</code>, <code>thinking</code>, <code>tool_use</code>, <code>tool_result</code> — so the decoding the Cline and</p>
 <p>Claude readers already do applies here: a call becomes a command or a file</p>
-<p>record, a <code>tool_result</code> becomes tool output, error runs included.</p>
+<p>record, a <code>tool_result</code> becomes tool output, error runs included. Since 0.9.6</p>
+<p>new turns use <code>read</code>, <code>write</code>, <code>edit</code> and <code>bash</code>, where <code>edit</code> takes</p>
+<p><code>edits[{oldText,newText}]</code>; the older <code>read_file</code>, <code>write_file</code> and <code>edit_file</code></p>
+<p>names are still read for sessions saved before.</p>
 <p><code>thinking</code> blocks are dropped. So are the <code>system</code> and <code>developer</code> roles:</p>
 <p>CodeWhale&#39;s own documentation names them as where it puts compaction summaries,</p>
 <p>branch summaries and sub-agent framing, which is the harness talking to itself</p>
@@ -75,7 +78,7 @@
 <ul>
 <li><strong>Bookkeeping sits beside the transcripts.</strong> <code>offline_queue.json</code>,</li>
 </ul>
-<p><code>owners.json</code> and the <code>checkpoints/</code> slot share the sessions directory; they</p>
+<p><code>session_boot_owners.json</code> and the <code>checkpoints/</code> slot share the sessions directory; they</p>
 <p>are named rather than counted, so drift in the store still shows up as an</p>
 <p>unread file.</p>
 <ul>

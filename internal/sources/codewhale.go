@@ -63,14 +63,15 @@ func CodeWhaleRoots() []string {
 }
 
 // codeWhaleSidecars are the files the harness keeps beside its transcripts:
-// the offline queue, the legacy checkpoint slot, and the ownership ledger.
+// the offline queue, the legacy checkpoint slot, and the ledger of which boot
+// owns which session (session_boot_owners.json, #4361).
 // None of them is a session, and the row that counts unread files should not
 // report them as transcripts deja failed on.
 var codeWhaleSidecars = map[string]bool{
-	"offline_queue.json": true,
-	"latest.json":        true,
-	"owners.json":        true,
-	"constitution.json":  true,
+	"offline_queue.json":       true,
+	"latest.json":              true,
+	"session_boot_owners.json": true,
+	"constitution.json":        true,
 }
 
 // CodeWhaleSessionFiles lists the transcripts. A session file sits directly in
@@ -112,17 +113,26 @@ func CodeWhaleSidecarFiles() []string {
 // codeWhaleDialect is what CodeWhale calls its tools. The shell tool answers to
 // three names on the wire — the canonical exec_shell and the bash aliases every
 // model already knows — and the file tools take `path`. apply_patch carries a
-// patch rather than a replaced span, so it names a file and no edit.
+// patch rather than a replaced span, so it names a file and no edit. Since
+// 0.9.6 new turns use read, write and edit instead, and edit takes
+// edits[{oldText,newText}]; the older names stay for sessions saved before
+// (#4360).
 var codeWhaleDialect = toolDialect{
 	pathKey: "path",
 	pathTools: map[string]bool{
+		"read": true, "write": true, "edit": true,
 		"read_file": true, "write_file": true, "edit_file": true,
 		"fim_edit": true, "apply_patch": true, "str_replace": true,
 	},
 	shellTool:  "exec_shell",
 	shellTools: map[string]bool{"exec_shell": true, "bash": true, "Bash": true},
-	editTools:  map[string]bool{"edit_file": true, "fim_edit": true, "str_replace": true},
-	oldKey:     "old_string",
+	editTools: map[string]bool{
+		"edit": true, "write": true,
+		"edit_file": true, "fim_edit": true, "str_replace": true,
+	},
+	oldKey:      "old_string",
+	editsOldKey: "oldText",
+	editsNewKey: "newText",
 }
 
 type codeWhaleSession struct {

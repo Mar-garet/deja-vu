@@ -519,6 +519,11 @@ type toolDialect struct {
 	// new_string. A dialect whose key is not set records no written side —
 	// nothing wrong, just nothing to attribute from.
 	newKey string
+	// editsOldKey and editsNewKey name the same two sides inside each element
+	// of an `edits` array, when they differ from oldKey and newKey: CodeWhale's
+	// edit takes edits[{oldText,newText}] while its legacy edit_file takes
+	// old_string (#4360). Empty means oldKey and newKey.
+	editsOldKey, editsNewKey string
 	// contentKey names the argument of a whole-file write. Empty means
 	// "content". A commit that adds a file has no replaced text at all, so
 	// this is the only evidence such a line was ever in a session.
@@ -554,6 +559,20 @@ func (d toolDialect) newSpanKey() string {
 		return "new_string"
 	}
 	return d.newKey
+}
+
+func (d toolDialect) editsOldSpanKey() string {
+	if d.editsOldKey == "" {
+		return d.oldSpanKey()
+	}
+	return d.editsOldKey
+}
+
+func (d toolDialect) editsNewSpanKey() string {
+	if d.editsNewKey == "" {
+		return d.newSpanKey()
+	}
+	return d.editsNewKey
 }
 
 func (d toolDialect) contentSpanKey() string {
@@ -679,7 +698,7 @@ func editSpansIn(v any, d toolDialect) []string {
 				if !ok {
 					continue
 				}
-				o, _ := em[d.oldSpanKey()].(string)
+				o, _ := em[d.editsOldSpanKey()].(string)
 				spans = append(spans, o)
 			}
 		}
@@ -727,7 +746,7 @@ func wroteRecordsIn(v any, d toolDialect) []string {
 				if !ok {
 					continue
 				}
-				n, _ := em[d.newSpanKey()].(string)
+				n, _ := em[d.editsNewSpanKey()].(string)
 				written = append(written, n)
 			}
 		}

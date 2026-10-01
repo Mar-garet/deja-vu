@@ -19,7 +19,10 @@ a different program with a different store, which is why both entries exist.
 `{role, content}`, where content is the block list Anthropic's API uses —
 `text`, `thinking`, `tool_use`, `tool_result` — so the decoding the Cline and
 Claude readers already do applies here: a call becomes a command or a file
-record, a `tool_result` becomes tool output, error runs included.
+record, a `tool_result` becomes tool output, error runs included. Since 0.9.6
+new turns use `read`, `write`, `edit` and `bash`, where `edit` takes
+`edits[{oldText,newText}]`; the older `read_file`, `write_file` and `edit_file`
+names are still read for sessions saved before.
 
 `thinking` blocks are dropped. So are the `system` and `developer` roles:
 CodeWhale's own documentation names them as where it puts compaction summaries,
@@ -39,7 +42,7 @@ either.
   one millisecond per record, so two identical turns stay two records rather
   than collapsing into one the way they did for Zed (#3333).
 - **Bookkeeping sits beside the transcripts.** `offline_queue.json`,
-  `owners.json` and the `checkpoints/` slot share the sessions directory; they
+  `session_boot_owners.json` and the `checkpoints/` slot share the sessions directory; they
   are named rather than counted, so drift in the store still shows up as an
   unread file.
 - **The shapes come from the source, not from a running install.** The store
