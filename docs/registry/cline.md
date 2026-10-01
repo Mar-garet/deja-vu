@@ -29,8 +29,10 @@ not indexed.
   `${CLINE_DIR:-~/.cline}/plugins/deja/`. It registers a rule whose content is
   session-start recall, a message builder that adds recall for each prompt and
   a repair after a failed command, the `/deja` command, and the
-  `deja-history` skill bundled in the plugin. Cline's own hooks cannot carry
-  context back, so the plugin is the channel.
+  `deja-history` skill bundled in the plugin. A `package.json` listing
+  `index.js` under `cline.plugins` makes the directory a plugin package, which
+  is the only way Cline loads its `skills/` (#4316). Cline's own hooks cannot
+  carry context back, so the plugin is the channel.
 - **Resume**: `cline --id <sessionId>` for modern sessions only; legacy VS
   Code tasks reopen from the extension UI.
 - **Handoff**: `cline <prompt>` runs directly.
