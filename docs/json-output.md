@@ -408,6 +408,12 @@ appears only after `deja embed` has built a semantic sidecar. The heatmap grid u
       "state": "wired",
       "path": "/home/user/.cursor/hooks.json",
       "binary_missing": true
+    },
+    {
+      "name": "antigravity",
+      "state": "wired",
+      "path": "/home/user/.gemini/config/plugins/deja/hooks.json",
+      "switched_off": true
     }
   ],
   "commands": [
@@ -525,6 +531,8 @@ Kimi's `config.toml` or Qwen's `settings.json` with no deja hook in it), or
 `plugin` (the harness carries its own).
 `binary_missing` marks a row whose entries name a deja binary that is no longer
 there — what an upgrade leaves behind, with every hook exiting 127.
+`switched_off` marks a `wired` row the harness has turned off, so it will not
+run the hook: Antigravity's plugin after `agy plugin disable deja`.
 
 The first two rows are `claude-code` and `codex-hook`, whose hooks are wired
 event by event, so they have two states of their own: `out of date` (some of the

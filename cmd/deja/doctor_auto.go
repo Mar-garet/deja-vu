@@ -270,6 +270,38 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	return state, binaryMissing
 }
 
+// autoWiringSwitchedOff is the line under a wired row whose harness has turned
+// the wiring off, and "" when it has not. The file is still ours and still
+// right, so the row stays wired, the way a switched-off MCP entry does.
+func autoWiringSwitchedOff(name string) string {
+	if name == "antigravity" && antigravityPluginSwitchedOff() {
+		return "the plugin is switched off — antigravity will not run it until `agy plugin enable deja`"
+	}
+	return ""
+}
+
+// antigravityPluginSwitchedOff reads the switch `agy plugin disable` writes:
+// plugins.<dir>.enabled in config.json, which wins wherever it has an entry,
+// and otherwise a `"disabled": true` in the plugin's own plugin.json (#4359).
+func antigravityPluginSwitchedOff() bool {
+	var config struct {
+		Plugins map[string]struct {
+			Enabled *bool `json:"enabled"`
+		} `json:"plugins"`
+	}
+	if b, err := readConfig(filepath.Join(antigravityConfigHome(), "config.json")); err == nil &&
+		json.Unmarshal([]byte(jsoncToJSON(string(b))), &config) == nil {
+		if p, ok := config.Plugins[antigravityPluginName]; ok && p.Enabled != nil {
+			return !*p.Enabled
+		}
+	}
+	var manifest struct {
+		Disabled bool `json:"disabled"`
+	}
+	b, err := readConfig(filepath.Join(antigravityConfigHome(), "plugins", antigravityPluginName, "plugin.json"))
+	return err == nil && json.Unmarshal([]byte(jsoncToJSON(string(b))), &manifest) == nil && manifest.Disabled
+}
+
 // doctorAutoRecall prints one line per harness. "stale" is the interesting
 // state: the file is there, so an install looks done, but nothing in it calls
 // deja any more — which is exactly how a silently dead integration looks.
@@ -316,6 +348,9 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no enabled record in %s — `deja install reasonix-auto`)\n", a.name, "stale", reportPath(path), reportPath(reasonixStatePath()))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
+			if off := autoWiringSwitchedOff(a.name); off != "" {
+				fmt.Fprintf(w, "  %-12s %s\n", "", off)
+			}
 		}
 		// Under the row whatever the row said. A machine that upgraded is most
 		// often stale rather than wired — the entries were written by the

@@ -78,6 +78,9 @@ type doctorAutoStatus struct {
 	State         string `json:"state"`
 	Path          string `json:"path,omitempty"`
 	BinaryMissing bool   `json:"binary_missing,omitempty"`
+	// SwitchedOff marks a wired row the user turned off in the harness, the
+	// key the mcp rows use: the file is ours and the harness skips it (#4359).
+	SwitchedOff bool `json:"switched_off,omitempty"`
 }
 
 // doctorIndexReport is the index component. It carries stale_stores, which
@@ -934,7 +937,8 @@ func collectDoctorAutoRecall() []doctorAutoStatus {
 	}
 	for _, a := range wirings {
 		state, dead := autoWiringState(a)
-		out = append(out, doctorAutoStatus{Name: a.name, State: state, Path: a.path(), BinaryMissing: dead})
+		out = append(out, doctorAutoStatus{Name: a.name, State: state, Path: a.path(), BinaryMissing: dead,
+			SwitchedOff: state == "wired" && autoWiringSwitchedOff(a.name) != ""})
 	}
 	return out
 }
