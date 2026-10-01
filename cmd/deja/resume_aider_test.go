@@ -36,3 +36,12 @@ func TestAiderResumeNamesRestoreChatHistory(t *testing.T) {
 		t.Errorf("a moved history is not named: %v", err)
 	}
 }
+
+// The command is pasted into a shell, so a path with a space in it is quoted.
+func TestAiderResumeQuotesAMovedHistory(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "my notes", "chat.md")
+	_, _, err := resumeCommand(model.Session{Harness: "aider", ID: "aider-1", Path: p})
+	if err == nil || !strings.Contains(err.Error(), "--chat-history-file '"+p+"'") {
+		t.Errorf("the path is not quoted: %v", err)
+	}
+}

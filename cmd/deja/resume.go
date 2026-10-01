@@ -209,7 +209,7 @@ func resumeCommand(s model.Session) (string, string, error) {
 		dir := filepath.Dir(s.Path)
 		cmd := "aider --restore-chat-history"
 		if filepath.Base(s.Path) != ".aider.chat.history.md" {
-			cmd += " --chat-history-file " + s.Path
+			cmd += " --chat-history-file " + shellQuoteForPaste(s.Path)
 		}
 		return "", "", fmt.Errorf("aider has no session resume — `%s` in %s loads the whole history file, every session in it, not only this one; `deja show %s` has this one alone", cmd, dir, s.ID)
 	case "gemini":
