@@ -92,18 +92,22 @@ func codexHookWiringState() hookWiringState {
 	}
 	if b, err := os.ReadFile(st.path); err == nil {
 		var root map[string]any
-		if json.Unmarshal(b, &root) == nil {
-			st.hooks, _ = root["hooks"].(map[string]any)
-			// Codex users keep their own hooks here, so the file being there
-			// says nothing about deja: with none of deja's events in it, the
-			// trust store below is about someone else's hook (#4297).
-			if !codexHooksHoldDejas(st.hooks) {
-				st.state, st.hooks = "missing", nil
-				if codexPluginInstalled() {
-					st.state = "plugin"
-				}
-				return st
+		if json.Unmarshal(b, &root) != nil {
+			// Nothing in it can be read as deja's, so neither can the trust
+			// codex keeps for it.
+			st.state = "unreadable"
+			return st
+		}
+		st.hooks, _ = root["hooks"].(map[string]any)
+		// Codex users keep their own hooks here, so the file being there
+		// says nothing about deja: with none of deja's events in it, the
+		// trust store below is about someone else's hook (#4297).
+		if !codexHooksHoldDejas(st.hooks) {
+			st.state, st.hooks = "missing", nil
+			if codexPluginInstalled() {
+				st.state = "plugin"
 			}
+			return st
 		}
 	}
 	// Whatever codex thinks of the entry, it can still name a binary that is
