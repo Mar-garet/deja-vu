@@ -86,7 +86,7 @@ func installZCode(exe string, uninstall bool) (installResult, error) {
 		mcp["servers"] = servers
 		root["mcp"] = mcp
 	}
-	next, err := json.MarshalIndent(root, "", "  ")
+	next, err := marshalConfigLike(old, root)
 	if err != nil {
 		return installResult{}, err
 	}
@@ -213,7 +213,7 @@ func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
 		delete(root, "hooks")
 		forgetBlockAdded(path, "hooks")
 	}
-	next, err := json.MarshalIndent(root, "", "  ")
+	next, err := marshalConfigLike(old, root)
 	if err != nil {
 		return installResult{}, err
 	}
