@@ -122,7 +122,7 @@ func yamlBlockEnd(text string, from int) int {
 			line = text[i : i+nl]
 		}
 		if strings.TrimSpace(line) != "" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") &&
-			!(strings.HasPrefix(line, "#") && yamlBlockGoesOn(text[i:])) {
+			(!strings.HasPrefix(line, "#") || !yamlBlockGoesOn(text[i:])) {
 			return i
 		}
 		if nl < 0 {
