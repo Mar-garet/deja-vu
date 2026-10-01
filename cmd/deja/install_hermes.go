@@ -220,14 +220,24 @@ func installHermesMCP(exe string, uninstall bool) (installResult, error) {
 		}
 		entry := pad + "deja:\n" + pad + pad + "command: " + yamlQuote(exe) + "\n" +
 			pad + pad + "args:\n" + pad + pad + pad + "- mcp\n" + pad + pad + "enabled: true\n"
-		if i := strings.Index(next, "\nmcp_servers:\n"); i >= 0 {
-			at := i + len("\nmcp_servers:\n")
+		if next != "" && !strings.HasSuffix(next, "\n") {
+			next += "\n"
+		}
+		at, err := yamlTopKeyEnd(next, "mcp_servers:")
+		if err != nil {
+			return installResult{}, fmt.Errorf("%s: %w", path, err)
+		}
+		if at >= 0 {
 			next = next[:at] + entry + next[at:]
 		} else {
-			if next != "" && !strings.HasSuffix(next, "\n") {
-				next += "\n"
+			// Before a `...` document end, where #4260 puts the plugins block
+			// too: a key after it is a second document Hermes cannot parse.
+			block := "\nmcp_servers:\n" + entry
+			if i := strings.LastIndex("\n"+next, "\n...\n"); i >= 0 {
+				next = next[:i] + strings.TrimPrefix(block, "\n") + next[i:]
+			} else {
+				next += block
 			}
-			next += "\nmcp_servers:\n" + entry
 			noteBlockAdded(path, "mcp_servers")
 		}
 	} else if blockWasAdded(path, "mcp_servers") {
@@ -260,15 +270,18 @@ func removeHermesMCPBlock(s string) string {
 	child := -1
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-		if strings.TrimSpace(line) == "mcp_servers:" && yamlIndentWidth(line) == 0 {
+		if yamlKeyLine(line, "mcp_servers:") && yamlIndentWidth(line) == 0 {
 			inBlock, child = true, -1
 			out = append(out, line)
 			continue
 		}
-		if inBlock && strings.TrimSpace(line) != "" && yamlIndentWidth(line) == 0 {
+		// A comment is at whatever indent its writer liked, so it neither
+		// ends the block nor sets the servers' indent (#4289).
+		entry := strings.TrimSpace(line) != "" && !strings.HasPrefix(strings.TrimSpace(line), "#")
+		if inBlock && entry && yamlIndentWidth(line) == 0 {
 			inBlock, child = false, -1
 		}
-		if inBlock && child < 0 && strings.TrimSpace(line) != "" {
+		if inBlock && child < 0 && entry {
 			child = yamlIndentWidth(line)
 		}
 		if !inBlock || strings.TrimSpace(line) != "deja:" || yamlIndentWidth(line) != child {
@@ -311,11 +324,13 @@ func removeHermesMCPBlock(s string) string {
 func hermesBlockIndent(s string) (string, bool) {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		if strings.TrimSpace(line) != "mcp_servers:" || yamlIndentWidth(line) != 0 {
+		if !yamlKeyLine(line, "mcp_servers:") || yamlIndentWidth(line) != 0 {
 			continue
 		}
 		for _, next := range lines[i+1:] {
-			if strings.TrimSpace(next) == "" {
+			// A comment sits at whatever indent its writer liked; the
+			// servers' own indent is the first entry's (#4289).
+			if strings.TrimSpace(next) == "" || strings.HasPrefix(strings.TrimSpace(next), "#") {
 				continue
 			}
 			if yamlIndentWidth(next) == 0 {
