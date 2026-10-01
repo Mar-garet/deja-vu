@@ -3,6 +3,7 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -11,11 +12,25 @@ import (
 	"github.com/vshulcz/deja-vu/internal/model"
 )
 
+// CopilotHome is Copilot CLI's own directory: $COPILOT_HOME when it is set,
+// ~/.copilot otherwise. Copilot keeps its config, skills, MCP servers and
+// sessions there, and resolves a relative COPILOT_HOME against the directory
+// it runs in, so deja does the same (#4240).
+func CopilotHome() string {
+	if h := os.Getenv("COPILOT_HOME"); h != "" {
+		if abs, err := filepath.Abs(h); err == nil {
+			return abs
+		}
+		return h
+	}
+	return filepath.Join(Home(), ".copilot")
+}
+
 // CopilotRoot returns the GitHub Copilot CLI session-state root, overridable
 // via DEJA_COPILOT_ROOT. Each session lives in its own UUID directory as an
 // append-only events.jsonl.
 func CopilotRoot() string {
-	return EnvPath("DEJA_COPILOT_ROOT", filepath.Join(Home(), ".copilot", "session-state"))
+	return EnvPath("DEJA_COPILOT_ROOT", filepath.Join(CopilotHome(), "session-state"))
 }
 
 // CopilotSessionFiles lists event logs under the Copilot session root.

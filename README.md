@@ -102,9 +102,10 @@ or `npx @vshulcz/deja-vu "query"` to try it without installing anything. Desktop
 take MCP servers as bundles can open the `.mcpb` from the
 [latest release](https://github.com/vshulcz/deja-vu/releases/latest); it carries the binary.
 
-Claude Code, Cursor, Qwen, OpenClaw and Copilot can take the same plugin bundle from
+Claude Code, Cursor, Qwen and OpenClaw can take the same plugin bundle from
 their own marketplaces instead (Codex has a bundle of its own, in the table under
-[Harnesses with a package of their own](#harnesses-with-a-package-of-their-own)):
+[Harnesses with a package of their own](#harnesses-with-a-package-of-their-own)).
+Copilot CLI installs it too but takes only the skill, so use `deja install copilot-auto` there:
 
 ```sh
 claude plugin marketplace add vshulcz/deja-vu && claude plugin install deja-vu@deja-vu

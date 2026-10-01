@@ -170,7 +170,7 @@ cursor-agent plugin marketplace add https://github.com/vshulcz/deja-vu
 qwen   extensions install https://github.com/vshulcz/deja-vu
 openclaw plugins install ./deja-vu/claude-plugin
 copilot plugin marketplace add vshulcz/deja-vu &amp;&amp; copilot plugin install deja-vu@deja-vu</pre>
-<div class="note">Cursor, Qwen, OpenClaw and Copilot read the Claude plugin format directly, so all of them install from the one bundle in this repository, which carries the hooks, the <code>/deja</code> command and the MCP server. OpenClaw runs hooks only from its own packs — <code>deja install openclaw-auto</code> writes one — and Copilot runs the plugin hooks but drops their context, so recall there is MCP plus the skill. The plugin stands down if <code>deja install</code> already wired the same hooks, so having both does not recall twice.</div>
+<div class="note">Cursor, Qwen and OpenClaw read the Claude plugin format directly, so all of them install from the one bundle in this repository, which carries the hooks, the <code>/deja</code> command and the MCP server. OpenClaw runs hooks only from its own packs — <code>deja install openclaw-auto</code> writes one. Copilot CLI installs the same bundle and takes only the skill from it: no hook runs and no MCP server is configured, so on Copilot use <code>deja install copilot-auto</code>, which writes both. The plugin stands down if <code>deja install</code> already wired the same hooks, so having both does not recall twice.</div>
 <p>These keep their extensions in an ecosystem of their own:</p>
 <pre>opencode plugin opencode-deja
 dsh plugin --profile web add dsh-deja

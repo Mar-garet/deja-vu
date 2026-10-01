@@ -77,8 +77,10 @@ func autoWirings() []autoWiring {
 		{"crush", func() string { return crushConfigPath() }, "hook-tool", ""},
 		{"grok", func() string { return grokHooksPath() }, "hook-context", ""},
 		// Copilot CLI keeps hooks with the rest of its user settings; the row
-		// follows them to config.json while they have not moved yet.
-		{"copilot", func() string { return copilotHooksPath() }, "hook-context", ""},
+		// follows them to config.json while they have not moved yet. The flag
+		// is part of the marker: a plain hook-context line answers in Claude's
+		// envelope, which Copilot runs and drops.
+		{"copilot", func() string { return copilotHooksPath() }, "hook-context --copilot", ""},
 		// ZCode keeps its hooks in the same file as its server map, and the
 		// line deja writes ends in `--strict` — its schema discards a whole
 		// response over one key it does not know.

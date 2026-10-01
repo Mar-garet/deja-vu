@@ -182,7 +182,7 @@
     {
       "id": "copilot",
       "store_paths": [
-        "${DEJA_COPILOT_ROOT:-~/.copilot/session-state}/*/events.jsonl"
+        "${DEJA_COPILOT_ROOT:-${COPILOT_HOME:-~/.copilot}/session-state}/*/events.jsonl"
       ],
       "format_kind": "jsonl",
       "fixture_paths": [

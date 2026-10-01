@@ -13,15 +13,16 @@ import (
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
-// copilotHome is Copilot CLI's own directory. It honours COPILOT_HOME the way
-// the CLI does: with it set, 1.0.79 keeps its config, sessions and logs there
-// and never looks at ~/.copilot.
-func copilotHome() string {
-	if h := os.Getenv("COPILOT_HOME"); filepath.IsAbs(h) {
-		return h
-	}
-	return filepath.Join(sources.Home(), ".copilot")
-}
+// copilotHome is Copilot CLI's own directory, $COPILOT_HOME or ~/.copilot.
+func copilotHome() string { return sources.CopilotHome() }
+
+// copilotMCPConfigPath is where Copilot CLI reads its MCP servers.
+func copilotMCPConfigPath() string { return filepath.Join(copilotHome(), "mcp-config.json") }
+
+// copilotManagedHeader is what Copilot CLI 1.0.79 writes at the top of the
+// config.json it manages. Every config.json it has started on carries it, so
+// refusing a file over its comments refused every real one.
+const copilotManagedHeader = "// User settings belong in settings.json.\n// This file is managed automatically.\n"
 
 // copilotHooksPath is the file Copilot will read deja's hook from.
 //
@@ -59,24 +60,37 @@ func copilotHookCommand(exe string) string {
 // output is appended to the user's own turn instead. The payload names the
 // session as `sessionId`, and `source` is "resume" when an old one is reopened.
 func installCopilotAuto(exe string, uninstall bool) (installResult, error) {
+	target := copilotHooksPath()
+	paths := []string{filepath.Join(copilotHome(), "settings.json"), filepath.Join(copilotHome(), "config.json")}
+	// Both hook edits are worked out before anything is written, and the MCP
+	// entry after them: a file deja has to refuse used to be found only once
+	// mcp-config.json and settings.json had already been written.
+	plans := make([]copilotHooksPlan, 0, len(paths))
+	for _, path := range paths {
+		// The other file is only ever cleared: an entry left there from an
+		// earlier install would run twice, or be what the move overwrites.
+		plan, err := planCopilotHooks(path, exe, uninstall || path != target)
+		if err != nil {
+			return installResult{}, err
+		}
+		plans = append(plans, plan)
+	}
 	mcp, err := installCopilotMCP(exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
-	target := copilotHooksPath()
-	var hooks installResult
-	for _, path := range []string{filepath.Join(copilotHome(), "settings.json"), filepath.Join(copilotHome(), "config.json")} {
-		// The other file is only ever cleared: an entry left there from an
-		// earlier install would run twice, or be what the move overwrites.
-		r, err := installCopilotHooks(path, exe, uninstall || path != target)
+	results := []installResult{mcp}
+	for _, plan := range plans {
+		r, err := plan.apply()
 		if err != nil {
 			return installResult{}, err
 		}
-		if path == target || r.Action != "unchanged" {
-			hooks = r
-		}
+		// Unchanged files ride along too: the kept-snapshot line reads them,
+		// and the config.json deja wrote into before Copilot moved its hooks
+		// still has deja's snapshot beside it.
+		results = append(results, r)
 	}
-	return wroteAll(mcp, hooks), nil
+	return wroteAll(results...), nil
 }
 
 // copilotHookTimeoutSec bounds how long Copilot waits for the digest before
@@ -84,25 +98,52 @@ func installCopilotAuto(exe string, uninstall bool) (installResult, error) {
 // one that cannot is not worth holding someone's prompt for.
 const copilotHookTimeoutSec = 10
 
-func installCopilotHooks(path, exe string, uninstall bool) (installResult, error) {
+// copilotHooksPlan is one file's edit, worked out and not yet written.
+type copilotHooksPlan struct {
+	path       string
+	old, next  []byte
+	addedBlock bool
+	result     installResult
+}
+
+func (p copilotHooksPlan) apply() (installResult, error) {
+	if p.next == nil {
+		return p.result, nil
+	}
+	if p.addedBlock {
+		noteBlockAdded(p.path, "hooks")
+	}
+	a, err := writeIfChanged(p.path, p.old, p.next)
+	return installResult{Path: p.path, Action: a}, err
+}
+
+func planCopilotHooks(path, exe string, uninstall bool) (copilotHooksPlan, error) {
+	unchanged := copilotHooksPlan{path: path, result: installResult{Path: path, Action: "unchanged"}}
 	exe = hookExeFor(exe, uninstall)
-	cmd := copilotHookCommand(exe)
 	old, err := readConfig(path)
 	if err != nil {
-		return installResult{}, err
+		return copilotHooksPlan{}, err
 	}
 	if uninstall && len(bytes.TrimSpace(old)) == 0 {
-		return installResult{Path: path, Action: "unchanged"}, nil
+		return unchanged, nil
 	}
-	jsonc := configIsJSONC(old)
-	source := old
+	// Copilot's own header comes off before the comment test and goes back on
+	// the way out; anything else that is a comment is the reader's.
+	header := ""
+	body := old
+	if bytes.HasPrefix(old, []byte(copilotManagedHeader)) {
+		header = copilotManagedHeader
+		body = old[len(header):]
+	}
+	jsonc := configIsJSONC(body)
+	source := body
 	if jsonc {
-		source = []byte(jsoncToJSON(string(old)))
+		source = []byte(jsoncToJSON(string(body)))
 	}
 	root := map[string]any{}
 	if len(bytes.TrimSpace(source)) > 0 {
 		if err := json.Unmarshal(source, &root); err != nil {
-			return installResult{}, configParseError(path, err)
+			return copilotHooksPlan{}, configParseError(path, err)
 		}
 		if root == nil {
 			root = map[string]any{}
@@ -112,40 +153,47 @@ func installCopilotHooks(path, exe string, uninstall bool) (installResult, error
 	hooks, isMap := root["hooks"].(map[string]any)
 	if _, has := root["hooks"]; has && !isMap {
 		if uninstall {
-			return installResult{Path: path, Action: "unchanged"}, nil
+			return unchanged, nil
 		}
-		return installResult{}, fmt.Errorf("%s: `hooks` is not an object — deja leaves it as it is", path)
+		return copilotHooksPlan{}, fmt.Errorf("%s: `hooks` is not an object — deja leaves it as it is", path)
 	}
+	added := false
 	if hooks == nil {
 		if uninstall {
-			return installResult{Path: path, Action: "unchanged"}, nil
+			return unchanged, nil
 		}
 		hooks = map[string]any{}
 		root["hooks"] = hooks
-		noteBlockAdded(path, "hooks")
+		added = true
 	}
-	setCopilotHook(hooks, "sessionStart", cmd, uninstall)
-	if len(hooks) == 0 && blockWasAdded(path, "hooks") {
-		delete(root, "hooks")
-		forgetBlockAdded(path, "hooks")
+	setCopilotHook(hooks, "sessionStart", exe, uninstall)
+	// The object deja added can be in either file by now: Copilot moves
+	// config.json's hooks into settings.json on start, and the record names
+	// the file deja wrote.
+	if len(hooks) == 0 && !added {
+		for _, p := range []string{filepath.Join(filepath.Dir(path), "settings.json"), filepath.Join(filepath.Dir(path), "config.json")} {
+			if blockWasAdded(p, "hooks") {
+				delete(root, "hooks")
+				forgetBlockAdded(p, "hooks")
+			}
+		}
 	}
 	after, _ := json.Marshal(root)
 	if string(after) == string(before) {
-		return installResult{Path: path, Action: "unchanged"}, nil
+		return unchanged, nil
 	}
 	if jsonc {
-		return installResult{}, fmt.Errorf("%s: deja cannot edit hooks in a file that carries comments — add or remove the hook by hand, or take the comments out", path)
+		return copilotHooksPlan{}, fmt.Errorf("%s: deja cannot edit hooks in a file that carries comments — add or remove the hook by hand, or take the comments out", path)
 	}
-	next, err := marshalConfigLike(old, root)
+	next, err := marshalConfigLike(body, root)
 	if err != nil {
-		return installResult{}, err
+		return copilotHooksPlan{}, err
 	}
-	next = append(next, '\n')
+	next = append([]byte(header), append(next, '\n')...)
 	if uninstall {
 		next = snapshotIfSame(path, root, next)
 	}
-	a, err := writeIfChanged(path, old, next)
-	return installResult{Path: path, Action: a}, err
+	return copilotHooksPlan{path: path, old: old, next: next, addedBlock: added}, nil
 }
 
 // snapshotIfSame gives back the snapshot deja took before its first write when
@@ -172,7 +220,8 @@ func snapshotIfSame(path string, root map[string]any, next []byte) []byte {
 // setCopilotHook keeps one deja entry under an event and leaves every other
 // one alone. Entries are flat — {"type","bash","timeoutSec"} — the same schema
 // as a repository's .github/hooks/*.json.
-func setCopilotHook(hooks map[string]any, event, cmd string, uninstall bool) {
+func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool) {
+	cmd := copilotHookCommand(exe)
 	base := strings.TrimSuffix(cmd, " --copilot")
 	entries, _ := hooks[event].([]any)
 	var kept []any
@@ -201,7 +250,7 @@ func setCopilotHook(hooks map[string]any, event, cmd string, uninstall bool) {
 			entry["bash"] = cmd
 			entry["timeoutSec"] = copilotHookTimeoutSec
 			if runtime.GOOS == "windows" {
-				entry["powershell"] = "& " + cmd
+				entry["powershell"] = copilotPowerShellCommand(exe)
 			}
 		}
 		kept = append(kept, entryAny)
@@ -211,7 +260,7 @@ func setCopilotHook(hooks map[string]any, event, cmd string, uninstall bool) {
 		// On Windows Copilot picks the powershell line when there is one;
 		// `&` is what lets PowerShell run a quoted path.
 		if runtime.GOOS == "windows" {
-			entry["powershell"] = "& " + cmd
+			entry["powershell"] = copilotPowerShellCommand(exe)
 		}
 		kept = append(kept, entry)
 	}
@@ -239,4 +288,13 @@ func copilotHooksDisabled() bool {
 		}
 	}
 	return false
+}
+
+// copilotPowerShellCommand is the line Copilot runs on Windows. PowerShell
+// runs a quoted path only behind `&`, and a double-quoted one expands `$` and
+// backticks, so the path goes in single quotes, where only the quote itself
+// means anything and is written twice.
+func copilotPowerShellCommand(exe string) string {
+	p := strings.ReplaceAll(exe, `\`, "/")
+	return "& '" + strings.ReplaceAll(p, "'", "''") + "' hook-context --copilot"
 }

@@ -3112,7 +3112,7 @@ func installCursor(exe string, uninstall bool) (installResult, error) {
 // (~/.copilot/mcp-config.json, or under COPILOT_HOME). Copilot's schema differs from the common
 // mcpServers shape: entries carry a type and an enabled-tools list.
 func installCopilotMCP(exe string, uninstall bool) (installResult, error) {
-	path := filepath.Join(copilotHome(), "mcp-config.json")
+	path := copilotMCPConfigPath()
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err

@@ -1,7 +1,9 @@
 # Copilot CLI
 
 - **ID**: `copilot`
-- **Store**: `~/.copilot/session-state/<sessionId>/events.jsonl`
+- **Store**: `~/.copilot/session-state/<sessionId>/events.jsonl`, under
+  `$COPILOT_HOME` when that is set (a relative one is read against the current
+  directory, as Copilot reads it)
 - **Read override**: `DEJA_COPILOT_ROOT` (points at the `session-state` directory)
 - **Format**: append-only JSONL, one event per line, each `{type, data, timestamp}`
 

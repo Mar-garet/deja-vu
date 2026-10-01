@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).
 - `deja uninstall gemini` takes `hooksConfig.enabled` back out of `settings.json` when install added it and no other extension has hooks, so the file comes back byte for byte. A switch you had on before, or one another extension runs on, stays (#4216).
 - A failed Gemini CLI command is indexed with its exit status (`$ git log …  → exit 128`), the way Codex, opencode and Cursor commands are, so the failed-command recall sees it. The index rebuilds once (#4208).
 - `deja resume` refuses an opencode or Kilo CLI session that was deleted in the agent and points at `deja show`; it printed `opencode -s <id>`, which failed with "Session not found" (#4205).
