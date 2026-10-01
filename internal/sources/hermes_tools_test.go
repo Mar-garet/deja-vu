@@ -327,7 +327,7 @@ func TestHermesActiveWithoutCompacted(t *testing.T) {
 }
 
 // In-place compaction writes the kept head and tail again as live rows, with
-// a summary between them; the archived originals are still there (#4242).
+// a summary between them; the archived originals are still there (#4296).
 func TestHermesCompactionDoesNotRepeatProse(t *testing.T) {
 	db := writeHermesStore(t, hermes017Schema, `
 		INSERT INTO messages (session_id,role,content,tool_call_id,tool_calls,tool_name,timestamp,active,compacted) VALUES
