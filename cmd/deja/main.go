@@ -616,7 +616,10 @@ func cmdIndex(dir string, rest []string) error {
 	// the step whose whole job is filling memory returned to the prompt after
 	// a bare "indexing ..." line, and the state (no history anywhere, or a
 	// store behind a permission wall) only surfaced on the next command.
-	if b := index.LastBuild; b.Sessions == 0 && b.Messages == 0 && (noAgentHistoryFound() || deniedStoreCount() > 0) {
+	// LastBuild is set by a full build alone, so an incremental pass read as
+	// an empty one: it paid for the probe and, with any store locked, told a
+	// full index it had nothing to index yet (#4272). The manifest says.
+	if b := index.LastBuild; b.Sessions == 0 && b.Messages == 0 && indexHoldsNothing(dir) && (noAgentHistoryFound() || deniedStoreCount() > 0) {
 		fmt.Fprintln(os.Stderr, emptyIndexReason(b, index.ReportEvictedFiles()))
 	}
 	if !quiet {
@@ -4320,15 +4323,27 @@ func emptyIndexHint(what string) string {
 }
 
 // deniedStoreCount reports how many harness stores exist but cannot be opened.
+// Opened, not parsed: the probe stops before doctor's parser (#4272).
 func deniedStoreCount() int {
 	n := 0
-	for _, check := range doctorStoreChecks() {
-		if store, _ := inspectDoctorStore(check); store.State == "denied" {
+	for _, check := range deniedStoreChecks() {
+		if store, _, _ := probeDoctorStore(check); store.State == "denied" {
 			n++
 		}
 	}
 	return n
 }
+
+// indexHoldsNothing reads the session count off the manifest; no manifest is
+// an empty index.
+func indexHoldsNothing(dir string) bool {
+	n, err := index.SessionCount(dir)
+	return err != nil || n == 0
+}
+
+// deniedStoreChecks is doctorStoreChecks, swappable so a test can count what
+// the probe parses.
+var deniedStoreChecks = doctorStoreChecks
 
 // noAgentHistoryFound reports whether the stores themselves are empty, as
 // opposed to an index that merely has not been built yet.

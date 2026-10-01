@@ -3171,6 +3171,7 @@ func wholeStoresThisPass(changed, old map[string]FileState) {
 	// Rebuilt here rather than kept: a store that appeared since the last pass
 	// is one the walk has to see.
 	passStores = resolveStorePaths()
+	passStoreHarness = new(sync.Map)
 	for p := range changed {
 		harness := storeHarness(p)
 		if harness == "" {
@@ -3220,6 +3221,22 @@ func storeHarness(p string) string {
 	if p == "" {
 		return ""
 	}
+	// Per path, not per record: every record of a goose or cursor store names
+	// the same database, and asking the registry again for each one was a
+	// third of a one-message pass over 5,000 sessions (#4272).
+	if h, ok := passStoreHarness.Load(p); ok {
+		return h.(string)
+	}
+	h := resolveStoreHarness(p)
+	passStoreHarness.Store(p, h)
+	return h
+}
+
+// passStoreHarness memoises storeHarness for one pass; wholeStoresThisPass
+// starts it over with passStores.
+var passStoreHarness = new(sync.Map)
+
+func resolveStoreHarness(p string) string {
 	if h, ok := passStorePaths()[p]; ok {
 		return h
 	}
