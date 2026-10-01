@@ -3149,15 +3149,6 @@ func fromDatabase(r Record) bool {
 	return storeHarness(r.SourcePath) != ""
 }
 
-// readWholeThisPass reports whether the pass re-read this record's store in
-// full. Only then may an old record be dropped because its key came back: a
-// store read from a watermark hands back the new turns alone, and dropping the
-// rest by key would take the earlier turns of a continued session with them.
-//
-// By store rather than by harness where the record names one: cursor keeps a
-// database per workspace as well as the global one, and a first sight of a new
-// workspace — opening a project — has no watermark, so a harness-wide flag let
-// that pass replace sessions in the store it had only read the tail of.
 // leftItsFile reports a session that a re-read file no longer holds, in a
 // harness that keeps many sessions in one file. aider appends every launch to
 // one history, and people delete it because it grows forever: the next launch
@@ -3168,6 +3159,15 @@ func leftItsFile(r Record, reread map[string]bool) bool {
 	return harness == "aider" && !reread[r.Key]
 }
 
+// readWholeThisPass reports whether the pass re-read this record's store in
+// full. Only then may an old record be dropped because its key came back: a
+// store read from a watermark hands back the new turns alone, and dropping the
+// rest by key would take the earlier turns of a continued session with them.
+//
+// By store rather than by harness where the record names one: cursor keeps a
+// database per workspace as well as the global one, and a first sight of a new
+// workspace — opening a project — has no watermark, so a harness-wide flag let
+// that pass replace sessions in the store it had only read the tail of.
 func readWholeThisPass(r Record) bool {
 	if len(passWholeStores) == 0 {
 		return false
