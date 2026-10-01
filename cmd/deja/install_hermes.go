@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/sources"
@@ -343,12 +344,15 @@ func setHermesPluginEnabled(on bool) error {
 		}
 	}
 	s := lfText(old)
-	listed := strings.Contains(s, "\n    - deja\n")
+	next, how := editHermesPluginsEnabled(s, on, blockWasAdded(path, "plugins.enabled"))
 	switch {
-	case on && listed, !on && !listed:
+	case how == hermesPluginsUnreadable && on:
+		return fmt.Errorf("%s: plugins.enabled is not a list deja can edit; add deja to it by hand", path)
+	case how == hermesPluginsUnreadable, !on && how == hermesPluginsMissing, next == s && how != hermesPluginsMissing:
 		return nil
 	case !on:
-		s = strings.Replace(s, "\n    - deja", "", 1)
+		s = next
+		forgetBlockAdded(path, "plugins.enabled")
 		// And the block itself, when deja is what put it there. Taking back
 		// only the entry left `plugins:\n  enabled:` behind on every machine
 		// that had no plugins block — an empty key that parses as null — while
@@ -359,17 +363,175 @@ func setHermesPluginEnabled(on bool) error {
 			s = strings.TrimSuffix(s, "\n\n") + "\n"
 			forgetBlockAdded(path, "plugins")
 		}
-	case strings.Contains(s, "\nplugins:\n  enabled:\n"):
-		s = strings.Replace(s, "\nplugins:\n  enabled:\n", "\nplugins:\n  enabled:\n    - deja\n", 1)
-	case strings.Contains(s, "\nplugins:\n  enabled: []\n"):
-		s = strings.Replace(s, "\nplugins:\n  enabled: []\n", "\nplugins:\n  enabled:\n    - deja\n", 1)
-	default:
+	case how == hermesPluginsMissing:
 		if s != "" && !strings.HasSuffix(s, "\n") {
 			s += "\n"
 		}
 		s += "\nplugins:\n  enabled:\n    - deja\n"
 		noteBlockAdded(path, "plugins")
+	default:
+		s = next
+		if how == hermesPluginsKeyAdded {
+			noteBlockAdded(path, "plugins.enabled")
+		}
 	}
 	_, err = writeIfChanged(path, old, []byte(s))
 	return err
+}
+
+const (
+	hermesPluginsEdited = iota
+	hermesPluginsMissing
+	hermesPluginsKeyAdded
+	hermesPluginsUnreadable
+)
+
+// editHermesPluginsEnabled puts deja into plugins.enabled, or takes it out,
+// in whichever style the list is written. Matching only the block form sent a
+// flow list — `enabled: [spotify]`, which Hermes' own docs use — to the branch
+// that appends a whole second `plugins:`, and YAML keeps the last key, so the
+// user's plugins went off (#4243). An `enabled: []` was rewritten as a block
+// key, which uninstall then left as null (#4249). A flow list stays a flow
+// list, and taking deja out gives back the bytes that were there.
+//
+// keyAdded says deja wrote the `enabled:` key itself, under a plugins block
+// that had none, and so takes it away with its last entry.
+func editHermesPluginsEnabled(s string, on, keyAdded bool) (string, int) {
+	lines := strings.Split(s, "\n")
+	p := -1
+	for i, line := range lines {
+		if v, ok := hermesYAMLKey(line, "plugins"); ok && yamlIndentWidth(line) == 0 {
+			if v != "" {
+				return s, hermesPluginsUnreadable
+			}
+			p = i
+			break
+		}
+	}
+	if p < 0 {
+		return s, hermesPluginsMissing
+	}
+	end := len(lines)
+	child := ""
+	for i := p + 1; i < len(lines); i++ {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		if yamlIndentWidth(lines[i]) == 0 {
+			end = i
+			break
+		}
+		if child == "" {
+			child = lines[i][:yamlIndentWidth(lines[i])]
+		}
+	}
+	if child == "" {
+		child = "  "
+	}
+	k := -1
+	val := ""
+	for i := p + 1; i < end; i++ {
+		if v, ok := hermesYAMLKey(lines[i], "enabled"); ok && lines[i][:yamlIndentWidth(lines[i])] == child {
+			k, val = i, v
+			break
+		}
+	}
+	if k < 0 {
+		if !on {
+			return s, hermesPluginsEdited
+		}
+		lines = slices.Insert(lines, p+1, child+"enabled:", child+child+"- deja")
+		return strings.Join(lines, "\n"), hermesPluginsKeyAdded
+	}
+	if val == "" {
+		last, mine, others := k, -1, 0
+		for i := k + 1; i < end; i++ {
+			t := strings.TrimSpace(lines[i])
+			if t == "" || strings.HasPrefix(t, "#") {
+				continue
+			}
+			w := yamlIndentWidth(lines[i])
+			if w < len(child) || w == len(child) && !strings.HasPrefix(t, "-") {
+				break
+			}
+			if !strings.HasPrefix(t, "-") {
+				continue
+			}
+			last = i
+			if hermesYAMLScalar(strings.TrimPrefix(t, "-")) == "deja" {
+				mine = i
+			} else {
+				others++
+			}
+		}
+		switch {
+		case on && mine >= 0, !on && mine < 0:
+			return s, hermesPluginsEdited
+		case on && last == k:
+			lines = slices.Insert(lines, k+1, child+child+"- deja")
+		case on:
+			lines = slices.Insert(lines, last+1, lines[last][:yamlIndentWidth(lines[last])]+"- deja")
+		case keyAdded && others == 0:
+			lines = slices.Delete(lines, mine, mine+1)
+			lines = slices.Delete(lines, k, k+1)
+		default:
+			lines = slices.Delete(lines, mine, mine+1)
+		}
+		return strings.Join(lines, "\n"), hermesPluginsEdited
+	}
+	if items, flow := yamlFlowItems(val); !flow || items == nil {
+		return s, hermesPluginsUnreadable
+	}
+	line := lines[k]
+	open := strings.Index(line, "[")
+	shut := open + strings.Index(line[open:], "]")
+	inner := line[open+1 : shut]
+	parts := strings.Split(inner, ",")
+	mine := slices.IndexFunc(parts, func(v string) bool { return hermesYAMLScalar(v) == "deja" })
+	switch {
+	case on && mine >= 0, !on && mine < 0:
+		return s, hermesPluginsEdited
+	case on && strings.TrimSpace(inner) == "":
+		inner = "deja"
+	case on:
+		r := strings.TrimRight(inner, " ")
+		inner = r + ", deja" + inner[len(r):]
+	case len(parts) == 1:
+		inner = ""
+	default:
+		lead := parts[mine][:len(parts[mine])-len(strings.TrimLeft(parts[mine], " "))]
+		parts = slices.Delete(parts, mine, mine+1)
+		if mine == 0 {
+			parts[0] = lead + strings.TrimLeft(parts[0], " ")
+		}
+		inner = strings.Join(parts, ",")
+	}
+	lines[k] = line[:open+1] + inner + line[shut:]
+	return strings.Join(lines, "\n"), hermesPluginsEdited
+}
+
+// hermesYAMLKey reads `key: value` off a line, the value without a trailing
+// comment.
+func hermesYAMLKey(line, key string) (string, bool) {
+	t := strings.TrimLeft(line, " \t")
+	if !strings.HasPrefix(t, key+":") {
+		return "", false
+	}
+	rest := t[len(key)+1:]
+	if rest != "" && rest[0] != ' ' && rest[0] != '\t' {
+		return "", false
+	}
+	if i := strings.Index(rest, " #"); i >= 0 {
+		rest = rest[:i]
+	}
+	return strings.TrimSpace(rest), true
+}
+
+// hermesYAMLScalar is a list item as a name: no comment, no quotes.
+func hermesYAMLScalar(v string) string {
+	if i := strings.Index(v, " #"); i >= 0 {
+		v = v[:i]
+	}
+	return strings.Trim(strings.TrimSpace(v), `"'`)
 }
