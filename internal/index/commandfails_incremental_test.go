@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -315,6 +316,39 @@ func TestACommandFailureUpdateEndsWhereAFullBuildDoes(t *testing.T) {
 	// Against the walk only: a full build of these transcripts holds a session
 	// the update dropped, which is older than this table.
 	checkWalk("a shared id losing one copy")
+
+	// Work an older deja appended, which never advanced the state: a command
+	// in one pass, its output in the next. Restoring the state from before
+	// both stands in for that binary. The rewrite that follows carries the
+	// state over, and has to read sessions 1 and 2 again from that tail.
+	saved, err := os.ReadFile(commandFailStatePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vet := map[int]string{}
+	for _, i := range []int{1, 2} {
+		vet[i] = c.turn(projects[i%2], i, 40, "go vet ./cmd/...", "./store.go:12:2: undefined: Flock", true)
+		use, _, _ := strings.Cut(vet[i], "\n")
+		c.appendRaw(projects[i%2], i, use+"\n")
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, i := range []int{1, 2} {
+		_, result, _ := strings.Cut(vet[i], "\n")
+		c.appendRaw(projects[i%2], i, result)
+	}
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(commandFailStatePath(dir), saved, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.write("web", 3, "fix the store test 3, once more")
+	if err := Ensure(dir, "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	checkWalk("a rewrite after an older deja's appends")
 }
 
 // commandFailsByFullWalk is the table a walk of every record in the index
