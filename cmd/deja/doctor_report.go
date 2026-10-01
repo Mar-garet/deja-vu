@@ -329,6 +329,9 @@ type doctorMCPStatus struct {
 	// BinaryMissing is the auto_recall field of the same name: the entry is
 	// wired and names a deja binary that is no longer there (#4177).
 	BinaryMissing bool `json:"binary_missing,omitempty"`
+	// Note is the caveat the text row prints under a "wired" it cannot fully
+	// vouch for: Cherry Studio's, when only the import file could be read (#4344).
+	Note string `json:"note,omitempty"`
 }
 
 type doctorCommandStatus struct {
@@ -919,6 +922,21 @@ func collectDoctorMCP() []doctorMCPStatus {
 		// same as able to start.
 		if state == "wired" && dejaCommandMissing(config.path) != "" {
 			row.BinaryMissing = true
+		}
+		// The app's own table, when it can be read, rather than the file it
+		// imports from (#4344).
+		if config.name == "cherrystudio" {
+			if known, wired, db, missing := cherryStudioAppWiring(); known {
+				row.BinaryMissing = false
+				switch {
+				case wired:
+					row.State, row.Path, row.BinaryMissing = "wired", db, missing != ""
+				case state != "config-missing":
+					row.State = "not-imported"
+				}
+			} else if state == "wired" {
+				row.Note = doctorWiringNote(config.name)
+			}
 		}
 		out = append(out, row)
 	}

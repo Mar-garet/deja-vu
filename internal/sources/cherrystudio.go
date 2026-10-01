@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -83,6 +84,64 @@ func cherryStudioAppDirs() []string {
 		}
 		return []string{filepath.Join(cfg, "CherryStudio")}
 	}
+}
+
+// CherryStudioDatabases are where the app keeps its own store, MCP servers
+// included: `<app data>/Data/cherrystudio.sqlite` (`app.database.file` in
+// 2.0.14's out/main/main.js).
+func CherryStudioDatabases() []string {
+	var out []string
+	for _, base := range cherryStudioAppDirs() {
+		out = append(out, filepath.Join(base, "Data", "cherrystudio.sqlite"))
+	}
+	return out
+}
+
+// CherryStudioMCPServer is one row of the app's `mcp_server` table.
+type CherryStudioMCPServer struct {
+	Name    string
+	Command string
+	Args    []string
+}
+
+// CherryStudioMCPServers reads the MCP servers the app itself has, from the
+// first of its databases that exists. ok is false when there is none, when
+// sqlite3 is missing, or when the read fails: then nothing is known about the
+// app, which is different from the app having no deja server (#4344).
+//
+// Read-only, through the same sqlite3 call the transcript stores use: a
+// running app owns this file.
+func CherryStudioMCPServers() (db string, servers []CherryStudioMCPServer, ok bool) {
+	for _, p := range CherryStudioDatabases() {
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
+			db = p
+			break
+		}
+	}
+	if db == "" || !SQLite3Available() {
+		return db, nil, false
+	}
+	out, err := sqliteOutput(db,
+		"select json_object('name', name, 'command', coalesce(command, ''), 'args', coalesce(args, '')) from mcp_server;")
+	if err != nil {
+		return db, nil, false
+	}
+	rows, err := sqliteObjects[struct {
+		Name    string `json:"name"`
+		Command string `json:"command"`
+		Args    string `json:"args"`
+	}](out)
+	if err != nil {
+		return db, nil, false
+	}
+	for _, r := range rows {
+		s := CherryStudioMCPServer{Name: r.Name, Command: r.Command}
+		// args is a JSON array in a text column; a row that does not parse
+		// keeps its command, which is still enough to recognise deja.
+		_ = json.Unmarshal([]byte(r.Args), &s.Args)
+		servers = append(servers, s)
+	}
+	return db, servers, true
 }
 
 // CherryStudioSessionFiles lists the transcripts on disk.

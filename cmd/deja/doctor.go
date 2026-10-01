@@ -1340,6 +1340,9 @@ func doctorMCP(w io.Writer) {
 		if status != "wired" && c.name == "codex" && codexPluginInstalled() {
 			status = "plugin"
 		}
+		if c.name == "cherrystudio" && doctorCherryStudioMCP(w, status, c.path) {
+			continue
+		}
 		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", c.name, status, guidanceStatus(guidanceHarness(c.name)), reportPath(c.path))
 		// One "wired" can be two registrations: a hand add under another name
 		// — the project is called deja-vu, after all — plus the `deja` a later
@@ -1357,8 +1360,11 @@ func doctorMCP(w io.Writer) {
 		// healthy while no memory arrived (#2216).
 		if status == "wired" {
 			if missing := dejaCommandMissing(c.path); missing != "" {
-				fmt.Fprintf(w, "  %-12s %s\n", "",
-					"points at "+missing+", which is not there — `deja install "+c.name+"` rewrites it for this binary")
+				fix := "`deja install " + c.name + "` rewrites it for this binary"
+				if c.name == "cherrystudio" {
+					fix += ", then re-import it in Settings → MCP"
+				}
+				fmt.Fprintf(w, "  %-12s %s\n", "", "points at "+missing+", which is not there — "+fix)
 			} else if other := otherBinaryNote(c.path, c.name); other != "" {
 				// The quieter half: the binary is there and is neither this one
 				// nor the deja on PATH. Two harnesses on the machine this was
@@ -1703,6 +1709,39 @@ func jsonKeyOpening(trimmed string) (string, bool) {
 		return "", false
 	}
 	return key, true
+}
+
+// doctorCherryStudioMCP prints the cherrystudio row from the app's own server
+// table when it can be read, and reports false when it cannot, leaving the
+// import-file row and its caveat to the caller. The import file existing says
+// nothing about the app having the server (#4344).
+func doctorCherryStudioMCP(w io.Writer, fileStatus, importPath string) bool {
+	known, wired, db, missing := cherryStudioAppWiring()
+	if !known {
+		return false
+	}
+	guidance := guidanceStatus(guidanceHarness("cherrystudio"))
+	if !wired {
+		status := "not imported"
+		if fileStatus == "config missing" {
+			status = fileStatus
+		}
+		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", "cherrystudio", status, guidance, reportPath(importPath))
+		fix := "`deja install cherrystudio`, then import " + reportPath(importPath)
+		if status == "not imported" {
+			fix = "import this file"
+		}
+		fmt.Fprintf(w, "  %-12s %s\n", "", "Cherry Studio has no deja server — "+fix+" in Settings → MCP → Import from JSON")
+		return true
+	}
+	fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", "cherrystudio", "wired", guidance, reportPath(db))
+	if missing != "" {
+		// Rewriting the import file does not reach the app: its copy keeps
+		// the dead path until the server is re-imported or edited.
+		fmt.Fprintf(w, "  %-12s %s\n", "", "points at "+missing+", which is not there — `deja install cherrystudio`, then re-import "+
+			reportPath(importPath)+" in Settings → MCP (or fix the command there)")
+	}
+	return true
 }
 
 // doctorWiringNote adds what "wired" cannot promise for a given harness. Three

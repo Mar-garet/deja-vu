@@ -347,7 +347,9 @@ func sharedSkillStillWanted(leaving string) bool {
 		if other == leaving || removingTargets[other] {
 			continue
 		}
-		if sharedSkillHarnesses[other] {
+		// cherrystudio writes the shared skill from its own install rather
+		// than through guidance, and reads it all the same (#4345).
+		if sharedSkillHarnesses[other] || ownGuidanceFile(other) == sharedSkillPath() {
 			return true
 		}
 	}

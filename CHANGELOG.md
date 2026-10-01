@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja doctor` reads Cherry Studio's own server list and reports `not-imported` until the app has a server that runs `deja mcp`; it said `wired` whenever the import file existed. A moved binary now points at re-importing the file, and `--json` carries the caveat when the app's database can't be read (#4344).
+- A second `deja install cherrystudio` names the JSON file to import instead of `SKILL.md` (#4343).
+- `deja uninstall cherrystudio` removes the deja-history skill it installed, unless another installed agent still reads it (#4345).
 - A session that ended a few minutes ago shows up in the next session's MCP recall. deja hid every session its hooks had touched in the last 20 minutes as one an agent was still inside; Claude Code and Gemini CLI now get a `SessionEnd` hook that clears that mark when the session closes, including a one-shot `gemini -p`. Installing or uninstalling hooks also keeps the key order of your own entries in `settings.json` instead of sorting them (#4210).
 - `deja index` no longer says "no agent history was found" when the transcript it just reported deleted is still held and searchable (#4221).
 - `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).
