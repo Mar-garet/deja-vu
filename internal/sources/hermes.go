@@ -1,7 +1,6 @@
 package sources
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -122,14 +121,21 @@ func parseHermesDBWhere(db, where string) ([]model.Session, error) {
 		`'content',cast(content as text),'timestamp',timestamp) from messages ` +
 		`where role in ('user','assistant') and content is not null and content <> ''` + where +
 		` order by session_id,timestamp,id`
-	if hermesHasToolColumns(db) {
+	if cols := hermesColumns(db); cols["tool_calls"] && cols["tool_call_id"] && cols["tool_name"] {
 		// A tool-call row has no content, only tool_calls, and the result lands
 		// on a `tool` row; both carry the session's work (#4242).
+		live := ""
+		if cols["active"] && cols["compacted"] {
+			// What Hermes' own search reads: live rows and the ones compaction
+			// archived. active=0 with compacted=0 is a turn rewound away.
+			live = " and (active = 1 or compacted = 1)"
+		}
 		q = `select json_object('session_id',cast(session_id as text),'role',cast(role as text),` +
 			`'content',cast(content as text),'timestamp',timestamp,` +
-			`'tool_calls',cast(tool_calls as text),'tool_call_id',cast(tool_call_id as text)) from messages ` +
+			`'tool_calls',cast(tool_calls as text),'tool_call_id',cast(tool_call_id as text),` +
+			`'tool_name',cast(tool_name as text)) from messages ` +
 			`where role in ('user','assistant','tool') and ((content is not null and content <> '')` +
-			` or (tool_calls is not null and tool_calls <> ''))` + where +
+			` or (tool_calls is not null and tool_calls <> ''))` + live + where +
 			` order by session_id,timestamp,id`
 	}
 	cmd, stopRead := sqliteReadCmd(db, q)
@@ -164,17 +170,30 @@ func parseHermesDBWhere(db, where string) ([]model.Session, error) {
 }
 
 // decodeHermesArray reads {session_id,role,content,timestamp} rows into
-// sessions — with tool_calls and tool_call_id when the query asked for them —
-// either as a json array — Postgres json_agg, with dec positioned
+// sessions — with tool_calls, tool_call_id and tool_name when the query asked
+// for them — either as a json array — Postgres json_agg, with dec positioned
 // just past the opening '[' and left just past the closing ']' — or as the
 // bare stream of objects the sqlite3 reader produces. project and path stamp
 // every session.
+//
+// Both queries order by session, so a session is finished when the next one
+// starts and its bookkeeping goes with it.
 func decodeHermesArray(dec *json.Decoder, project, path string) ([]model.Session, error) {
-	by := map[string]*model.Session{}
-	var order []string
-	// Which messages hold the commands a call ran, by session and call id, so
-	// the exit code on the `tool` row lands on its command.
-	commandAt := map[[2]string][]int{}
+	var out []model.Session
+	var cur *hermesSession
+	finish := func() {
+		if cur == nil {
+			return
+		}
+		// No title here: the index derives one (the person's first line,
+		// a greeting giving way to the next turn, the agent's line when
+		// nobody typed). Titling in the parser skipped the greeting rule, so
+		// a session opened with "hi" listed as "hi" (#3241, #3251).
+		if s := cur.done(); len(s.Messages) > 0 {
+			out = append(out, s)
+		}
+		cur = nil
+	}
 	for dec.More() {
 		var r map[string]any
 		if err := dec.Decode(&r); err != nil {
@@ -184,185 +203,35 @@ func decodeHermesArray(dec *json.Decoder, project, path string) ([]model.Session
 		if id == "" {
 			continue
 		}
-		s := by[id]
-		if s == nil {
-			s = &model.Session{Harness: "hermes", ID: id, Project: project, Path: path}
-			by[id] = s
-			order = append(order, id)
+		if cur == nil || cur.s.ID != id {
+			finish()
+			cur = newHermesSession(model.Session{Harness: "hermes", ID: id, Project: project, Path: path})
 		}
-		t := hermesTime(r["timestamp"])
-		role := str(r["role"])
-		txt := strings.TrimSpace(str(r["content"]))
-		if role == "tool" {
-			hermesToolResult(s, txt, commandAt[[2]string{id, str(r["tool_call_id"])}], t)
-			continue
-		}
-		if txt != "" {
-			s.Touch(t)
-			s.Messages = append(s.Messages, model.Message{Role: role, Text: capParsedMessage(txt), Time: t})
-		}
-		if role == "assistant" {
-			hermesToolCalls(s, str(r["tool_calls"]), commandAt, t)
-		}
+		cur.row(r)
 	}
+	finish()
 	if _, err := dec.Token(); err != nil && err != io.EOF {
 		return nil, err
-	}
-	out := make([]model.Session, 0, len(order))
-	for _, id := range order {
-		s := by[id]
-		if len(s.Messages) == 0 {
-			continue
-		}
-		// No title here: the index derives one (the person's first line,
-		// a greeting giving way to the next turn, the agent's line when
-		// nobody typed). Titling in the parser skipped the greeting rule, so
-		// a session opened with "hi" listed as "hi" (#3241, #3251).
-		out = append(out, *s)
 	}
 	return out, nil
 }
 
-// hermesHasToolColumns probes for the two columns the tool rows are read
-// from. Every Hermes schema seen has them, but naming a missing column fails
-// the whole query, and a store without them still has its prose to give.
-func hermesHasToolColumns(db string) bool {
+// hermesColumns names the columns of the messages table. Every Hermes schema
+// seen has the tool columns, but naming a missing one fails the whole query,
+// and a store without them still has its prose to give.
+func hermesColumns(db string) map[string]bool {
 	out, err := sqliteOutput(db, "pragma table_info(messages)")
-	return err == nil && bytes.Contains(out, []byte("|tool_calls|")) && bytes.Contains(out, []byte("|tool_call_id|"))
-}
-
-// hermesDialect is Hermes' tool vocabulary, read off its own schemas in
-// tools/file_tools.py and tools/terminal_tool.py: the shell is `terminal`, the
-// file tools take `path`, and patch in its default replace mode takes
-// old_string/new_string like Claude's Edit. search_files' path is a directory
-// to search, not a file the session touched, so it is left out.
-var hermesDialect = toolDialect{
-	pathKey:   "path",
-	pathTools: map[string]bool{"read_file": true, "write_file": true, "patch": true},
-	shellTool: "terminal",
-	editTools: map[string]bool{"patch": true, "write_file": true},
-}
-
-// hermesToolCalls turns an assistant row's OpenAI-style tool_calls into work
-// records, noting where each call's commands landed.
-func hermesToolCalls(s *model.Session, raw string, commandAt map[[2]string][]int, t time.Time) {
-	if raw == "" {
-		return
-	}
-	var calls []any
-	if json.Unmarshal([]byte(raw), &calls) != nil {
-		return
-	}
-	for _, c := range calls {
-		blocks := reasonixToolUses([]any{c})
-		if len(blocks) == 0 {
-			continue
-		}
-		var records []model.Message
-		if IndexToolPaths() {
-			if p := toolPathsIn(blocks, hermesDialect); p != "" {
-				records = append(records, model.Message{Role: RoleFiles, Text: p, Time: t})
-			}
-		}
-		if IndexWrites() {
-			for _, w := range wroteRecordsIn(blocks, hermesDialect) {
-				records = append(records, model.Message{Role: RoleWrote, Text: w, Time: t})
-			}
-		}
-		if IndexEdits() {
-			for _, span := range editSpansIn(blocks, hermesDialect) {
-				records = append(records, model.Message{Role: RoleEdit, Text: span, Time: t})
-			}
-		}
-		records = append(records, hermesPatchRecords(blocks[0], t)...)
-		var at []int
-		if IndexCommands() {
-			for _, cmd := range commandsIn(blocks, hermesDialect) {
-				at = append(at, len(s.Messages)+len(records))
-				records = append(records, model.Message{Role: RoleCommand, Text: cmd, Time: t})
-			}
-		}
-		if len(records) == 0 {
-			continue
-		}
-		if m, _ := c.(map[string]any); m != nil && len(at) > 0 {
-			if id, _ := m["id"].(string); id != "" {
-				commandAt[[2]string{s.ID, id}] = at
-			}
-		}
-		s.Touch(t)
-		s.Messages = append(s.Messages, records...)
-	}
-}
-
-// hermesPatchRecords reads patch in its V4A mode, where the call carries a
-// multi-file patch instead of a path and a span.
-func hermesPatchRecords(block any, t time.Time) []model.Message {
-	b, _ := block.(map[string]any)
-	if name, _ := b["name"].(string); name != "patch" {
+	if err != nil {
 		return nil
 	}
-	in, _ := b["input"].(map[string]any)
-	patch, _ := in["patch"].(string)
-	if patch == "" {
-		return nil
-	}
-	var out []model.Message
-	if IndexToolPaths() {
-		var files []string
-		seen := map[string]bool{}
-		for _, m := range codexPatchFile.FindAllStringSubmatch(patch, -1) {
-			if f := strings.TrimSpace(m[1]); f != "" && !seen[f] {
-				seen[f] = true
-				files = append(files, f)
-			}
-		}
-		if len(files) > 0 {
-			out = append(out, model.Message{Role: RoleFiles, Text: strings.Join(files, "\n"), Time: t})
+	cols := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		// cid|name|type|notnull|dflt_value|pk
+		if f := strings.SplitN(line, "|", 3); len(f) == 3 {
+			cols[f[1]] = true
 		}
 	}
-	if IndexWrites() {
-		for _, rec := range addedLinesOfPatch(patch) {
-			out = append(out, model.Message{Role: RoleWrote, Text: rec, Time: t})
-		}
-	}
-	if IndexEdits() {
-		for _, span := range patchSpans(patch) {
-			out = append(out, model.Message{Role: RoleEdit, Text: span, Time: t})
-		}
-	}
-	return out
-}
-
-// hermesToolResult records a `tool` row. terminal answers with
-// {output, exit_code, error}: the output is the record and a non-zero code
-// rides on the command it answers, as it does for opencode and Copilot. Every
-// other tool's JSON is kept as written.
-func hermesToolResult(s *model.Session, txt string, cmdAt []int, t time.Time) {
-	if txt == "" {
-		return
-	}
-	var res map[string]any
-	if json.Unmarshal([]byte(txt), &res) == nil {
-		if out, ok := res["output"].(string); ok {
-			txt = strings.TrimSpace(out)
-			if e, _ := res["error"].(string); strings.TrimSpace(e) != "" {
-				txt = strings.TrimSpace(txt + "\n" + e)
-			}
-			if code := exitCode(res["exit_code"]); code > 0 {
-				for _, i := range cmdAt {
-					if i < len(s.Messages) && s.Messages[i].Role == RoleCommand {
-						s.Messages[i].Text += fmt.Sprintf("  → exit %d", code)
-					}
-				}
-			}
-		}
-	}
-	if txt == "" || !IndexToolOutput() {
-		return
-	}
-	s.Touch(t)
-	s.Messages = append(s.Messages, model.Message{Role: RoleToolOutput, Text: capParsedMessage(txt), Time: t})
+	return cols
 }
 
 // hermesTime reads Hermes' REAL epoch seconds. The shared parser handles

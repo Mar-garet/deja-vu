@@ -48,11 +48,16 @@
 <p>A flat <code>messages</code> table, grouped by <code>session_id</code>: <code>role</code>, <code>content</code>, and <code>timestamp</code></p>
 <p>as REAL epoch seconds. An assistant row that calls tools has no <code>content</code> and an</p>
 <p>OpenAI-style <code>tool_calls</code> array instead; the result lands on a <code>tool</code> row under the</p>
-<p>same <code>tool_call_id</code>. Calls to <code>terminal</code> become commands (a non-zero <code>exit_code</code> from</p>
-<p>the result rides on the command), <code>read_file</code>, <code>write_file</code> and <code>patch</code> name the files,</p>
-<p>and <code>patch</code> and <code>write_file</code> give the edit and written sides — <code>patch</code> in its V4A</p>
-<p>mode the same way an apply_patch does. A <code>tool</code> row is kept as tool output: the</p>
-<p><code>output</code> of a terminal result, the JSON as written for anything else (#4242). The</p>
+<p>same <code>tool_call_id</code>. Calls to <code>terminal</code> become commands: a non-zero <code>exit_code</code> from</p>
+<p>the result rides on the command, and <code>-1</code>, which Hermes returns for a command it never</p>
+<p>ran (denied, blocked, waiting on approval), drops the command record. <code>read_file</code>,</p>
+<p><code>write_file</code> and <code>patch</code> name the files, and <code>patch</code> and <code>write_file</code> give the edit and</p>
+<p>written sides — <code>patch</code> in its V4A mode as Hermes&#39; own parser reads it, <code>Move File</code></p>
+<p>included. A <code>tool</code> row is kept as tool output by what it says (<code>output</code>, <code>content</code>,</p>
+<p><code>diff</code>, <code>matches_text</code>, <code>error</code>); bookkeeping such as a byte count is not. Rows</p>
+<p>rewound away (<code>active = 0</code>, <code>compacted = 0</code>) are skipped, a call compaction wrote again</p>
+<p>counts once, and its compressor stubs are dropped. Multimodal content, stored as</p>
+<p><code>\x00json:</code> and a list of parts, keeps its text parts and not the image (#4242). The</p>
 <p>Postgres path still reads prose only. A <code>sessions</code> table beside it carries <code>id</code>, <code>cwd</code>,</p>
 <p><code>git_repo_root</code> and <code>title</code>; the <code>cwd</code> is where the work happened and is what names</p>
 <p>the project, the same way a Cline or Roo workspace does. A store without that table,</p>

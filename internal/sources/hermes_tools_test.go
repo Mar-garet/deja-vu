@@ -34,7 +34,7 @@ func TestHermesToolCallsBecomeWorkRecords(t *testing.T) {
 		RoleCommand:    {"$ go test ./...", "$ make build  → exit 1"},
 		RoleFiles:      {"/tmp/proj/retry.py", "/tmp/proj/retry.py", "/tmp/proj/a.py"},
 		RoleEdit:       {"/tmp/proj/retry.py\nraise NotImplementedError", "/tmp/proj/a.py\nold_value = compute_the_old_way()"},
-		RoleToolOutput: {"notes.txt", `{"bytes_written": 26}`, "SyntaxError: bad"},
+		RoleToolOutput: {"notes.txt", "SyntaxError: bad"},
 	}
 	for role, w := range want {
 		if got := strings.Join(by[role], " | "); got != strings.Join(w, " | ") {

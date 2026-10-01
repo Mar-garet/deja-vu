@@ -10,11 +10,16 @@
 A flat `messages` table, grouped by `session_id`: `role`, `content`, and `timestamp`
 as REAL epoch seconds. An assistant row that calls tools has no `content` and an
 OpenAI-style `tool_calls` array instead; the result lands on a `tool` row under the
-same `tool_call_id`. Calls to `terminal` become commands (a non-zero `exit_code` from
-the result rides on the command), `read_file`, `write_file` and `patch` name the files,
-and `patch` and `write_file` give the edit and written sides — `patch` in its V4A
-mode the same way an apply_patch does. A `tool` row is kept as tool output: the
-`output` of a terminal result, the JSON as written for anything else (#4242). The
+same `tool_call_id`. Calls to `terminal` become commands: a non-zero `exit_code` from
+the result rides on the command, and `-1`, which Hermes returns for a command it never
+ran (denied, blocked, waiting on approval), drops the command record. `read_file`,
+`write_file` and `patch` name the files, and `patch` and `write_file` give the edit and
+written sides — `patch` in its V4A mode as Hermes' own parser reads it, `Move File`
+included. A `tool` row is kept as tool output by what it says (`output`, `content`,
+`diff`, `matches_text`, `error`); bookkeeping such as a byte count is not. Rows
+rewound away (`active = 0`, `compacted = 0`) are skipped, a call compaction wrote again
+counts once, and its compressor stubs are dropped. Multimodal content, stored as
+`\x00json:` and a list of parts, keeps its text parts and not the image (#4242). The
 Postgres path still reads prose only. A `sessions` table beside it carries `id`, `cwd`,
 `git_repo_root` and `title`; the `cwd` is where the work happened and is what names
 the project, the same way a Cline or Roo workspace does. A store without that table,
