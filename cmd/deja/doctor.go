@@ -667,6 +667,11 @@ func doctorHarnesses(w io.Writer, dir string) {
 		partly[check.name] = store.Partial
 	}
 
+	// Crush and OpenClaw print a row per database under one name, and the
+	// counts below are the harness's, not the row's: repeated on every row, an
+	// empty crush.db claimed another project's sessions (#4379). The first row
+	// of a harness carries them.
+	counted := map[string]bool{}
 	printRow := func(name, path string, present bool, detail string) {
 		// A store DEJA_STORES silences has no row at all. The line above says
 		// which stores are being read; a row saying "missing" about one of the
@@ -726,7 +731,9 @@ func doctorHarnesses(w io.Writer, dir string) {
 		// `sync import` has no files at all, and doctor said nothing about the
 		// sessions it does hold — the only surface that names them was stats
 		// (#892).
-		if n, ok := indexed[name]; ok {
+		first := !counted[name]
+		counted[name] = true
+		if n, ok := indexed[name]; ok && first {
 			if detail != "" {
 				detail += ", "
 			}
@@ -761,7 +768,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 		// read. Outside the block above on purpose — a store with no indexed
 		// session at all has no entry there, and that is exactly the store
 		// this is about (#3747).
-		if u := neverRead[name]; u > 0 {
+		if u := neverRead[name]; u > 0 && first {
 			if detail != "" {
 				detail += ", "
 			}
