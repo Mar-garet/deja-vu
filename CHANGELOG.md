@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja doctor` prints Crush's session count once, on the registry row, instead of repeating it on every project database, where an empty crush.db read "1 indexed session" (#4379).
 - Crush `edit`, `multiedit` and `write` calls are indexed with the text they replaced and wrote, so `deja restore` and `deja blame` see Crush sessions; before, only the path was kept (#4377).
 - A new Crush message no longer re-reads the whole project store: deja asks crush.db only for the sessions that moved since the last pass. One turn in a 3000-session store replaced all 3000 and took 8 s (#4381).
+- Crush loads the deja-search skill instead of dropping it with a warning on every start: the copy deja installs no longer carries the nested OpenClaw `metadata` block, which the Agent Skills spec types as strings (#4378).
 - Resuming a recent session reads the session-start digest from the cache instead of rebuilding it, and keeps doing so after the cache refreshes; a resume took 24-41 ms against 0.1-0.2 ms for a new session (#4224).
 - `deja install codex-auto` that drops a second copy of deja's hook moves the Codex trust pins of your hooks after it along with them, so your hook keeps its approval instead of picking up the dropped copy's pin (#4227).
 - A Claude Code session in a non-ASCII directory whose first transcript had no `cwd` line yet when `deja mcp` first read it is filed under that directory once the line lands, not under its parent until the server restarts (#4225).
