@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The `files` trust-policy tests no longer read the scope from the checkout they run in. `files` answers in the working directory's project, which includes every worktree's name, and a worktree called `t` put the imported fixture session in scope and the local one out, so the test failed for as long as that worktree existed. No behaviour change (#4383).
 - A session that ended a few minutes ago shows up in the next session's MCP recall. deja hid every session its hooks had touched in the last 20 minutes as one an agent was still inside; Claude Code and Gemini CLI now get a `SessionEnd` hook that clears that mark when the session closes, including a one-shot `gemini -p`. Installing or uninstalling hooks also keeps the key order of your own entries in `settings.json` instead of sorting them (#4210).
 - `deja index` no longer says "no agent history was found" when the transcript it just reported deleted is still held and searchable (#4221).
 - `deja resume` on a VS Code Copilot Chat session names the workspace to open (`code <folder>`) before Chat: Show Chats; the list holds only the open workspace's chats, so from any other folder the session was not there (#4223).
