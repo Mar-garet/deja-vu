@@ -4224,15 +4224,17 @@ func updateOpencodeJSONC(old []byte, exe string, uninstall bool) ([]byte, string
 	if insert < 1 || strings.TrimSpace(stripJSONComments(lines[insert])) != "}" {
 		return nil, "", fmt.Errorf("opencode config is not laid out in a way deja can add to — add the deja server by hand")
 	}
-	comma := ""
-	for i := insert - 1; i >= 0; i-- {
-		trim := strings.TrimSpace(lines[i])
-		if trim != "" && !strings.HasPrefix(trim, "//") && !strings.HasSuffix(trim, ",") && trim != "{" {
-			lines[i] += ","
-			break
-		}
+	// The comma goes on the last line of code above the brace, and only when
+	// that code has none yet. Walking up past every line that already ended
+	// in one ran past a trailing comma on the last key and put a second comma
+	// on the line above it — in a nested config an opening brace, `"shim": {,`,
+	// which Kilo and opencode refuse to start with (#4399). At the end of the
+	// code rather than the line: after a // comment it is not a comma (#1695).
+	if i, end, code := jsoncLastCodeLine(lines[:insert]); i >= 0 &&
+		!strings.HasSuffix(code, ",") && !strings.HasSuffix(code, "{") {
+		lines[i] = lines[i][:end] + "," + lines[i][end:]
 	}
-	mcp := []string{comma + `  "mcp": {`, line, "  }"}
+	mcp := []string{`  "mcp": {`, line, "  }"}
 	out := append([]string{}, lines[:insert]...)
 	out = append(out, mcp...)
 	out = append(out, lines[insert:]...)
