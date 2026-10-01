@@ -3875,6 +3875,9 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		return nil
 	}
 	var recErr error
+	// The sessions that lost a record here, which the command failure walk
+	// has to read again along with the ones re-read (#4288).
+	dropped := map[string]bool{}
 	if err := eachRecord(filepath.Join(dir, "records.bin"), tablesFromManifest(old), func(r Record) {
 		if recErr != nil {
 			return
@@ -3897,7 +3900,11 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		// watermark hands back the new turns alone, so dropping the rest by key
 		// would take the earlier turns of every continued session (#2033).
 		if removed[r.SourcePath] || (changed[r.SourcePath].Path != "" && !fromStore) || (fromStore && readWholeThisPass(r) && storeKeys[r.Key]) {
+			dropped[r.Key] = true
 			return
+		}
+		if r.SourcePath == "" {
+			dropped[r.Key] = true // addRec does not carry it
 		}
 		recErr = addRec(r)
 	}); err != nil {
@@ -3991,7 +3998,10 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	// have something to say, and the carried file is what a quiet update leaves.
 	mergeFixes(dir, tmp, replacements, replaceKeys)
 	buildCommandsFromIndex(tmp)
-	buildCommandFailsFromIndex(tmp)
+	for key := range replaceKeys {
+		dropped[key] = true
+	}
+	buildCommandFailsFromIndex(tmp, carriedCommandFailState(dir, old, tmp, m.Generation, dropped), dropped)
 	buildSessionFactsFromIndex(tmp)
 	return swapIndexDir(dir, tmp)
 }
@@ -4397,7 +4407,9 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 	// one, and most appends are speech, so ask first.
 	if carriesWork(appended) {
 		buildCommandsFromIndex(dir)
-		buildCommandFailsFromIndex(dir)
+		// From the state the last update left: only the records this pass
+		// appended are read (#4288).
+		buildCommandFailsFromIndex(dir, readCommandFailState(dir), nil)
 		buildSessionFactsFromIndex(dir)
 	}
 	return filesTouched, messages, unreadable, nil
