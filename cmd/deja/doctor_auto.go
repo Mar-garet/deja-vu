@@ -361,13 +361,6 @@ func doctorContinueWired(path string) bool {
 	return removeContinueItem(string(b), "mcpServers", "deja") != string(b)
 }
 
-// yamlHasChildKey reports whether a key sits directly under a top-level parent.
-//
-// The indent is whatever the reader wrote the block at, and asking for exactly
-// two called a goose deja had just wired at four unwired — while the writer
-// itself follows the block (#2614, #2727). "Anywhere below the top level" was
-// the other end of the same mistake: `deja:` in another server's env, or in a
-// comment-shaped example under `notes:`, then read as a wired server (#2730).
 // yamlKeyLine reports whether line is the mapping key `key` (with its colon)
 // and nothing else — a trailing comment or blanks allowed, as YAML allows
 // them. An exact match missed `mcp_servers:  # mine` (#4289).
@@ -447,6 +440,13 @@ func yamlTopKeyEnd(doc, key string) (int, error) {
 	return found, nil
 }
 
+// yamlHasChildKey reports whether a key sits directly under a top-level parent.
+//
+// The indent is whatever the reader wrote the block at, and asking for exactly
+// two called a goose deja had just wired at four unwired — while the writer
+// itself follows the block (#2614, #2727). "Anywhere below the top level" was
+// the other end of the same mistake: `deja:` in another server's env, or in a
+// comment-shaped example under `notes:`, then read as a wired server (#2730).
 func yamlHasChildKey(path, parent, key string) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {

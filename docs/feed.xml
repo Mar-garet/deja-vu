@@ -88,20 +88,6 @@
     <summary>Where Hermes writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
-    <title>Where Hermes stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/hermes.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/hermes.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Hermes writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Kimi Code stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/kimi.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimi.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Kimi Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
     <title>Where Kimi Code stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/kimi.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimi.html"></link>
@@ -289,5 +275,19 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-opencode-session-history.html"></link>
     <updated>2026-09-30T00:00:00Z</updated>
     <summary>opencode keeps every session in one SQLite database. What the tables hold, how to remove a session, and why deleting rows does not free the space.</summary>
+  </entry>
+  <entry>
+    <title>Delete Roo Code task history</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/delete-roo-task-history.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-roo-task-history.html"></link>
+    <updated>2026-09-30T00:00:00Z</updated>
+    <summary>Find Roo Code history across editor hosts and custom storage. Delete one task or all tasks, understand what is lost, or keep the history searchable.</summary>
+  </entry>
+  <entry>
+    <title>Delete Zed agent thread history</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/delete-zed-thread-history.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-zed-thread-history.html"></link>
+    <updated>2026-09-30T00:00:00Z</updated>
+    <summary>Find Zed agent threads in threads.db, delete one through the history view, or remove the built-in agent database with Zed closed. Know what is lost.</summary>
   </entry>
 </feed>
