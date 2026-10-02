@@ -606,6 +606,9 @@ import (
 //
 // 60 also: removing one of two transcripts that share an id re-reads the
 // other, so the runs both held stay and the row moves to it (#4310).
+//
+// 60 also: with DEJA_INCLUDE_SUBAGENTS=1, Kimi Code and Qwen Code sub-agent
+// logs are read as sub-agent sessions of their parent (#4483).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

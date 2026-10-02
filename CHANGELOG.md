@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `DEJA_INCLUDE_SUBAGENTS=1` takes Kimi Code and Qwen Code sub-agent logs, each as a session of its own naming the session that spawned it, and `deja doctor` names the switch on their rows. It did nothing for either (#4483).
 - When two projects hold a transcript with the same session id and one project directory is removed, the session keeps the commands and output the remaining transcript holds and points at that file. They were written once under the removed copy and went with it until a rebuild (#4310).
 - A Codex rollout compressed in place (`x.jsonl` to `x.jsonl.zst`) is indexed once. When nothing else in the pass shrank, deja kept the old path as no longer on disk and added the compressed copy's messages beside it, so `deja show` printed each twice (#4252).
 - A session id that two files share, such as a Gemini resume stub beside its transcript, gets the same start and update time from a full build whichever file name sorts first, and the same as an update gives (#4253).
