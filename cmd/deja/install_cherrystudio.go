@@ -86,7 +86,7 @@ func installCherryStudio(exe string, uninstall bool) (installResult, error) {
 // root it has written, rather than the app directory, which an uninstalled
 // Electron app can leave behind.
 func cherryStudioFirstRoot() string {
-	for _, root := range sources.CherryStudioRoots() {
+	for _, root := range sources.CherryStudioAllRoots() {
 		if _, err := os.Stat(root); err == nil {
 			return root
 		}

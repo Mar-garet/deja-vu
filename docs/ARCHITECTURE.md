@@ -38,7 +38,7 @@ against the loader list.
 | Reasonix | `reasonix.go`, `reasonix_stores.go`, `reasonix_v4.go` | under `~/.reasonix` (`%APPDATA%\reasonix` on Windows): flat role/content JSONL in `sessions/` and `projects/<slug>/sessions/`, and the 1.x session directories (`sessions-v4/<id>/`, `desktop-sessions-v5/by-id/<id>/`) whose `events.frames` log is zstd-framed JSON |
 | Zed | `zed.go` | threads in the SQLite store at `Zed/threads/threads.db` |
 | Crush | `crush.go` | SQLite databases named by `projects.json`, plus `<project>/.crush/crush.db` |
-| Cherry Studio | `cherrystudio.go` | Claude-format JSONL under the app's `Data/Agents/.claude/projects` |
+| Cherry Studio | `cherrystudio.go` | Claude-format JSONL under the app's `Data/Agents/.claude/projects`, plus pi and dsh logs under `Data/Agents/.pi` and `.dsh`; a data dir moved in the app's settings is read from `~/.cherrystudio/boot-config.json` |
 | Kilo Code | `kilo.go` | task JSON under the VS Code extension's storage, plus the CLI's `kilo.db` |
 | Kiro | `kiro.go` | CLI JSONL under `~/.kiro/sessions/cli`, and `messages.jsonl` per IDE session |
 | Command Code | `commandcode.go` | JSONL under `~/.commandcode/projects` |

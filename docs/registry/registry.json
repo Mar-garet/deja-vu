@@ -653,6 +653,9 @@
         "%APPDATA%/CherryStudio/Data/Agents/.claude/projects/*/*.jsonl",
         "${XDG_CONFIG_HOME}/CherryStudio/Data/Agents/.claude/projects/*/*.jsonl",
         "<app data>/CherryStudio/.claude/projects/*/*.jsonl",
+        "<app data>/CherryStudio/Data/Agents/.pi/sessions/*.jsonl",
+        "<app data>/CherryStudio/Data/Agents/.dsh/sessions/*/session-*/session*.jsonl*",
+        "<app.user_data_path in ~/.cherrystudio/boot-config.json>/Data/Agents/…",
         "${DEJA_CHERRYSTUDIO_ROOTS}/*/*.jsonl"
       ],
       "format_kind": "jsonl",
