@@ -77,3 +77,24 @@ func TestOpenClawPluginPromptRecallKnowsItsSession(t *testing.T) {
 		t.Errorf("hook-prompt was sent session_id %q, so recall repeats itself on every turn", id)
 	}
 }
+
+// The live stamp drops the asking session from MCP recall by its transcript
+// id. The plugin stamped OpenClaw's session key — agent:main:main names no
+// transcript at all — so the session asking came back as its own top hit, and
+// the forget on compaction cleared rows filed under another name (#4582).
+func TestOpenClawPluginStampsTheTranscriptID(t *testing.T) {
+	for _, tc := range []struct{ hook, event string }{
+		{"agent_turn_prepare", `{ prompt: "hello", messages: [], queuedInjections: [] }`},
+		{"before_compaction", `{ messageCount: 40, tokenCount: 90000 }`},
+	} {
+		t.Run(tc.hook, func(t *testing.T) {
+			got := driveOpenClawPlugin(t, tc.hook, tc.event)
+			if len(got) != 1 {
+				t.Fatalf("want one deja call, got %v", got)
+			}
+			if id, _ := got[0]["session_id"].(string); id != "7efce465-14b2-4671-a4d0-6dc309dd4992" {
+				t.Errorf("%s sent session_id %q, not the transcript id the index knows the session by", tc.hook, id)
+			}
+		})
+	}
+}

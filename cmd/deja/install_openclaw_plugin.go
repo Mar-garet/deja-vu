@@ -342,8 +342,11 @@ export default {
     api.on(
       "agent_turn_prepare",
       async (_event, ctx) => {
+        // The transcript id, not the session key: the live stamp hook-context
+        // writes keeps this session out of its own MCP recall by the id the
+        // index knows it by, and agent:main:main names no transcript (#4582).
         const digest = ask(["hook-context", "--plain"], {
-          session_id: ctx?.sessionKey || ctx?.sessionId || "",
+          session_id: ctx?.sessionId || ctx?.sessionKey || "",
           cwd: process.cwd(),
           source: "startup",
           deja_once: true,
@@ -382,7 +385,7 @@ export default {
     api.on(
       "before_compaction",
       async (_event, ctx) => {
-        ask(["hook-precompact"], { session_id: ctx?.sessionKey || ctx?.sessionId || "" });
+        ask(["hook-precompact"], { session_id: ctx?.sessionId || ctx?.sessionKey || "" });
       },
       { timeoutMs: 15000 },
     );
