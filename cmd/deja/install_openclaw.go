@@ -147,8 +147,8 @@ func setOpenClawHookEnabled(on bool) (string, error) {
 		// with the MCP one — so refusing here left a target that wrote half its
 		// wiring, or could not take its own hook back out (#2811).
 		return setOpenClawEntryJSONC(path, old, openclawHookEntries, openclawHookName, openclawHookSwitch, on)
-	} else if err := json.Unmarshal(old, &root); err != nil {
-		return "", configParseError(path, err)
+	} else if json.Unmarshal(old, &root) != nil {
+		return "", openclawParseError(path, old)
 	}
 	hooks, _ := root["hooks"].(map[string]any)
 	internal, _ := mapAt(hooks, "internal")
@@ -287,6 +287,22 @@ func flagRecordKey(keys []string, flagKey string) string {
 	return strings.Join(keys[:len(keys)-1], ".") + "." + flagKey
 }
 
+// openclawParseError is the refusal for an openclaw.json deja cannot read.
+// OpenClaw parses it with JSON5, so unquoted keys and single quotes are a valid
+// config there; the strict parser's "invalid character 'a'", or "'/'" for the
+// comment above them, sent the reader after the wrong thing (#4557). The
+// error is the JSONC reading's, which gets past comments and trailing commas.
+func openclawParseError(path string, old []byte) error {
+	var v any
+	err := json.Unmarshal([]byte(jsoncToJSON(string(old))), &v)
+	if err == nil {
+		// It reads, and is not an object: a list, a bare value.
+		var root map[string]any
+		err = json.Unmarshal([]byte(jsoncToJSON(string(old))), &root)
+	}
+	return configParseError(path, fmt.Errorf("%v — OpenClaw reads this file as JSON5, and deja edits it as JSON with comments: quote its keys and strings, or add deja by hand", err))
+}
+
 // setOpenClawEntryJSONC writes one of openclaw's entries — the bootstrap hook,
 // or the plugin — into a config carrying comments, as text, so the reader's own
 // lines stay where they are.
@@ -298,7 +314,9 @@ func flagRecordKey(keys []string, flagKey string) string {
 func setOpenClawEntryJSONC(path string, old []byte, blockKey, id, flagKey string, on bool) (string, error) {
 	text := lfText(old)
 	var root map[string]any
-	if err := json.Unmarshal([]byte(stripJSONComments(text)), &root); err != nil {
+	// Trailing commas too: configIsJSONC sends a file here for those alone,
+	// and the uninstall refused what the install had just edited (#4557).
+	if err := json.Unmarshal([]byte(jsoncToJSON(text)), &root); err != nil {
 		return "", configParseError(path, err)
 	}
 	keys := strings.Split(blockKey, ".")

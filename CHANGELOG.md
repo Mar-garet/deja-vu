@@ -201,6 +201,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A CRLF config with a comment in it installs and uninstalls cleanly: a second `deja install opencode` or `kilocode` no longer writes `\r,` after its entry, which opencode refused to load, and gemini, VS Code, prime, amp and OpenClaw no longer keep a blank line deja added (#4553).
 - `deja install codex`, `grok` and `kimi-auto` refuse a `config.toml` that sets `mcp_servers` or `hooks` inline (`mcp_servers = { … }`, `hooks = []`) and say which line, rather than appending a table that redefines it, after which codex would not load its config at all (#4554).
 - A YAML config that is `{}` on one line, or that sets `mcp_servers: {}` inline, is refused with the reason rather than given a block after it that no parser reads; hermes fell back to its defaults and goose dropped the config. Continue, aider and dsh had the same append (#4555).
+- An `openclaw.json` in JSON5, with unquoted keys or single quotes, is refused saying OpenClaw reads it as JSON5, not with a JSON error pointing at the comment above it; and one with trailing commas uninstalls the way it installed (#4557).
 
 ## [0.21.4] - 2026-09-29
 

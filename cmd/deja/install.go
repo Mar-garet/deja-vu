@@ -3404,8 +3404,8 @@ func installOpenClawMCP(exe string, uninstall bool) (installResult, error) {
 		command, args := mcpCommandArgs(exe)
 		return writeJSONCEntry(path, old, "mcp.servers",
 			map[string]any{"command": command, "args": args}, uninstall)
-	} else if err := json.Unmarshal(old, &root); err != nil {
-		return installResult{}, configParseError(path, err)
+	} else if json.Unmarshal(old, &root) != nil {
+		return installResult{}, openclawParseError(path, old)
 	}
 	mcp, _, err := mcpBlock(root, "mcp", path)
 	if err != nil {
