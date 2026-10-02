@@ -495,8 +495,8 @@ import (
 // call, whose arguments are the patch string, leaves files, edit and wrote
 // records (#4491).
 //
-// 60 also: a Copilot Chat copilot_readFile or copilot_getErrors call leaves a
-// files record from its message uris (#4492).
+// 60 also: a Copilot Chat copilot_readFile call leaves a files record from
+// its message uris (#4492).
 //
 // 60 also: a Gemini CLI read_many_files call leaves a files record for the
 // literal paths in include (#4494).

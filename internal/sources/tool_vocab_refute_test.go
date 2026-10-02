@@ -60,3 +60,38 @@ func TestClaudeNotebookDeleteWritesNothing(t *testing.T) {
 		})
 	}
 }
+
+// Only copilot_readFile names in its message the file it opened. getErrors
+// over the workspace lists every file with a problem, getChangedFiles the
+// repository root, createDirectory a directory and memory a file of the
+// extension's own — none a file the session touched (#4492).
+func TestCopilotChatMessageURIsOnlyForReadFile(t *testing.T) {
+	uri := func(paths ...string) map[string]any {
+		out := map[string]any{}
+		for _, p := range paths {
+			out["file://"+p] = map[string]any{"$mid": 1, "path": p, "scheme": "file"}
+		}
+		return out
+	}
+	part := func(id, tool, msg string, uris map[string]any) any {
+		return map[string]any{"kind": "toolInvocationSerialized", "toolId": tool, "toolCallId": id, "isComplete": true,
+			"pastTenseMessage": map[string]any{"value": msg, "uris": uris}}
+	}
+	p := vocabWrite(t, filepath.Join(t.TempDir(), "chatSessions", "5c0ffee0-0000-4000-8000-000000000001.jsonl"),
+		vocabJSON(map[string]any{"kind": 0, "v": map[string]any{"version": 3, "sessionId": "5c0ffee0-0000-4000-8000-000000000001", "creationDate": 1790000000000, "requests": []any{}}}),
+		vocabJSON(map[string]any{"kind": 2, "k": []any{"requests"}, "v": []any{map[string]any{
+			"requestId": "r1", "timestamp": 1790000001000, "message": map[string]any{"text": "fix the retry loop"},
+			"response": []any{
+				part("c1", "copilot_getErrors", "Checked workspace, 3 problems found in [](file:///tmp/proj/a.go), [](file:///tmp/proj/b.go)", uri("/tmp/proj/a.go", "/tmp/proj/b.go")),
+				part("c2", "copilot_getChangedFiles", "Read changed files in [](file:///tmp/proj)", uri("/tmp/proj")),
+				part("c3", "copilot_createDirectory", "Created [](file:///tmp/proj/pkg)", uri("/tmp/proj/pkg")),
+				part("c4", "copilot_memory", "Read memory [](file:///tmp/storage/memory.md)", uri("/tmp/storage/memory.md")),
+				part("c5", "copilot_readFile", "Read [](file:///tmp/proj/retry.go)", uri("/tmp/proj/retry.go")),
+				map[string]any{"value": "The retry loop never stops."},
+			}}}}),
+	)
+	ss := vocabParse(t, ParseCopilotChatFile, p)
+	if got := vocabRoles(ss, RoleFiles); len(got) != 1 || got[0] != "/tmp/proj/retry.go" {
+		t.Errorf("files records = %q, want only the file readFile opened", got)
+	}
+}

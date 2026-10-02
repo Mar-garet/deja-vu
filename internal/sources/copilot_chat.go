@@ -767,10 +767,11 @@ func copilotChatTool(m map[string]any, t time.Time, extras *[]model.Message) {
 				paths = append(paths, p)
 			}
 		}
-		// VS Code keeps no resultDetails for copilot_readFile or
-		// copilot_getErrors: the file is only in the uris of the message the
-		// call showed. listDirectory's are directories, not files (#4492).
-		if id, _ := m["toolId"].(string); len(paths) == 0 && id != "copilot_listDirectory" {
+		// VS Code keeps no resultDetails for copilot_readFile: the file is
+		// only in the uris of the message the call showed. readFile alone —
+		// the other tools' uris are directories, every file with a problem in
+		// the workspace, or the extension's own memory files (#4492).
+		if id, _ := m["toolId"].(string); len(paths) == 0 && id == "copilot_readFile" {
 			paths = copilotChatMessageURIs(m)
 		}
 		if len(paths) > 0 {
