@@ -627,6 +627,9 @@ import (
 //
 // 60 also: a Crush call the user denied leaves no command, files, edit or
 // wrote record (#4575).
+//
+// 60 also: an omp patch-mode update that renames its file records the
+// written lines under the new path and both paths as files (#4576).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

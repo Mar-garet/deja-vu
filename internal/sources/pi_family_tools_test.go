@@ -98,6 +98,10 @@ func TestOmpAndGjcReplaceAndPatchEdits(t *testing.T) {
 			[]string{"files " + limits, "wrote " + WroteRecord(limits, created)}},
 		{"omp patch, delete", "omp", `{"path":"limits.go","edits":[{"op":"delete"}]}`, false,
 			[]string{"files " + limits}},
+		// A rename writes the new path: the removed lines were the old
+		// file's, the added ones are the new file's (#4576).
+		{"omp patch, rename", "omp", `{"path":"jitter.go","edits":[{"op":"update","rename":"backoff/jitter.go","diff":"@@\n-\treturn 0\n+\treturn time.Duration(rand.Int63n(int64(base)))\n"}]}`, false,
+			[]string{"files " + jitter + "\n/tmp/proj/backoff/jitter.go", "edit " + jitter + "\n\treturn 0", "wrote " + WroteRecord("/tmp/proj/backoff/jitter.go", newJitter)}},
 		{"gjc replace refused", "gjc", `{"path":"backoff.go","edits":[{"old_text":"\tdelay := base","new_text":"\tdelay := base * time.Duration(attempt)"}]}`, true,
 			[]string{"files " + backoff}},
 	}
