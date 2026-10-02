@@ -558,8 +558,8 @@ start the server, and `switched_off` when the client will not start it: the
 entry is turned off (`"disabled": true`, opencode's `"enabled": false`, or
 `enabled: false` in goose, hermes, codex and grok, `disabled: true` on dsh's
 row), or a list or switch beside it says so — gemini and qwen `mcp.excluded`
-or an `mcp.allowed` without deja, `gemini mcp disable`, copilot's
-`disabledMcpServers`, grok's `disabled_mcp_servers`, omp and gjc
+or an `mcp.allowed` without deja (gemini ignores an empty one), `gemini mcp
+disable`, copilot's `disabledMcpServers`, grok's `disabled_mcp_servers`, omp and gjc
 `disabledServers`, VS Code's `chat.mcp.access`, zcode's `features.mcp`,
 openclaw's `tools.deny`, opencode's `tools`, amp's `amp.tools.disable`, and the
 per-project lists claude-code and cursor-agent keep for the directory doctor

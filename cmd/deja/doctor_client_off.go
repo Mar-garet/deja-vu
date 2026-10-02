@@ -55,19 +55,30 @@ func clientMCPDenied(name string) string {
 		}
 		settings := filepath.Join(home, "settings.json")
 		root := readJSONConfig(settings)
-		if listHasDeja(jsonAt(root, "mcp", "excluded")) {
+		// Both compare the server key exactly. Qwen reads each entry as a
+		// `*`/`?` pattern and an empty allow list as none; gemini starts
+		// everything when the allow list is empty.
+		listed := func(v any) bool {
+			for _, s := range jsonStrings(v) {
+				if s == "deja" || name == "qwen" && serverPatternMatch(s, "deja") {
+					return true
+				}
+			}
+			return false
+		}
+		if listed(jsonAt(root, "mcp", "excluded")) {
 			return mcpOffNote(name, "`mcp.excluded` lists deja", settings)
 		}
-		if allowed, ok := jsonAt(root, "mcp", "allowed").([]any); ok && !listHasDeja(allowed) {
+		if allowed, ok := jsonAt(root, "mcp", "allowed").([]any); ok && !listed(allowed) &&
+			(name == "qwen" || len(jsonStrings(allowed)) > 0) {
 			return mcpOffNote(name, "`mcp.allowed` does not list deja", settings)
 		}
-		// What `gemini mcp disable deja` writes.
+		// What `gemini mcp disable deja` writes, under the lowercased id it
+		// looks the server up by.
 		if name == "gemini" {
 			p := filepath.Join(home, "mcp-server-enablement.json")
-			for k, v := range readJSONConfig(p) {
-				if nameIsDeja(k) && jsonAt(asMap(v), "enabled") == false {
-					return mcpOffNote(name, "`deja.enabled: false`", p)
-				}
+			if jsonAt(readJSONConfig(p), "deja", "enabled") == false {
+				return mcpOffNote(name, "`deja.enabled: false`", p)
 			}
 		}
 	case "copilot":
@@ -348,4 +359,24 @@ func piExtensionExcluded(entries []string, dir string) string {
 		return ""
 	}
 	return off
+}
+
+// serverPatternMatch is qwen's matchesServerPattern: `*` any run, `?` one
+// character, everything else literal.
+func serverPatternMatch(pattern, name string) bool {
+	if pattern == "" {
+		return name == ""
+	}
+	switch pattern[0] {
+	case '*':
+		for i := 0; i <= len(name); i++ {
+			if serverPatternMatch(pattern[1:], name[i:]) {
+				return true
+			}
+		}
+		return false
+	case '?':
+		return name != "" && serverPatternMatch(pattern[1:], name[1:])
+	}
+	return name != "" && name[0] == pattern[0] && serverPatternMatch(pattern[1:], name[1:])
 }

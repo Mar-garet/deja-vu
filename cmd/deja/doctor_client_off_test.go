@@ -395,3 +395,47 @@ func TestInstallSaysAClientSwitchOnce(t *testing.T) {
 		t.Errorf("the note is said %d times, want once:\n%s", n, out)
 	}
 }
+
+// Gemini starts every server when mcp.allowed is empty and compares names
+// exactly; qwen reads both lists as `*` and `?` patterns and an empty allow
+// list as none. Each case is how the client itself answers.
+func TestGeminiAndQwenServerListsReadAsTheClientReadsThem(t *testing.T) {
+	cases := []struct {
+		name, client, settings, enablement string
+		off                                bool
+	}{
+		{"gemini empty allowed", "gemini", `{"mcp":{"allowed":[]}}`, "", false},
+		{"gemini allowed without deja", "gemini", `{"mcp":{"allowed":["other"]}}`, "", true},
+		{"gemini excluded in another case", "gemini", `{"mcp":{"excluded":["Deja"]}}`, "", false},
+		{"gemini enablement key in another case", "gemini", `{}`, `{"Deja":{"enabled":false}}`, false},
+		{"gemini enablement", "gemini", `{}`, `{"deja":{"enabled":false}}`, true},
+		{"qwen empty allowed", "qwen", `{"mcp":{"allowed":[]}}`, "", true},
+		{"qwen allowed by pattern", "qwen", `{"mcp":{"allowed":["de*"]}}`, "", false},
+		{"qwen excluded by pattern", "qwen", `{"mcp":{"excluded":["d?ja"]}}`, "", true},
+		{"qwen excluded another pattern", "qwen", `{"mcp":{"excluded":["dej"]}}`, "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hermeticEnv(t)
+			home := sources.GeminiHome()
+			if c.client == "qwen" {
+				home = sources.QwenConfigDir()
+			}
+			write := func(p, body string) {
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(filepath.Join(home, "settings.json"), c.settings)
+			if c.enablement != "" {
+				write(filepath.Join(home, "mcp-server-enablement.json"), c.enablement)
+			}
+			if got := clientMCPDenied(c.client) != ""; got != c.off {
+				t.Errorf("switched off = %v, want %v (%q)", got, c.off, clientMCPDenied(c.client))
+			}
+		})
+	}
+}
