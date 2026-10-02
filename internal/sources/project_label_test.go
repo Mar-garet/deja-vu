@@ -233,3 +233,16 @@ func TestCopilotChatWorkspaceDirKeepsTheUNCHost(t *testing.T) {
 		}
 	}
 }
+
+// A drive is not a parent on any of the ways a Claude Code project gets its
+// name: the folder name decoded once the directory is gone says C:\proj is
+// "proj", as the recorded cwd does, or one directory is filed under two names
+// depending on whether its transcripts carry a cwd.
+func TestADriveRootDecodesToTheNameItsCwdGives(t *testing.T) {
+	for _, cwd := range []string{`C:\proj`, `C:\a\b`, `D:\app`} {
+		enc := claudeEncodePath(cwd)
+		if got, want := decodeProjectBase(enc), cwdProjectName(cwd); got != want {
+			t.Errorf("%s: folder %s decodes to %q, the cwd names %q", cwd, enc, got, want)
+		}
+	}
+}
