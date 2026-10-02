@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A Cursor chat renamed in the IDE takes its new title and date on the next index pass, and a chat that goes on across passes keeps its word count, the questions asked and the files touched for the whole chat. The pass read only the new turns, so a rename with no new turn was skipped and every pass recounted the chat from its latest turns alone (#4450, #4451).
 - An older-ZCode snapshot is held once however often it is rewritten, and once you restore it into the CLI database the next index pass reads the session from there alone, as a rebuild does. The snapshot's turns used to stay beside the database's (#4448).
 - A title or project that Roo, Kilo Code, Cline's VS Code extension, Reasonix or Kimi Code keep in a file beside the transcript reaches the index when only that file changes: a task whose `history_item.json` lands after its first turn, a rename. It used to wait for the next turn or a rebuild. Cline re-reads a task when its own `taskHistory.json` entry changes, not on every write to that shared file (#4446).
 - A Kiro CLI reply, command or tool output written after an index pass takes the time of the prompt before it. kiro-cli stamps only the prompt, and on a resumed read that prompt was behind the offset, so the record was stored at 0001-01-01 until a rebuild (#4444).

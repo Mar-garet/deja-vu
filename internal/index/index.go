@@ -458,6 +458,9 @@ import (
 //
 // 60 also: a ZCode snapshot restored into the CLI database leaves its turns
 // to the database's on the next pass (#4448).
+//
+// 60 also: a Cursor chat continued or renamed after a pass is read whole, so
+// its title, words, asked and touched match a rebuild (#4450, #4451).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

@@ -3395,6 +3395,10 @@ func rereadsWholeSessions(p string) bool {
 		// one returns the newest turn alone, and replacing a session with it
 		// loses the rest.
 		return true
+	case "cursor":
+		// Since #4450 and #4451 a touched composer comes back with all its
+		// bubbles, so a rename is read and the derived fields count every turn.
+		return true
 	}
 	return false
 }
