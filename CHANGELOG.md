@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- OpenClaw reset and delete archives from 2026.7 are indexed. OpenClaw now stamps them like `<id>.jsonl.reset.2026-10-01T15-18-21.294Z`, and deja only matched a numeric stamp, so none were read (#4482).
 - In Claude Code a failing command now gets the earlier fix. Claude fires `PostToolUseFailure` for a command that exits non-zero, which `deja install claude-auto` never wired, and it rejected the hook's reply as naming the wrong event. Existing installs pick the hook up on the next upgrade; Claude Code before 2.0.56, which would ignore the whole settings file over the unknown event, is left without it (#4488).
 - A failed command keeps its `→ exit N` in Claude Code, Cherry Studio, pi, omp, gjc, prime, senpi, Kimchi, goose, Cline, Kiro CLI, Zed and Copilot Chat, so `deja how` and `deja fix` can tell it from a run whose outcome is unknown. Copilot Chat terminal runs also keep their output (#4487, #4501, #4496, #4502, #4505, #4507, #4493).
 - A failed command in Roo, Kilo Code, Continue, Amp and Antigravity keeps the exit code the client wrote for it, read only off the client's own status line or field (#4530).

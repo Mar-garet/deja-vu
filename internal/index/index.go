@@ -590,6 +590,9 @@ import (
 // 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
 // call leaves files records, notebook_edit a wrote record and delete_range an
 // edit record from its result's diff (#4541).
+//
+// 60 also: an OpenClaw 2026.7 reset or delete archive, stamped
+// 2026-10-01T15-18-21.294Z rather than with a number, is read (#4482).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
