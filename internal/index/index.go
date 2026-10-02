@@ -546,6 +546,8 @@ import (
 //
 // 60 also: an omp or gjc edit in replace or patch mode leaves edit and wrote
 // records (#4524).
+//
+// 60 also: an omp hashline edit leaves files, edit and wrote records (#4525).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

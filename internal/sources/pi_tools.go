@@ -2,6 +2,7 @@ package sources
 
 import (
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -292,23 +293,49 @@ func evalText(txt string) string {
 	return *v.Text
 }
 
+// ompHashlineHeader is an omp hashline section header, `[path#TAG]` with a
+// four-hex snapshot tag, or `[path]` (HL_HEADER_RE in @oh-my-pi/hashline).
+var ompHashlineHeader = regexp.MustCompile(`^\s*\[([^#\r\n\]]+)(?:#[0-9a-fA-F]{4})?\]\s*$`)
+
 // hashline reads gjc's edit, which takes one string rather than a path and a
 // span: `§path` starts a file, `≔A..B` replaces the anchored lines, `«A` and
 // `»A` insert before and after, and the lines under an op are what it writes.
 // The replaced text is not in the call; the result's diff carries it.
+//
+// omp's hashline, its default edit mode, is the same idea in other words: a
+// `[path#TAG]` header starts a file, an op ending in ":" (`PUT 3.=5:`,
+// `PUT >3:`) takes body rows, each "+" and the line it writes, and `CUT`,
+// `REM` and `MV` take none (#4525).
 func (r *piReader) hashline(id, input string, t time.Time) {
 	var files []string
 	written := map[string][]string{}
+	// One dialect per call: a gjc body line such as a TOML `[server]` is
+	// written text, not an omp header.
+	omp := !strings.HasPrefix(input, "§") && !strings.Contains(input, "\n§")
 	cur, inOp := "", false
 	for _, l := range strings.Split(input, "\n") {
 		l = strings.TrimRight(l, "\r")
+		if m := ompHashlineHeader.FindStringSubmatch(l); omp && m != nil {
+			if cur, inOp = r.abs(strings.TrimSpace(m[1])), false; cur != "" {
+				files = append(files, cur)
+			}
+			continue
+		}
 		switch {
-		case strings.HasPrefix(l, "§"):
+		case !omp && strings.HasPrefix(l, "§"):
 			cur, inOp = r.abs(strings.TrimSpace(strings.TrimPrefix(l, "§"))), false
 			if cur != "" && !strings.ContainsAny(cur, "\n\r") {
 				files = append(files, cur)
 			}
 		case cur == "":
+		case omp:
+			if inOp && strings.HasPrefix(l, "+") {
+				if row := l[1:]; strings.TrimSpace(row) != "" {
+					written[cur] = append(written[cur], row)
+				}
+			} else {
+				inOp = strings.HasSuffix(strings.TrimSpace(l), ":")
+			}
 		case strings.HasPrefix(l, "≔"), strings.HasPrefix(l, "«"), strings.HasPrefix(l, "»"):
 			inOp = true
 		case inOp && strings.TrimSpace(l) != "":

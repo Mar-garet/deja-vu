@@ -109,3 +109,35 @@ func TestOmpAndGjcReplaceAndPatchEdits(t *testing.T) {
 		}
 	}
 }
+
+// omp's default edit mode is hashline in its own syntax: `[path#TAG]`
+// sections, `PUT N.=M:` ops whose body rows start with "+", the whole wrapped
+// in `*** Begin Patch`. The reader knew only gjc's `§path`, so every omp edit
+// left nothing (#4525). The replaced lines come off the result's diff.
+func TestOmpHashlineEdit(t *testing.T) {
+	const newLoop = "\tfor attempt := 0; attempt < maxAttempts; attempt++ {"
+	retry, jitter := "/tmp/proj/retry.go", "/tmp/proj/jitter.go"
+	rows := []struct {
+		name, input, details string
+		failed               bool
+		want                 []string
+	}{
+		{"put", "*** Begin Patch\n[retry.go#1a2b]\nPUT 3.=3:\n+" + newLoop + "\n*** End Patch", `{"path":"retry.go","diff":"-3|\tfor {\n+3|` + strings.ReplaceAll(newLoop, "\t", `\t`) + `"}`, false,
+			[]string{"files " + retry, "wrote " + WroteRecord(retry, newLoop), "edit " + retry + "\n\tfor {"}},
+		{"bare, two sections", "[retry.go#1A2B]\nPUT >3:\n+" + newLoop + "\n[jitter.go#3c4d]\nCUT 5.=5\n", `{}`, false,
+			[]string{"files " + retry + "\n" + jitter, "wrote " + WroteRecord(retry, newLoop)}},
+		{"refused", "[retry.go#1a2b]\nPUT 3.=3:\n+" + newLoop, `{}`, true,
+			[]string{"files " + retry}},
+		// gjc's own form is read as before, a TOML section line in its body
+		// included.
+		{"gjc", "§retry.toml\n≔1rq\n[server]\nretry_attempts_before_giving_up = 5", `{}`, false,
+			[]string{"files /tmp/proj/retry.toml", "wrote " + WroteRecord("/tmp/proj/retry.toml", "retry_attempts_before_giving_up = 5")}},
+	}
+	for _, r := range rows {
+		p := writePiFixture(t, piSession(piCall("c0", "edit", `{"input":`+vocabJSON(r.input)+`}`), piResult("c0", "edit", "Updated retry.go", r.details, r.failed)))
+		got := changesOf(parseKindForTest(t, "omp", p))
+		if strings.Join(got, "|") != strings.Join(r.want, "|") {
+			t.Errorf("%s: records = %q, want %q", r.name, got, r.want)
+		}
+	}
+}
