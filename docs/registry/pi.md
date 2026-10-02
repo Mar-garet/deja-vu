@@ -87,7 +87,7 @@ The `id` field from the session header line is used as the session ID. The UUID 
 
 ## MCP
 
-pi does not include built-in MCP but supports it via the `pi-mcp-adapter` package (`pi install npm:pi-mcp-adapter`). The adapter reads `~/.pi/agent/mcp.json` with the standard `mcpServers` shape. `deja install pi` writes to that file.
+pi does not include built-in MCP but supports it via the `pi-mcp-adapter` package (`pi install npm:pi-mcp-adapter`). The adapter reads `~/.pi/agent/mcp.json` with the standard `mcpServers` shape. `deja install pi` writes to that file and says when the adapter is not in pi's packages; `deja doctor` then reports the row as `no adapter` (#4583).
 
 ## Skill, auto-recall, command
 

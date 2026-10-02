@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -676,10 +677,142 @@ func copilotChatWalkResponse(v any, t time.Time, speech *[]string, extras *[]mod
 			*speech = append(*speech, r)
 		}
 	case []any:
-		for _, part := range r {
+		for _, part := range copilotChatFoldEditFences(r) {
 			copilotChatWalkPart(part, t, speech, extras)
 		}
 	}
+}
+
+// copilotChatFoldEditFences turns the empty code fence agent mode writes around
+// an edit into the file's name. The parts are a fence, a codeblockUri, the
+// textEditGroup and a closing fence; VS Code draws a pill naming the file
+// there, and read as text the reply had an empty fence in the middle of it
+// (#4590). A fence with code in it is left alone, and the edit parts are kept
+// for the records they leave.
+func copilotChatFoldEditFences(parts []any) []any {
+	out := make([]any, 0, len(parts))
+	for i := 0; i < len(parts); i++ {
+		if fold, end, ok := copilotChatEditFence(parts, i); ok {
+			out = append(out, fold...)
+			i = end
+			continue
+		}
+		out = append(out, parts[i])
+	}
+	return out
+}
+
+// copilotChatEditFence reads an empty fence around an edit starting at parts[i]:
+// what to put in its place, and the index of the part that closes it.
+func copilotChatEditFence(parts []any, i int) ([]any, int, bool) {
+	text, ok := copilotChatValue(parts[i])
+	if !ok || i+1 >= len(parts) {
+		return nil, 0, false
+	}
+	before, ok := copilotChatCutOpenFence(text)
+	if !ok {
+		return nil, 0, false
+	}
+	cb, _ := parts[i+1].(map[string]any)
+	if kind, _ := cb["kind"].(string); kind != "codeblockUri" {
+		return nil, 0, false
+	}
+	name := copilotChatBaseName(copilotChatRefPath(cb["uri"]))
+	if name == "" {
+		return nil, 0, false
+	}
+	k := i + 2
+	for k < len(parts) && !copilotChatSpeaks(parts[k]) {
+		k++
+	}
+	if k >= len(parts) {
+		return nil, 0, false
+	}
+	closing, _ := copilotChatValue(parts[k])
+	after, ok := copilotChatCutCloseFence(closing)
+	if !ok {
+		return nil, 0, false
+	}
+	fold := []any{before + "\n" + name + "\n"}
+	fold = append(fold, parts[i+1:k]...)
+	if after != "" {
+		fold = append(fold, after)
+	}
+	return fold, k, true
+}
+
+// copilotChatValue is the markdown a speech part carries.
+func copilotChatValue(part any) (string, bool) {
+	switch x := part.(type) {
+	case string:
+		return x, true
+	case map[string]any:
+		if kind, _ := x["kind"].(string); kind != "" {
+			return "", false
+		}
+		v, ok := x["value"].(string)
+		return v, ok
+	}
+	return "", false
+}
+
+// copilotChatSpeaks reports whether a part puts text in the reply.
+func copilotChatSpeaks(part any) bool {
+	if _, ok := copilotChatValue(part); ok {
+		return true
+	}
+	m, _ := part.(map[string]any)
+	kind, _ := m["kind"].(string)
+	return kind == "markdownVuln" || kind == "inlineReference"
+}
+
+// copilotChatCutOpenFence takes a fence off the end of a chunk: the line
+// "```" or "```lang", last in it.
+func copilotChatCutOpenFence(text string) (string, bool) {
+	t := strings.TrimRight(text, " \t\r\n")
+	nl := strings.LastIndex(t, "\n")
+	line := strings.TrimSpace(t[nl+1:])
+	if !strings.HasPrefix(line, "```") || strings.Contains(line[3:], "`") {
+		return "", false
+	}
+	if nl < 0 {
+		return "", true
+	}
+	return strings.TrimRight(t[:nl], "\r\n"), true
+}
+
+// copilotChatCutCloseFence takes a bare "```" line off the start of a chunk.
+func copilotChatCutCloseFence(text string) (string, bool) {
+	line, rest, _ := strings.Cut(strings.TrimLeft(text, " \t\r\n"), "\n")
+	if strings.TrimSpace(line) != "```" {
+		return "", false
+	}
+	return rest, true
+}
+
+// copilotChatBaseName is a file's name out of a path or URI path, whichever
+// separator it was written with.
+func copilotChatBaseName(p string) string {
+	// A URI written as a string keeps its escapes; the object form's path
+	// does not. The scheme is not part of the name: file:/// is the root, and
+	// untitled:Untitled-1 is a buffer VS Code calls Untitled-1. A one-letter
+	// scheme is a Windows drive.
+	if u, err := url.Parse(p); err == nil && len(u.Scheme) > 1 {
+		if u.Opaque != "" {
+			p = u.Opaque
+		} else {
+			p = u.Path
+		}
+	} else if strings.Contains(p, "://") {
+		if u, err := url.PathUnescape(p); err == nil {
+			p = u
+		}
+	}
+	base := path.Base(strings.ReplaceAll(p, "\\", "/"))
+	if base == "/" || base == "." {
+		return ""
+	}
+	return base
 }
 
 func copilotChatWalkPart(part any, t time.Time, speech *[]string, extras *[]model.Message) {
@@ -712,6 +845,12 @@ func copilotChatWalkPart(part any, t time.Time, speech *[]string, extras *[]mode
 	case "textEditGroup":
 		copilotChatEdits(m, t, extras)
 	case "inlineReference":
+		// VS Code draws the reference as a name in the middle of the
+		// sentence; without it the reply read "The bug is in , line 40:"
+		// (#4589).
+		if name := copilotChatRefName(m); name != "" {
+			*speech = append(*speech, name)
+		}
 		if !IndexToolPaths() {
 			return
 		}
@@ -719,6 +858,23 @@ func copilotChatWalkPart(part any, t time.Time, speech *[]string, extras *[]mode
 			*extras = append(*extras, model.Message{Role: RoleFiles, Text: p, Time: t})
 		}
 	}
+}
+
+// copilotChatRefName is what VS Code shows for an inlineReference: the part's
+// own name when it has one, a symbol's name, or the file's base name.
+func copilotChatRefName(m map[string]any) string {
+	if n, _ := m["name"].(string); strings.TrimSpace(n) != "" {
+		return n
+	}
+	ref, _ := m["inlineReference"].(map[string]any)
+	if n, _ := ref["name"].(string); strings.TrimSpace(n) != "" {
+		return n
+	}
+	p := copilotChatRefPath(m["inlineReference"])
+	if p == "" {
+		return ""
+	}
+	return copilotChatBaseName(p)
 }
 
 // copilotChatEdits reads the written side of a Copilot Chat edit.

@@ -983,6 +983,11 @@ func collectDoctorMCP() []doctorMCPStatus {
 			}
 		}
 		row := doctorMCPStatus{Name: config.name, State: state, Path: config.path}
+		if state == "wired" && config.name == "pi" && !piMCPAdapterInstalled() {
+			row.State, row.Note = "no-adapter", piNoAdapterNote
+			out = append(out, row)
+			continue
+		}
 		// The check the text report has made since #2216: declared is not the
 		// same as able to start.
 		if state == "wired" && dejaCommandMissing(config.path) != "" {

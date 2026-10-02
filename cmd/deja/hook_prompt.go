@@ -188,7 +188,9 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	// above is renewed (#4573). opencode has no text part to put an answer
 	// in, so the compaction packet waits for a turn or tool call that can
 	// carry it rather than being marked delivered and dropped.
-	if strings.TrimSpace(string(input.Prompt)) == "" {
+	// Grok discards what this hook returns. Answering anyway logged memory as
+	// arrived and marked it shown to a session that never saw it (#4588).
+	if strings.TrimSpace(string(input.Prompt)) == "" || grokDropsContext() {
 		return nil
 	}
 	if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "UserPromptSubmit", shape, stdout); delivered {

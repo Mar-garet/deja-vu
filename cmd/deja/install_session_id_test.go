@@ -19,7 +19,8 @@ func TestPerPromptPayloadsCarryTheSessionID(t *testing.T) {
 		// every handler reaches through ctx.
 		{"pi", piExtensionTS("/bin/deja"), "m.getSessionId ? m.getSessionId() : m.sessionId"},
 		{"omp", ompExtensionJS("/bin/deja"), "m.getSessionId ? m.getSessionId() : m.sessionId"},
-		{"openclaw", openclawPluginJS("/bin/deja"), "event?.sessionId"},
+		// OpenClaw's before_prompt_build event has none; it is on ctx (#4581).
+		{"openclaw", openclawPluginJS("/bin/deja"), "ctx?.sessionId"},
 	} {
 		if !strings.Contains(tc.src, "hook-prompt") {
 			t.Fatalf("%s: no per-prompt recall in the generated plugin", tc.name)
