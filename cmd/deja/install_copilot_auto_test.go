@@ -408,8 +408,8 @@ func TestDoctorCallsAPlainHookContextEntryStale(t *testing.T) {
 	t.Fatal("no copilot row")
 }
 
-// COPILOT_HOME moves every file Copilot CLI keeps, and a relative one is read
-// against the directory Copilot runs in, as Copilot reads it.
+// COPILOT_HOME moves every file Copilot CLI keeps, and a relative one is used
+// as written, as Copilot's own resolveCopilotHome uses it (#4567).
 func TestCopilotHomeMovesEveryCopilotPath(t *testing.T) {
 	copilotTestHome(t)
 	t.Setenv("DEJA_COPILOT_ROOT", "")
@@ -428,9 +428,9 @@ func TestCopilotHomeMovesEveryCopilotPath(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
 	t.Setenv("COPILOT_HOME", "relch")
-	want, _ := filepath.Abs("relch")
-	if got := sources.CopilotRoot(); got != filepath.Join(want, "session-state") {
-		t.Errorf("relative COPILOT_HOME: session root = %s, want %s", got, filepath.Join(want, "session-state"))
+	want := filepath.Join("relch", "session-state")
+	if got := sources.CopilotRoot(); got != want {
+		t.Errorf("relative COPILOT_HOME: session root = %s, want %s", got, want)
 	}
 	// The deja override still wins for the session root.
 	t.Setenv("DEJA_COPILOT_ROOT", filepath.Join(cwd, "mine"))
