@@ -66,6 +66,23 @@ insert into messages(session_id,role,content_json,created_timestamp) values ('20
 insert into messages(session_id,role,content_json,created_timestamp) values ('20260920_1','assistant','[{"type":"toolRequest","id":"c1","toolCall":{"status":"success","value":{"name":"shell","arguments":{"command":"go test ./..."}}}}]',1790874401);
 insert into messages(session_id,role,content_json,created_timestamp) values ('20260920_1','user','[{"type":"toolResponse","id":"c1","toolResult":{"status":"success","value":{"content":[{"type":"text","text":"./retry.go:12:5: undefined: backoffJitter\n\nCommand exited with code 1"}],"isError":true,"structuredContent":{"stdout":"","stderr":"./retry.go:12:5: undefined: backoffJitter","exit_code":1,"timed_out":false}}}}]',1790874402);`)
 		}},
+		{name: "cline cli", kind: "cline-sdk", fixture: func(t *testing.T, dir string) string {
+			id := "1790877871094"
+			write(t, filepath.Join(dir, id, id+".json"), `{"cwd":"/tmp/proj","started_at":"2026-10-01T18:00:00Z"}`)
+			return write(t, filepath.Join(dir, id, id+".messages.json"), `{"version":1,"agent":"lead","sessionId":"`+id+`","messages":[
+ {"role":"user","ts":1790877871100,"content":[{"type":"text","text":"fix the retry loop"}]},
+ {"role":"assistant","ts":1790877871200,"content":[{"type":"tool_use","id":"call_1","name":"run_commands","input":{"commands":["go vet ./...","go test ./..."]}}]},
+ {"role":"user","ts":1790877871300,"content":[{"type":"tool_result","tool_use_id":"call_1","name":"run_commands","content":[
+  {"query":"go vet ./...","result":"","success":true},
+  {"query":"go test ./...","result":"[Command exited with code 1]\n\n[stderr]\n./retry.go:12:5: undefined: backoffJitter\n","error":"Command exited with code 1","success":false}]}]}]}`)
+		}},
+		{name: "cline vscode", kind: "cline-vscode", fixture: func(t *testing.T, dir string) string {
+			write(t, filepath.Join(dir, "state", "taskHistory.json"), `[{"id":"1790000000000","ts":1790000000000,"task":"fix the retry loop","cwdOnTaskInitialization":"/tmp/proj"}]`)
+			return write(t, filepath.Join(dir, "tasks", "1790000000000", "api_conversation_history.json"), `[
+ {"role":"user","content":[{"type":"text","text":"<task>fix the retry loop</task>"}]},
+ {"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"execute_command","input":{"command":"go test ./...","requires_approval":false}}]},
+ {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Command failed with exit code 1.\nOutput:\n./retry.go:12:5: undefined: backoffJitter"}]}]`)
+		}},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
