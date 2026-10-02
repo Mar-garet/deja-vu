@@ -474,6 +474,9 @@ import (
 //
 // 60 also: a Cursor chat continued or renamed after a pass is read whole, so
 // its title, words, asked and touched match a rebuild (#4450, #4451).
+//
+// 60 also: an OpenClaw <id>.trajectory.jsonl is no longer read as a session
+// (#4477).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
