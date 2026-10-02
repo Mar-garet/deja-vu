@@ -40,7 +40,49 @@ func snapshotIfOnlyEmptyBlocksDiffer(path string, old, next []byte) []byte {
 	if !reflect.DeepEqual(withoutEmptyContainers(want), withoutEmptyContainers(have)) {
 		return next
 	}
+	// And only the empty blocks deja's own edit explains: one the reader added
+	// or took out since install is theirs, and the snapshot would undo it.
+	prev, ok := decodeJSONCExact(old)
+	if !ok || !emptyBlocksDifferByDeja(want, have, prev) {
+		return next
+	}
 	return b
+}
+
+// emptyBlocksDifferByDeja reports whether the empty blocks between the result
+// and the snapshot are the writer's doing: one the result has and the snapshot
+// lacks either held deja's entry before this uninstall or was not in the file
+// at all, and one the snapshot has and the result lacks was still in the file.
+// An empty block in the file that the snapshot lacks, or a block gone from
+// both, is the reader's change since install.
+func emptyBlocksDifferByDeja(next, snap, old any) bool {
+	n, ok := next.(map[string]any)
+	s, ok2 := snap.(map[string]any)
+	if !ok || !ok2 {
+		return true
+	}
+	o, _ := old.(map[string]any)
+	for k, v := range n {
+		sv, inSnap := s[k]
+		if !inSnap {
+			if ov, had := o[k]; had && isEmptyContainer(ov) {
+				return false
+			}
+			continue
+		}
+		if !emptyBlocksDifferByDeja(v, sv, o[k]) {
+			return false
+		}
+	}
+	for k := range s {
+		if _, inNext := n[k]; inNext {
+			continue
+		}
+		if _, had := o[k]; !had {
+			return false
+		}
+	}
+	return true
 }
 
 // ownSnapshot reads the .bak deja took of path, without its byte order mark.
