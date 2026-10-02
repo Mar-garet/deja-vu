@@ -2,7 +2,7 @@
 
 ## Store and files
 
-Grok Build stores sessions below `${GROK_HOME:-~/.grok}/sessions/<encoded-cwd>/<session-id>/`. `DEJA_GROK_ROOT` overrides where deja reads sessions; `GROK_HOME` relocates the whole Grok tree, including `config.toml`. `updates.jsonl` is the conversation stream and sibling `summary.json` carries metadata. A `.cwd` file beside session directories can recover the working directory when summary metadata is absent. `grok-dev`, another CLI sharing `~/.grok`, writes no session files: its history is in `${GROK_HOME:-~/.grok}/grok.db`, a SQLite store read through `sqlite3`, and `DEJA_GROK_DB` points deja at another copy.
+Grok Build stores sessions below `${GROK_HOME:-~/.grok}/sessions/<encoded-cwd>/<session-id>/`. `DEJA_GROK_ROOT` overrides where deja reads sessions; `GROK_HOME` relocates the whole Grok tree, including `config.toml`. `updates.jsonl` is the conversation stream and sibling `summary.json` carries metadata. A `.cwd` file beside session directories can recover the working directory when summary metadata is absent. `grok-dev`, another CLI sharing `~/.grok`, writes no session files: its history is in `${GROK_HOME:-~/.grok}/grok.db`, a SQLite store read through `sqlite3`, and `DEJA_GROK_DB` points deja at another copy. Each row of `messages` is an AI SDK message: text parts are the turn, `tool-call` parts become commands (`bash`), files, edits and written lines (`read_file`, `write_file`, `edit_file` under `path`), and the `tool-result` parts on `tool` rows tool output.
 
 The working-directory group is URL-encoded, although observed names are not always encoded consistently. deja prefers `summary.json` and `.cwd` over decoding the directory name.
 

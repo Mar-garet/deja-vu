@@ -79,6 +79,15 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 			vocabFiles("/tmp/proj/jitter.go"),
 			vocabWrote("/tmp/proj/jitter.go", jitter),
 		}},
+		{"grok-dev grok.db", vocabGrokDB, []string{
+			vocabCmd("$ go test ./..."),
+			RoleToolOutput + ": ./retry.go:12:5: undefined: backoffJitter",
+			vocabFiles("/tmp/proj/read.go"),
+			vocabFiles("/tmp/proj/retry.go"),
+			vocabEdit("/tmp/proj/retry.go", oldLoop),
+			vocabWrote("/tmp/proj/retry.go", newLoop),
+			vocabWrote("/tmp/proj/jitter.go", jitter),
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -303,7 +312,12 @@ INSERT INTO sessions VALUES ('gd1','w1','fix the retry loop','/tmp/proj','2026-0
 	for i, c := range []struct {
 		name    string
 		in, out map[string]any
-	}{} {
+	}{
+		{"bash", map[string]any{"command": "go test ./..."}, map[string]any{"success": false, "error": "./retry.go:12:5: undefined: backoffJitter"}},
+		{"read_file", map[string]any{"path": "/tmp/proj/read.go"}, map[string]any{"success": true, "output": "package proj"}},
+		{"edit_file", map[string]any{"path": "/tmp/proj/retry.go", "old_string": "\tfor {", "new_string": "\tfor attempt := 0; attempt < maxAttempts; attempt++ {"}, map[string]any{"success": true, "output": "Edited /tmp/proj/retry.go"}},
+		{"write_file", map[string]any{"path": "/tmp/proj/jitter.go", "content": "func backoffJitter(attempt int) time.Duration { return 0 }"}, map[string]any{"success": true, "output": "Wrote /tmp/proj/jitter.go"}},
+	} {
 		id := fmt.Sprintf("c%d", i)
 		add("assistant", map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool-call", "toolCallId": id, "toolName": c.name, "input": c.in}}})
 		add("tool", map[string]any{"role": "tool", "content": []any{map[string]any{"type": "tool-result", "toolCallId": id, "toolName": c.name, "output": map[string]any{"type": "json", "value": c.out}}}})
