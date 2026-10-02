@@ -3495,8 +3495,8 @@ func inOpencodeSchemaDB(h, p string) bool {
 	if p == db() {
 		return true
 	}
-	// opencode's diff files, Kilo's task files and ZCode's transcripts carry
-	// the same harness name; anything else is a project directory. A diff
+	// opencode's diff files, Kilo's task files and ZCode's transcripts and
+	// snapshots carry the same harness name; anything else is a project directory. A diff
 	// record still counts as the database's through storeHarness, which files
 	// the diff path under that store.
 	return !opencodeSchemaOwnFile(h, p)
@@ -3513,7 +3513,9 @@ func opencodeSchemaOwnFile(h, p string) bool {
 	case "kilocode":
 		return strings.EqualFold(filepath.Base(p), "api_conversation_history.json")
 	case "zcode":
-		return strings.EqualFold(filepath.Ext(p), ".jsonl")
+		// Its transcripts, and the snapshots an older ZCode left, each
+		// rewritten whole (#4432).
+		return strings.EqualFold(filepath.Ext(p), ".jsonl") || isZCodeSnapshot(p)
 	}
 	return false
 }
