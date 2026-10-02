@@ -142,12 +142,14 @@ func parseQwenFileFromOffset(path string, offset int64) ([]model.Session, error)
 	}
 	// A sub-agent's log sits under the session that spawned it, and its
 	// records may carry that session's id: it keeps an id of its own so it is
-	// not read as a second copy of the parent (#4483).
+	// not read as a second copy of the parent (#4483). The agent's name
+	// leads, so the parent's id is not a prefix of it: a whole id opens the
+	// newest session it prefixes.
 	child := QwenSubagentFile(path)
 	if child {
 		s.Kind = "subagent"
 		s.Parent = filepath.Base(filepath.Dir(path))
-		s.ID = s.Parent + "-" + s.ID
+		s.ID += "-" + s.Parent
 	}
 	// A shell call and its result are separate records; the call id carries
 	// the command over to the result its exit status is read from (#4255).

@@ -198,10 +198,11 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 		// A sub-agent sits under the session that spawned it and shares its
 		// state.json: its own id, not the parent's, which would make it a
 		// second copy of the parent; no title or span from the parent's
-		// state (#4483).
+		// state (#4483). The agent's name leads, so the parent's id is not a
+		// prefix of it: a whole id opens the newest session it prefixes.
 		s.Kind = "subagent"
 		s.Parent = s.ID
-		s.ID += "-" + filepath.Base(filepath.Dir(path))
+		s.ID = filepath.Base(filepath.Dir(path)) + "-" + s.Parent
 		s.Title = ""
 	}
 	// A Bash call and its result are separate loop events joined by
