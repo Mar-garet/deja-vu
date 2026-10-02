@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -362,4 +363,17 @@ func statuslineCommand(t *testing.T, settings string) string {
 	entry, _ := root["statusLine"].(map[string]any)
 	cmd, _ := entry["command"].(string)
 	return cmd
+}
+
+// What an earlier test's run created is not this one's: on the windows leg
+// TestUninstallTakesBackEveryFileItWrote found goose's config directory from
+// another test in its record, once the tests before it were no longer the
+// whole suite.
+func TestHermeticEnvStartsAFreshRunRecord(t *testing.T) {
+	earlier := filepath.Join(t.TempDir(), "earlier")
+	createdDirsByThisRun = append(createdDirsByThisRun, earlier)
+	hermeticEnv(t)
+	if slices.Contains(createdDirsByThisRun, earlier) {
+		t.Fatalf("a directory from an earlier run is still on this run's record: %v", createdDirsByThisRun)
+	}
 }
