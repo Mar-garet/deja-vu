@@ -290,19 +290,4 @@
     <updated>2026-10-02T00:00:00Z</updated>
     <summary>Where omp (Oh My Pi) writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
-  <entry>
-    <title>Where opencode stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/opencode.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/opencode.html"></link>
-    <updated>2026-10-02T00:00:00Z</updated>
-    <summary>Where pi writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where prime-agent (PrimeIntellect) stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/prime.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/prime.html"></link>
-    <updated>2026-10-02T00:00:00Z</updated>
-    <summary>Where prime-agent (PrimeIntellect) writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-    <summary>Where opencode writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
 </feed>
