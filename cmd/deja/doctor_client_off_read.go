@@ -5,6 +5,39 @@ import (
 	"strings"
 )
 
+type jsonKeyValue struct {
+	key   string
+	value any
+}
+
+// jsonObjectInOrder is the top-level object at key in a JSON or JSONC
+// config, its entries in the order the file has them, for a client that
+// lets a later key overrule an earlier one. Nil when it cannot be read.
+func jsonObjectInOrder(b []byte, key string) []jsonKeyValue {
+	var top map[string]json.RawMessage
+	if json.Unmarshal([]byte(jsoncToJSON(string(b))), &top) != nil || top[key] == nil {
+		return nil
+	}
+	dec := json.NewDecoder(strings.NewReader(string(top[key])))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return nil
+	}
+	var out []jsonKeyValue
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return nil
+		}
+		k, _ := t.(string)
+		var v any
+		if dec.Decode(&v) != nil {
+			return nil
+		}
+		out = append(out, jsonKeyValue{k, v})
+	}
+	return out
+}
+
 // Small readers for the client switches in doctor_client_off.go. They answer
 // "is this key set to that", and a file they cannot read is a file with no
 // switch in it: doctor's other rows say when a config is broken.

@@ -121,12 +121,21 @@ func clientMCPDenied(name string) string {
 			}
 		}
 	case "opencode":
-		// Tool names are server_tool, and a key is a glob over them.
+		// Tool names are server_tool, a key is a `*`/`?` pattern over them,
+		// and the last key in the file that matches decides.
 		p := doctorOpencodeConfigPath()
-		for k, v := range asMap(jsonAt(readJSONConfig(p), "tools")) {
-			if ok, _ := path.Match(k, "deja_deja"); ok && v == false {
-				return mcpOffNote(name, "`tools` turns "+k+" off", p)
+		b, err := readConfig(p)
+		if err != nil {
+			return ""
+		}
+		last, off := "", false
+		for _, kv := range jsonObjectInOrder(b, "tools") {
+			if v, ok := kv.value.(bool); ok && serverPatternMatch(kv.key, "deja_deja") {
+				last, off = kv.key, !v
 			}
+		}
+		if off {
+			return mcpOffNote(name, "`tools` turns "+last+" off", p)
 		}
 	case "amp":
 		p := sources.AmpSettingsFile()
@@ -384,8 +393,8 @@ func piExtensionExcluded(entries []string, dir string) string {
 	return off
 }
 
-// serverPatternMatch is qwen's matchesServerPattern: `*` any run, `?` one
-// character, everything else literal.
+// serverPatternMatch is qwen's matchesServerPattern and opencode's
+// Wildcard.match: `*` any run, `?` one character, everything else literal.
 func serverPatternMatch(pattern, name string) bool {
 	if pattern == "" {
 		return name == ""

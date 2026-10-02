@@ -514,3 +514,29 @@ func TestClientPluginAndServerListsMatchOnlyWhatTheClientMatches(t *testing.T) {
 		})
 	}
 }
+
+// opencode turns its `tools` map into rules and the last key that matches
+// decides, in the order the file lists them (#4468).
+func TestOpencodeToolsLastMatchingKeyWins(t *testing.T) {
+	for body, off := range map[string]bool{
+		`{"tools":{"*":false,"deja_deja":true}}`:  false,
+		`{"tools":{"deja_deja":true,"*":false}}`:  true,
+		`{"tools":{"deja*":false}}`:               true,
+		`{"tools":{"deja_[d]eja":false}}`:         false,
+		`{"tools":{"deja?deja":false,"x":true}}`:  true,
+		`{"tools":{"other_*":false}}`:             false,
+		`{"tools":{"deja_*":false,"deja*":true}}`: false,
+	} {
+		hermeticEnv(t)
+		p := doctorOpencodeConfigPath()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := clientMCPDenied("opencode") != ""; got != off {
+			t.Errorf("%s: switched off = %v, want %v", body, got, off)
+		}
+	}
+}
