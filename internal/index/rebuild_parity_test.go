@@ -187,3 +187,36 @@ func TestUpdateThatEmptiesTheCommandTableDropsIt(t *testing.T) {
 	}
 	sameAsRebuild(t, inc)
 }
+
+// A line the client writes after a pass took its file state is read in that
+// pass and again in the next one, unless the pass stops where it recorded
+// (#4442). The append is made between the walk and the parse here, which is
+// the window a live client writes into.
+func TestLineWrittenDuringAPassIsReadOnce(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprint("first-build=", full), func(t *testing.T) {
+			tmp := parityEnv(t, map[string]string{"DEJA_PI_ROOT": "pi"})
+			f := filepath.Join(tmp, "pi", "--tmp-proj--", "s-retry.jsonl")
+			line := func(id, ts, text string) string {
+				return fmt.Sprintf(`{"type":"message","id":%q,"timestamp":"2026-09-01T09:%s","message":{"role":"user","content":[{"type":"text","text":%q}]}}`, id, ts, text) + "\n"
+			}
+			parityWrite(t, f, `{"type":"session","version":3,"id":"s-retry","timestamp":"2026-09-01T09:00:00Z","cwd":"/tmp/proj"}`+"\n"+line("u1", "00:01Z", "fix the retry loop"), false)
+			inc := filepath.Join(tmp, "inc")
+			if !full {
+				parityPass(t, inc, false)
+				parityWrite(t, f, line("u2", "01:00Z", "now run the tests"), true)
+			}
+			want := currentFiles("")
+			parityWrite(t, f, line("u3", "02:00Z", "written while the pass ran"), true)
+			if full {
+				if err := rebuild(inc, "", "", want, io.Discard); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := updateIndex(inc, "", "", want, false, io.Discard); err != nil {
+				t.Fatal(err)
+			}
+			parityPass(t, inc, false)
+			sameAsRebuild(t, inc)
+		})
+	}
+}

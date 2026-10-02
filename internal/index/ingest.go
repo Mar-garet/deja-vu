@@ -546,6 +546,7 @@ func rebuild(dir string, harness string, scope string, files map[string]FileStat
 }
 
 func rebuildWithTombstones(dir string, harness string, scope string, files map[string]FileState, progress io.Writer, dead map[string]bool) error {
+	defer readTo(files)()
 	// This build's counts, not the process's: see writeSessionsWithSync (#1850).
 	beginPass()
 	emptied.Store(0)
@@ -1445,6 +1446,7 @@ func forgetUnreadStores(files map[string]FileState) {
 }
 
 func rebuildForSearch(dir string, o query.Options, scope string, files map[string]FileState, progress io.Writer) error {
+	defer readTo(files)()
 	beginPass()
 	tmp := dir + ".tmp"
 	_ = os.RemoveAll(tmp)
@@ -3616,6 +3618,7 @@ func parsedThisPass(files map[string]FileState) {
 }
 
 func updateIndex(dir, harness, scope string, files map[string]FileState, force bool, progress io.Writer) error {
+	defer readTo(files)()
 	// Cleared here rather than beside the other two: this build counts what
 	// went away further down, before the incremental paths reset theirs, so a
 	// reset down there would zero the number this build is about to report
@@ -4343,6 +4346,20 @@ func canAppendIncremental(changed map[string]FileState, old map[string]FileState
 		}
 	}
 	return true
+}
+
+// readTo holds this pass's transcript reads to the sizes its walk recorded,
+// which is where the next pass resumes. A line the client wrote after the walk
+// was read here and again there, and the copies stayed until a rebuild
+// (#4442).
+func readTo(files map[string]FileState) func() {
+	ends := make(map[string]int64, len(files))
+	for p, f := range files {
+		if strings.HasSuffix(p, ".jsonl") {
+			ends[p] = f.Size
+		}
+	}
+	return sources.LimitReads(ends)
 }
 
 // resumeOffset is where an appended read of a known file starts: the end of

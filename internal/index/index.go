@@ -446,6 +446,9 @@ import (
 // 60 also: Roo, Kilo and legacy Cline tasks from the XML tool era read their
 // calls into command, files and edit records and their results as tool
 // output (#4424).
+//
+// 60 also: a line written while a pass ran is held once, where the pass read
+// it and the next read it again (#4442); copies already held go on a rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

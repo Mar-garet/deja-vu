@@ -334,7 +334,7 @@ func scanGrokUpdatesFrom(path string, offset int64, fn func(grokUpdateEvent)) er
 			return err
 		}
 	}
-	r := bufio.NewReaderSize(f, 1024*1024)
+	r := bufio.NewReaderSize(boundedFrom(path, f, offset), 1024*1024)
 	for {
 		line, err := r.ReadBytes('\n')
 		if bytes.Contains(line, grokUserChunk) || bytes.Contains(line, grokAgentChunk) || bytes.Contains(line, grokToolCall) || bytes.Contains(line, grokToolUpdate) {
