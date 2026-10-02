@@ -289,6 +289,9 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 	var buf []string
 	inFence := false
 	idx := 0
+	// How many sessions so far started in each second, for the rare two
+	// launches that share one.
+	starts := map[string]int{}
 	// aider marks its own output with "> " on the first line only: the
 	// --verbose configuration dump and a multi-line commit message continue
 	// unprefixed, and those lines read as the assistant speaking — one of them
@@ -338,9 +341,13 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 			endSession()
 			idx++
 			ts, _ := time.ParseInLocation("2006-01-02 15:04:05", strings.TrimSpace(strings.TrimPrefix(line, aiderSessionMark)), time.Local)
-			id := aiderSessionID(path, idx)
+			id := aiderSessionID(path, ts, idx, starts)
 			cur = &model.Session{Harness: "aider", ID: id, Project: project, Path: path, Started: ts, Updated: ts}
 			seenFiles = map[string]bool{}
+			// The ordinal id a `deja forget` before #4332 tombstoned.
+			if former := aiderSessionID(path, time.Time{}, idx, nil); former != id {
+				cur.FormerID = former
+			}
 			inFence = false
 			afterOutput, seenUser = false, false
 			continue
@@ -428,10 +435,26 @@ func ParseAiderFile(path string) ([]model.Session, error) {
 	return out, nil
 }
 
-// aider has no session ids; derive a stable one from file path + ordinal.
-func aiderSessionID(path string, idx int) string {
+// aider has no session ids; derive a stable one from the file path and the
+// time the session started. The ordinal in the file was the id once, and it
+// is not stable: people delete the history because aider appends to it
+// forever, deja keeps what it held, and the first session of the next file at
+// that path took ordinal 1 again and overwrote the kept one (#4332). Records
+// are keyed by harness and id, the collision #699 measured for two files; this
+// is the same collision in time. A second launch in the same second gets a
+// suffix; a header that does not parse keeps the ordinal.
+func aiderSessionID(path string, started time.Time, idx int, starts map[string]int) string {
 	h := sha1.Sum([]byte(path))
-	return "aider-" + hex.EncodeToString(h[:6]) + "-" + itoa(idx)
+	base := "aider-" + hex.EncodeToString(h[:6]) + "-"
+	if started.IsZero() {
+		return base + itoa(idx)
+	}
+	stamp := started.Format("20060102T150405")
+	starts[stamp]++
+	if n := starts[stamp]; n > 1 {
+		return base + stamp + "-" + itoa(n)
+	}
+	return base + stamp
 }
 
 func itoa(n int) string {
