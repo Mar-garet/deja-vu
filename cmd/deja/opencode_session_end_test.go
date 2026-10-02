@@ -26,7 +26,7 @@ func TestOpencodePluginEndsTheSessionsItStamped(t *testing.T) {
 	}
 	// Bun's $ stood in for by a tag that writes down each command line.
 	driver := `
-import { DejaRecall } from "` + plugin + `";
+import { DejaRecall } from "./deja.mjs";
 const ran = [];
 const $ = (strings, ...values) => {
   ran.push(strings.reduce((acc, s, i) => acc + s + (i < values.length ? String(values[i]) : ""), ""));

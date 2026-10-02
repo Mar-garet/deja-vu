@@ -44,7 +44,9 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 			return model.Session{Harness: "pi", ID: id, Path: p}
 		}, nil},
 		{"grok", note, func(t *testing.T, name, dir string) model.Session {
-			p := filepath.Join(tmp, "grok", url.PathEscape(dir), "019f-"+name, "updates.jsonl")
+			// QueryEscape, not PathEscape: the folder holds a Windows path's
+			// colon too, which no Windows directory name can.
+			p := filepath.Join(tmp, "grok", url.QueryEscape(dir), "019f-"+name, "updates.jsonl")
 			writeResumeFile(t, p, "")
 			writeResumeFile(t, filepath.Join(filepath.Dir(p), "summary.json"), `{"info":{"cwd":`+jsonStr(dir)+`}}`)
 			return model.Session{Harness: "grok", ID: "019f-" + name, Path: p}
@@ -73,7 +75,7 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 			p := filepath.Join(tmp, "commandcode", name, id+".jsonl")
 			writeResumeFile(t, p, `{"type":"session","version":3,"id":"`+id+`","cwd":`+jsonStr(dir)+`}`+"\n")
 			return model.Session{Harness: "commandcode", ID: id, Path: p}
-		}, func(s model.Session) string { return "cmd --session " + s.ID }},
+		}, func(s model.Session) string { return commandCodeBin() + " --session " + s.ID }},
 		{"reasonix", note, func(t *testing.T, name, dir string) model.Session {
 			id := "20261001-101000.000000000-deepseek-chat"
 			p := filepath.Join(tmp, "reasonix", name, id+".jsonl")
@@ -113,7 +115,7 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 			s = c.session(t, "gone", gone)
 			got, cmd, err := resumeCommand(s)
 			if c.gone == refuse {
-				if err == nil || !strings.Contains(err.Error(), gone) || !strings.Contains(err.Error(), "deja show") {
+				if err == nil || !namesDir(err.Error(), gone) || !strings.Contains(err.Error(), "deja show") {
 					t.Fatalf("dir = %q, err = %v; want a refusal naming %s and deja show", got, err, gone)
 				}
 				return
@@ -125,11 +127,26 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 				t.Errorf("cmd = %q, want %q", cmd, c.goneCmd(s))
 			}
 			n := resumeDirGoneNote(s, got)
-			if !strings.Contains(n, gone) || (c.gone == fork) != strings.Contains(n, "fork") {
+			if !namesDir(n, gone) || (c.gone == fork) != strings.Contains(n, "fork") {
 				t.Errorf("note = %q, want it to name %s (fork: %v)", n, gone, c.gone == fork)
 			}
 		})
 	}
+}
+
+// commandCodeBin is the name Command Code installs under: cmdc on Windows,
+// where cmd is the shell.
+func commandCodeBin() string {
+	if runtime.GOOS == "windows" {
+		return "cmdc"
+	}
+	return "cmd"
+}
+
+// namesDir reports whether s names dir, in the OS's separators or in the
+// forward slashes Kiro and the Roo CLI record a Windows path in.
+func namesDir(s, dir string) bool {
+	return strings.Contains(s, dir) || strings.Contains(s, filepath.ToSlash(dir))
 }
 
 // pi folds every `/` of the directory into `-` for the session folder, so the

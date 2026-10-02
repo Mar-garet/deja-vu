@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,13 @@ func TestCodexResumeGetsNoSecondDigest(t *testing.T) {
 	forked := filepath.Join(codex, "rollout-2026-10-02T07-20-00-fork-x.jsonl")
 	prior := filepath.Join(codex, "rollout-2026-08-04T09-00-00-prior-x.jsonl")
 	run := func(sid, src, transcript, cwd string) string {
-		withHookStdin(t, `{"session_id":"`+sid+`","source":"`+src+`","transcript_path":"`+transcript+`","cwd":"`+cwd+`"}`)
+		// Marshalled, not spliced: a Windows transcript path's backslashes
+		// spliced in raw are not JSON, and the hook read no payload at all.
+		payload, err := json.Marshal(map[string]string{"session_id": sid, "source": src, "transcript_path": transcript, "cwd": cwd})
+		if err != nil {
+			t.Fatal(err)
+		}
+		withHookStdin(t, string(payload))
 		return captureStdout(t, func() {
 			if err := runHookContext(dir, true); err != nil {
 				t.Error(err)

@@ -100,7 +100,7 @@ func TestOpencodePluginNamesTheParentOfASubAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	driver := `
-import { DejaRecall } from "` + plugin + `";
+import { DejaRecall } from "./deja.mjs";
 const ran = [];
 const $ = (strings, ...values) => {
   ran.push(strings.reduce((acc, s, i) => acc + s + (i < values.length ? String(values[i]) : ""), ""));
