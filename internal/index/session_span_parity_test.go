@@ -100,3 +100,34 @@ func TestASharedIDsSpanDoesNotDependOnWhichFileSortsFirst(t *testing.T) {
 		t.Errorf("the full build's span follows the file names: %s with the stub sorting after, %s with it first", spans[0], spans[1])
 	}
 }
+
+// When only the owner of a shared id is read again, its own span replaced the
+// row's and the later Updated the stub gave was gone until a rebuild (#4574).
+func TestRereadingASharedIDsOwnerKeepsTheOtherFilesSpan(t *testing.T) {
+	for _, stub := range []string{"session-z-008140a7.jsonl", "session-a-008140a7.jsonl"} {
+		t.Run(stub, func(t *testing.T) {
+			tmp := hermeticIndexEnv(t)
+			real := filepath.Join(geminiChats(), "session-b-008140a7.jsonl")
+			write(t, real, geminiOriginal())
+			write(t, filepath.Join(geminiChats(), stub), geminiStub())
+			dir := filepath.Join(tmp, "idx")
+			if err := Ensure(dir, "", true, nil); err != nil {
+				t.Fatal(err)
+			}
+			f, err := os.OpenFile(real, os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.WriteString(`{"$set":{"summary":"add an email column"}}` + "\n"); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := Ensure(dir, "", false, nil); err != nil {
+				t.Fatal(err)
+			}
+			sameSpanAsRebuild(t, dir, "gemini:"+resumeID)
+		})
+	}
+}

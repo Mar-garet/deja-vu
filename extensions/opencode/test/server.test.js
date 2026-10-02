@@ -201,3 +201,86 @@ test("every write to deja's stdin has an error handler on the pipe", () => {
     assert.ok(handlers.length > 0, `${rel} writes to deja's stdin with no error handler`)
   }
 })
+
+// 2.x has no event hook in the table: a plugin subscribes through ctx.event and
+// returns a cleanup from setup. Without either, the 1.x session end never ran
+// on 2.x (#4571). 2.0.22 ends a turn with session.execution.succeeded, .failed
+// or .interrupted, and `opencode run` awaits the cleanup before it exits.
+test("on 2.x the sessions it stamped end with the turn and at cleanup", async () => {
+  await withHome(async (dir) => {
+    const bin = join(dir, "deja")
+    const calls = join(dir, "calls")
+    writeFileSync(bin, `#!/bin/sh\nif [ "$1" = version ]; then echo 0.0.0; exit 0; fi\nprintf '%s %s\\n' "$1" "$(cat)" >> ${calls}\n`, {
+      mode: 0o755,
+    })
+    const ended = () => {
+      let text = ""
+      try {
+        text = readFileSync(calls, "utf8")
+      } catch {}
+      return text.split("\n").filter((l) => l.startsWith("hook-session-end "))
+    }
+    const { ctx, hooks } = fakeContext(dir, { bin })
+    const events = channel()
+    ctx.event = { subscribe: events.subscribe }
+    const cleanup = await plugin.setup(ctx)
+    assert.equal(typeof cleanup, "function", "setup returned no cleanup: opencode run exits with the session stamped")
+    await hooks.session.context[0]({
+      sessionID: "s1",
+      system: [],
+      messages: [{ role: "user", content: [{ type: "text", text: "the retry loop" }] }],
+    })
+    await events.push({ type: "session.execution.started", data: { sessionID: "s1" } })
+    assert.equal(ended().length, 0, "a turn starting ended the session")
+    await events.push({ type: "session.execution.succeeded", data: { sessionID: "s1" } })
+    assert.deepEqual(ended(), ['hook-session-end {"session_id":"s1"}'])
+    await hooks.session.context[0]({
+      sessionID: "s2",
+      system: [],
+      messages: [{ role: "user", content: [{ type: "text", text: "the flaky test" }] }],
+    })
+    rmSync(calls, { force: true })
+    await cleanup()
+    // s1's turn already ended it; the cleanup ends only what is still live.
+    assert.deepEqual(ended(), ['hook-session-end {"session_id":"s2"}'])
+    assert.equal(events.open(), false, "the subscription outlived the plugin")
+  })
+})
+
+// channel stands in for ctx.event.subscribe: push hands an event to the
+// subscriber and waits for it to be handled.
+function channel() {
+  let waiting = null
+  let handled = null
+  let open = false
+  return {
+    open: () => open,
+    subscribe: (options) => ({
+      async *[Symbol.asyncIterator]() {
+        open = true
+        try {
+          while (!options?.signal?.aborted) {
+            const next = await new Promise((resolve) => {
+              waiting = resolve
+              options?.signal?.addEventListener("abort", () => resolve(null), { once: true })
+            })
+            if (!next) return
+            yield next
+            handled?.()
+          }
+        } finally {
+          open = false
+        }
+      },
+    }),
+    push: async (event) => {
+      while (!waiting) await new Promise((r) => setTimeout(r, 5))
+      const done = new Promise((r) => (handled = r))
+      const give = waiting
+      waiting = null
+      give(event)
+      await Promise.race([done, new Promise((r) => setTimeout(r, 2000))])
+      await new Promise((r) => setTimeout(r, 50))
+    },
+  }
+}

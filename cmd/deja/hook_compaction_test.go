@@ -208,3 +208,25 @@ func TestCompactionRewrittenTranscriptIsUnmeasured(t *testing.T) {
 		t.Fatalf("rewritten evidence was accepted: %+v", summary)
 	}
 }
+
+// opencode sends a turn that is only an image to hook-prompt with an empty
+// prompt so the session is stamped live again (#4573), and has no text part to
+// carry what comes back. The recovery packet was marked delivered there and
+// dropped; it waits for a turn that can carry it.
+func TestCompactionRecoveryWaitsOutAnEmptyPrompt(t *testing.T) {
+	dir, workspace, _ := prepareCompaction(t)
+	payload, _ := json.Marshal(map[string]string{"session_id": "compaction-fixture", "cwd": workspace, "prompt": ""})
+	var out bytes.Buffer
+	if err := runHookPrompt(dir, bytes.NewReader(payload), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("an empty prompt was answered: %s", out.String())
+	}
+	if _, ok := readLiveSessions(dir)["compaction-fixture"]; !ok {
+		t.Error("an empty prompt did not stamp the session live")
+	}
+	if _, packet := compactionRecovery(dir, "compaction-fixture", workspace); !strings.Contains(packet, "Fix retry cancellation") {
+		t.Fatalf("the recovery packet was spent on an empty prompt: %q", packet)
+	}
+}

@@ -300,6 +300,12 @@ export default {
     // is empty is still asked only a few times.
     const empties = new Map()
     const emptyRetries = 3
+    // Every session this plugin stamped live, ended when its turn is: 2.x has
+    // no event hook or dispose in the table 1.x reads, so the #4546 end never
+    // ran here and a finished session stayed out of the next one's MCP recall
+    // for twenty minutes (#4571).
+    const live = new Set()
+    const endSession = (id) => runHook("hook-session-end", JSON.stringify({ session_id: id }), cwd)
 
     // Session digest: fold into the first system block rather than
     // appending a second one. An OpenAI-compatible endpoint that requires
@@ -309,6 +315,7 @@ export default {
     await ctx.session.hook("context", async (event) => {
       try {
         const key = event.sessionID || "default"
+        if (event.sessionID) live.add(event.sessionID)
         if (!cache.has(key)) {
           // The session id rides along so the digest leaves this session
           // out: the context hook runs after the first message is stored,
@@ -350,10 +357,13 @@ export default {
         if (!last) return
         const parts = (last.content || []).filter((p) => p?.type === "text" && p.text)
         const prompt = parts.map((p) => p.text).join("\n").trim()
-        if (!prompt) return
+        // A turn with no text, an image alone, still goes to hook-prompt:
+        // that call is what stamps the session live again after its last
+        // turn ended it (#4573).
+        if (event.sessionID) live.add(event.sessionID)
         const payload = { prompt, session_id: event.sessionID || "", cwd }
         const raw = await runHook("hook-prompt", JSON.stringify(payload))
-        if (!raw.trim()) return
+        if (!prompt || !raw.trim()) return
         const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
         if (!extra) return
         parts[parts.length - 1].text += "\n\n" + extra
@@ -453,6 +463,31 @@ export default {
         // memory is optional: never break a tool call over it
       }
     })
+
+    // A turn is over when its execution ends: 2.0.22 publishes
+    // session.execution.succeeded, .failed or .interrupted, and none of 1.x's
+    // session.idle, which its schema still carries.
+    const stop = new AbortController()
+    if (typeof ctx.event?.subscribe === "function") {
+      ;(async () => {
+        for await (const event of ctx.event.subscribe({ signal: stop.signal })) {
+          const ends = ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted", "session.idle"]
+          const id = ends.includes(event?.type) ? event.data?.sessionID : ""
+          // Out of live only once ended: opencode run shuts down a few
+          // milliseconds after the turn, and the cleanup ends what is left.
+          if (id && live.has(id)) {
+            await endSession(id)
+            live.delete(id)
+          }
+        }
+      })().catch(() => {})
+    }
+    // opencode run awaits this before it exits.
+    return async () => {
+      stop.abort()
+      for (const id of live) await endSession(id)
+      live.clear()
+    }
   },
 }
 `, exe)
@@ -644,7 +679,9 @@ export const DejaRecall = async ({ $, client, directory }) => {
         if (!last) return
         const parts = (last.parts || []).filter((p) => p?.type === "text" && p.text)
         const prompt = parts.map((p) => p.text).join("\n").trim()
-        if (!prompt) return
+        // A turn with no text, an image alone, still goes to hook-prompt:
+        // that call is what stamps the session live again after session.idle
+        // ended it (#4573).
         // The session id travels with the payload so recall can skip what it
         // already showed this session. Without it every message re-injects the
         // same block: measured on a real store, half of all injections were a
@@ -652,7 +689,7 @@ export const DejaRecall = async ({ $, client, directory }) => {
         const sessionID = input?.sessionID || last?.info?.sessionID || ""
         if (sessionID) live.add(sessionID)
         const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, parent_session_id: await parentOf(sessionID), cwd })} | %s%q hook-prompt%s.text()
-        if (!raw.trim()) return
+        if (!prompt || !raw.trim()) return
         const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
         if (!extra) return
         parts[parts.length - 1].text += "\n\n" + extra
@@ -744,7 +781,10 @@ export const DejaRecall = async ({ $, client, directory }) => {
     event: async ({ event }) => {
       try {
         const id = event?.type === "session.idle" ? event.properties?.sessionID : ""
-        if (id) await endSession(id)
+        if (!id) return
+        await endSession(id)
+        // Ended, so dispose does not spawn deja for it again on the way out.
+        live.delete(id)
       } catch {
         // memory is optional: never break the session over it
       }

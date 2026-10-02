@@ -16,7 +16,11 @@ var piEditKeys = map[string]string{
 // {path, edits:[{op, diff}]}, where an update's diff is hunks of " ", "-" and
 // "+" lines under "@@" and a create's is the whole file. The call is copied,
 // not changed.
-func piEditModes(args map[string]any) map[string]any {
+//
+// omp's update can also move the file, {op, rename, diff}. The removed lines
+// were the old file's and the added ones are the new file's, so the added
+// side goes out as a second call on the new path (#4576).
+func piEditModes(args map[string]any) []map[string]any {
 	out := make(map[string]any, len(args))
 	for k, v := range args {
 		if pk, ok := piEditKeys[k]; ok {
@@ -26,16 +30,32 @@ func piEditModes(args map[string]any) map[string]any {
 	}
 	edits, ok := args["edits"].([]any)
 	if !ok {
-		return out
+		return []map[string]any{out}
 	}
 	var folded []any
+	var moved []map[string]any
 	for _, e := range edits {
 		em, ok := e.(map[string]any)
 		if !ok {
 			continue
 		}
 		if diff, ok := em["diff"].(string); ok {
-			folded = append(folded, piPatchEdits(str(em["op"]), diff)...)
+			// omp reads a missing op as update (pi-edit Operation::parse).
+			op := str(em["op"])
+			if op == "" {
+				op = "update"
+			}
+			pe := piPatchEdits(op, diff)
+			if to := str(em["rename"]); to != "" && op == "update" {
+				var written []any
+				for _, h := range pe {
+					hm := h.(map[string]any)
+					written = append(written, map[string]any{"newText": hm["newText"]})
+					hm["newText"] = ""
+				}
+				moved = append(moved, map[string]any{"path": to, "edits": written})
+			}
+			folded = append(folded, pe...)
 			continue
 		}
 		pe := make(map[string]any, len(em))
@@ -48,7 +68,7 @@ func piEditModes(args map[string]any) map[string]any {
 		folded = append(folded, pe)
 	}
 	out["edits"] = folded
-	return out
+	return append([]map[string]any{out}, moved...)
 }
 
 // piPatchEdits is one patch-mode entry as pi edits: a hunk's removed lines

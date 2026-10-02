@@ -181,6 +181,20 @@ export function jsonSchema(args) {
   return { type: "object", properties, required }
 }
 
+// turnEnded is the session whose turn a 2.x event says is over, or "". 2.0.22
+// ends a turn with session.execution.succeeded, .failed or .interrupted and
+// never publishes 1.x's session.idle, which its schema still carries (#4571).
+export function turnEnded(event) {
+  switch (event?.type) {
+    case "session.execution.succeeded":
+    case "session.execution.failed":
+    case "session.execution.interrupted":
+    case "session.idle":
+      return event.data?.sessionID || ""
+  }
+  return ""
+}
+
 // v1Messages shows 2.x's request messages in the 1.x shape lastUserText reads.
 // The parts are 2.x's own content objects, so text appended to one lands in
 // the request.

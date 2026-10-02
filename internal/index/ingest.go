@@ -677,7 +677,7 @@ func rebuildWithTombstones(dir string, harness string, scope string, files map[s
 				collisions.Add(1)
 			}
 			if owns {
-				m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
+				m.Sessions[key] = ownerRow(m.Sessions[key], s, ord, collided)
 			} else {
 				widenSpan(m.Sessions, key, s)
 			}
@@ -1654,7 +1654,7 @@ func writeSessionsWithSync(tmp, dir string, ss []model.Session, files map[string
 				collisions.Add(1)
 			}
 			if owns {
-				m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
+				m.Sessions[key] = ownerRow(m.Sessions[key], s, ord, collided)
 			} else {
 				widenSpan(m.Sessions, key, s)
 			}
@@ -2693,13 +2693,39 @@ func widenSpan(sessions map[string]SessionMeta, key string, s model.Session) {
 	if !ok {
 		return
 	}
-	if !s.Started.IsZero() && (meta.Started.IsZero() || s.Started.Before(meta.Started)) {
-		meta.Started = s.Started
-	}
-	if s.Updated.After(meta.Updated) {
-		meta.Updated = s.Updated
-	}
+	meta.Started, meta.Updated = widerSpan(meta.Started, meta.Updated, s.Started, s.Updated)
+	meta.SharedStarted, meta.SharedUpdated = widerSpan(meta.SharedStarted, meta.SharedUpdated, s.Started, s.Updated)
 	sessions[key] = meta
+}
+
+// ownerRow is the row of s, which owns it. prev is the row held before, and
+// collided says whether s collided with it. The span of the files that share
+// the id stays in the row, so reading the owner alone does not drop it
+// (#4574): prev's own span when prev was another file sharing the id, a
+// collision or a stub with nothing to index, and what prev kept when it was
+// the same file. A row s supersedes, a ZCode snapshot restored into the
+// database, gives it nothing.
+func ownerRow(prev SessionMeta, s model.Session, ord uint32, collided bool) SessionMeta {
+	meta := metaWithOrd(metaForSession(s), ord)
+	switch {
+	case prev.Path == "" || prev.Path == s.Path:
+		meta.SharedStarted, meta.SharedUpdated = prev.SharedStarted, prev.SharedUpdated
+	case collided || prev.NoText:
+		meta.SharedStarted, meta.SharedUpdated = widerSpan(prev.SharedStarted, prev.SharedUpdated, prev.Started, prev.Updated)
+	}
+	meta.Started, meta.Updated = widerSpan(meta.Started, meta.Updated, meta.SharedStarted, meta.SharedUpdated)
+	return meta
+}
+
+// widerSpan is the span covering both.
+func widerSpan(started, updated, s2, u2 time.Time) (time.Time, time.Time) {
+	if !s2.IsZero() && (started.IsZero() || s2.Before(started)) {
+		started = s2
+	}
+	if u2.After(updated) {
+		updated = u2
+	}
+	return started, updated
 }
 
 // claimSession is attributeSession for a session read this pass. A transcript
@@ -4192,7 +4218,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 			collisions.Add(1)
 		}
 		if owns {
-			m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
+			m.Sessions[key] = ownerRow(held, s, ord, collided)
 		} else {
 			if _, present := m.Sessions[key]; !present {
 				m.Sessions[key] = held
@@ -4558,13 +4584,16 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 			// as the full build keeps it.
 			if owns && meta.NoText && meta.Path != s.Path && !known {
 				prev := meta
-				meta = metaWithOrd(metaForSession(s), prev.Ord)
+				meta = ownerRow(prev, s, prev.Ord, collided)
 				if !prev.Started.IsZero() && (meta.Started.IsZero() || prev.Started.Before(meta.Started)) {
 					meta.Started = prev.Started
 				}
 				if prev.Updated.After(meta.Updated) {
 					meta.Updated = prev.Updated
 				}
+			}
+			if !owns {
+				meta.SharedStarted, meta.SharedUpdated = widerSpan(meta.SharedStarted, meta.SharedUpdated, s.Started, s.Updated)
 			}
 			if collided {
 				collisions.Add(1)
@@ -4598,11 +4627,20 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 				// A thin title is widened from the session's first substantial
 				// turn, and a tail does not hold it: one appended turn renamed
 				// the session after itself. A row already named from the whole
-				// session keeps that name (#4452).
+				// session keeps that name (#4452). Unless the sidecar the title
+				// lives in changed too: that is a rename, the row holds the old
+				// name, and only the whole session can widen the new one
+				// (#4592).
 				t, _ := redact.Text(s.Title)
 				t = boundSourceTitle(s.Harness, t)
 				fromTail := known && named && s.Harness != "deja" && thinTitle(t) && !thinTitle(meta.Title)
-				if w := widenThinSourceTitle(s, t); !fromTail && w != meta.Title {
+				w := widenThinSourceTitle(s, t)
+				if fromTail && sidecarChanged(of, changed[p]) {
+					if whole, ok := wholeSession(p, s); ok {
+						w, fromTail = widenThinSourceTitle(whole, t), false
+					}
+				}
+				if !fromTail && w != meta.Title {
 					meta.Title = w
 					meta.AgentTitle = s.AgentTitle
 				}
@@ -4772,6 +4810,27 @@ func carriesWork(ss []model.Session) bool {
 		}
 	}
 	return false
+}
+
+// sidecarChanged reports whether the metadata file read with a transcript
+// (Kimi's state.json, say) changed between two walks.
+func sidecarChanged(a, b FileState) bool {
+	return a.MetadataSize != b.MetadataSize || a.MetadataMTime != b.MetadataMTime
+}
+
+// wholeSession reads s's file from its first byte and returns s as the full
+// build sees it, for what an appended tail cannot tell.
+func wholeSession(p string, s model.Session) (model.Session, bool) {
+	ss, err := parseAppendedFile("", p, FileState{}, true)
+	if err != nil {
+		return model.Session{}, false
+	}
+	for _, w := range ss {
+		if w.Harness == s.Harness && w.ID == s.ID {
+			return w, true
+		}
+	}
+	return model.Session{}, false
 }
 
 func sameFile(a, b FileState) bool {

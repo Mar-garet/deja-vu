@@ -119,18 +119,22 @@ func (r *piReader) call(id, name string, args map[string]any, applied bool, t ti
 		r.hashline(id, in, t)
 		return
 	}
+	calls := []map[string]any{args}
 	if name == "edit" {
-		args = piEditModes(args)
+		calls = piEditModes(args)
 	}
-	in := args
-	if p, _ := args["path"].(string); p != "" && r.abs(p) != p {
-		in = make(map[string]any, len(args))
-		for k, v := range args {
-			in[k] = v
+	var call []any
+	for _, in := range calls {
+		if p, _ := in["path"].(string); p != "" && r.abs(p) != p {
+			abs := make(map[string]any, len(in))
+			for k, v := range in {
+				abs[k] = v
+			}
+			abs["path"] = r.abs(p)
+			in = abs
 		}
-		in["path"] = r.abs(p)
+		call = append(call, map[string]any{"type": "tool_use", "name": name, "input": in})
 	}
-	call := []any{map[string]any{"type": "tool_use", "name": name, "input": in}}
 	if IndexToolPaths() {
 		if p := toolPathsIn(call, piDialect); p != "" {
 			r.add(RoleFiles, p, t)

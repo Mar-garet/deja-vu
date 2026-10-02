@@ -108,3 +108,41 @@ func TestASidecarChangeAloneIsReread(t *testing.T) {
 		})
 	}
 }
+
+// A rename that lands with an appended turn reaches the append path, which
+// sees only the tail. Renamed to a title too thin to keep, the row kept the
+// long title it had before the rename, where a rebuild widens the new one
+// from the session's first turn, and it stayed until a rebuild (#4592).
+func TestRenameToAThinTitleWithAnAppendedTurn(t *testing.T) {
+	tmp := t.TempDir()
+	isolateStores(t, tmp)
+	root := filepath.Join(tmp, "store")
+	t.Setenv("DEJA_KIMI_ROOT", filepath.Join(root, "kimi"))
+	session := filepath.Join(root, "kimi", "sessions", "wd_proj_0123456789ab", "session_retry01")
+	wire := filepath.Join(session, "agents", "main", "wire.jsonl")
+	state := filepath.Join(session, "state.json")
+	meta := func(title string) string {
+		return fmt.Sprintf(`{"createdAt":"2026-09-01T09:00:00.000Z","updatedAt":"2026-09-01T09:00:02.000Z","title":%q,"workDir":"/tmp/proj"}`, title)
+	}
+	turn := func(text string, ms int64) string {
+		return fmt.Sprintf(`{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":%q}],"toolCalls":[]},"time":%d}`, text, ms) + "\n"
+	}
+	body := `{"type":"metadata","protocol_version":"1.4"}` + "\n" + turn("fix the retry loop", 1788253201000)
+	at := time.Now().Add(-time.Hour)
+	writeAt(t, wire, body, at)
+	writeAt(t, state, meta("investigate the flaky retry loop in the http client"), at)
+	dir := filepath.Join(tmp, "index.db")
+	indexPass(t, dir)
+
+	writeAt(t, state, meta("retry loop"), at.Add(time.Minute))
+	body += turn("now run the tests", 1788253261000)
+	writeAt(t, wire, body, at.Add(time.Minute))
+	indexPass(t, dir)
+	harness, id := onlySession(t, dir)
+	matchesRebuild(t, dir, harness, id)
+
+	// The next turn alone is a tail too; the row has to stay right after it.
+	writeAt(t, wire, body+turn("and the lint", 1788253321000), at.Add(2*time.Minute))
+	indexPass(t, dir)
+	matchesRebuild(t, dir, harness, id)
+}

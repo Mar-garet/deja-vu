@@ -29,7 +29,7 @@ func TestResumeRefusesAKimiOrQwenSubagent(t *testing.T) {
 	} {
 		dir, cmd, err := resumeCommand(s)
 		if err == nil {
-			t.Errorf("%s: printed %q for a sub-agent run", s.Harness, formatResumeCommand(dir, cmd))
+			t.Errorf("%s: printed %q for a sub-agent run", s.Harness, resumeCmdLine(dir, cmd))
 			continue
 		}
 		for _, want := range []string{"sub-agent", "deja resume " + s.Parent} {
