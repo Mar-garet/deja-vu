@@ -3819,12 +3819,13 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 			}
 		}
 	}
+	rewritten := rewrittenInPlace(kept, changed, files, old.Files, old.Sessions)
 	if len(changed) == 0 && len(removed) == 0 {
 		sayKept()
 		lastIngestFiles = 0
 		return nil
 	}
-	if len(removed) == 0 && !rewrittenInPlace(kept, changed, old.Files) && canAppendIncremental(changed, old.Files) {
+	if len(removed) == 0 && !rewritten && canAppendIncremental(changed, old.Files) {
 		filesTouched, messages, unreadable, err := appendIncremental(dir, harness, scope, old, files, changed)
 		if IsCorrupt(err) {
 			if progress != nil {
@@ -4713,12 +4714,14 @@ func rereadSharedCopies(removed map[string]bool, changed, files map[string]FileS
 	}
 }
 
-// rewrittenInPlace reports whether a kept file has a new one beside it under
+// rewrittenInPlace reports whether a kept file has another beside it under
 // the same name in another form: Codex compressing x.jsonl to x.jsonl.zst,
 // Gemini rewriting x.json as x.jsonl. That is the file moving, which only the
 // replacement path's rename rule pairs up; the append path wrote the new
-// file's records beside the old ones and kept the dead path (#4252).
-func rewrittenInPlace(kept map[string]bool, changed, held map[string]FileState) bool {
+// file's records beside the old ones and kept the dead path (#4252). A pass
+// that ran between zstd writing the .zst and removing the .jsonl held both,
+// the row marked shared; the .zst is read again so the rule can pair them.
+func rewrittenInPlace(kept map[string]bool, changed, files, held map[string]FileState, sessions map[string]SessionMeta) bool {
 	if len(kept) == 0 {
 		return false
 	}
@@ -4726,12 +4729,27 @@ func rewrittenInPlace(kept map[string]bool, changed, held map[string]FileState) 
 	for p := range kept {
 		stems[fileStem(p)] = true
 	}
-	for p := range changed {
-		if _, ok := held[p]; !ok && stems[fileStem(p)] {
-			return true
+	shared := map[string]bool{}
+	for _, meta := range sessions {
+		if meta.Shared && kept[meta.Path] {
+			shared[fileStem(meta.Path)] = true
 		}
 	}
-	return false
+	found := false
+	for p, f := range files {
+		if kept[p] || !stems[fileStem(p)] {
+			continue
+		}
+		if _, ok := changed[p]; ok {
+			if _, known := held[p]; !known {
+				found = true
+			}
+		} else if shared[fileStem(p)] {
+			changed[p] = f
+			found = true
+		}
+	}
+	return found
 }
 
 // fileStem is p without its compression suffix and its extension.
