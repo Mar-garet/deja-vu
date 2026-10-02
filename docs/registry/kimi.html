@@ -66,7 +66,12 @@
 <p>whose output reaches the model, and it takes plain stdout, so the session</p>
 <p>digest rides the first prompt rather than a session-start hook.</p>
 <ul>
-<li><strong>Resume</strong>: <code>kimi --session &lt;sessionId&gt;</code> (verified live on 0.28.1).</li>
+<li><strong>Resume</strong>: <code>kimi --session &lt;sessionId&gt;</code>, run in the <code>workDir</code> from the</li>
+</ul>
+<p>session&#39;s <code>state.json</code>: Kimi refuses a session from any other directory</p>
+<p>(verified live on 0.28.1). A <code>workDir</code> that is gone is refused with a</p>
+<p>pointer to <code>deja show</code>.</p>
+<ul>
 <li><strong>Handoff</strong>: exec, <code>kimi -p</code>.</li>
 </ul>
 <p>Requested and specified by <a href="https://github.com/yearth">@yearth</a> in</p>

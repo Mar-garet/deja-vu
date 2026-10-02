@@ -407,7 +407,7 @@
     {
       "name": "copilot",
       "state": "config-missing",
-      "path": "<tmp>/home/.copilot/skills/deja-history/SKILL.md"
+      "path": "<tmp>/home/.copilot/mcp-config.json"
     },
     {
       "name": "vscode",

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -141,8 +142,7 @@ func TestResumeQwenRunsInTheProjectDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DEJA_QWEN_ROOT", filepath.Join(tmp, "qwen"))
-	encoded := strings.ReplaceAll(real, string(filepath.Separator), "-")
-	path := filepath.Join(tmp, "qwen", "projects", encoded, "chats", "a2d5a292.jsonl")
+	path := qwenTranscriptIn(t, filepath.Join(tmp, "qwen"), real, "a2d5a292", true)
 
 	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "a2d5a292", Project: "my-app", Path: path})
 	if err != nil {
@@ -153,6 +153,35 @@ func TestResumeQwenRunsInTheProjectDirectory(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && dir != real {
 		t.Fatalf("dir = %q, want the project directory %q", dir, real)
+	}
+}
+
+// A directory named outside ASCII is blanked in qwen's folder name, so the cd
+// comes from the cwd the transcript records (#4258).
+func TestResumeQwenRunsInANonASCIIProjectDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	real := filepath.Join(tmp, "проект q")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEJA_QWEN_ROOT", filepath.Join(tmp, "qwen"))
+	encoded := regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(real, "-")
+	chats := filepath.Join(tmp, "qwen", "projects", encoded, "chats")
+	if err := os.MkdirAll(chats, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(chats, "ee561e79.jsonl")
+	cwd, _ := json.Marshal(real)
+	line := `{"sessionId":"ee561e79","type":"user","cwd":` + string(cwd) + `,"message":{"role":"user","parts":[{"text":"hi"}]}}` + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "ee561e79", Path: path})
+	if err != nil || cmd != "qwen -r ee561e79" {
+		t.Fatalf("qwen resume: %q %v", cmd, err)
+	}
+	if dir != real {
+		t.Fatalf("dir = %q, want %q", dir, real)
 	}
 }
 
@@ -179,6 +208,44 @@ func TestCrushResumeRunsInTheProject(t *testing.T) {
 	// An id that is not a uuid never reaches a command line.
 	if _, _, err := resumeCommand(model.Session{Harness: "crush", ID: "x; rm -rf /", Project: "p", Path: path}); err == nil {
 		t.Fatal("a non-uuid id was accepted")
+	}
+}
+
+// Kimi Code refuses a session from any directory but the one it was created
+// in, so the command cds into the workDir state.json records; one that is gone
+// is refused with a pointer to deja show, since the bare command fails too.
+func TestResumeKimiRunsInTheSessionDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	project := filepath.Join(tmp, "proj-kimi")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id := "session_f39de7f4-4831-4734-a289-fc75046cc67e"
+	sessionDir := filepath.Join(tmp, "kimi", "sessions", "wd_proj-kimi_f31a2b2fc330", id)
+	main := filepath.Join(sessionDir, "agents", "main")
+	if err := os.MkdirAll(main, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeState := func(workDir string) {
+		b, _ := json.Marshal(map[string]string{"title": "t", "workDir": workDir})
+		if err := os.WriteFile(filepath.Join(sessionDir, "state.json"), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(main, "wire.jsonl")
+
+	writeState(project)
+	dir, cmd, err := resumeCommand(model.Session{Harness: "kimi", ID: id, Path: path})
+	if err != nil || cmd != "kimi --session "+id {
+		t.Fatalf("kimi resume: %q %v", cmd, err)
+	}
+	if dir != project {
+		t.Fatalf("dir = %q, want the session's workDir %q", dir, project)
+	}
+
+	writeState(filepath.Join(tmp, "gone"))
+	if dir, cmd, err := resumeCommand(model.Session{Harness: "kimi", ID: id, Path: path}); err == nil || !strings.Contains(err.Error(), "deja show") {
+		t.Fatalf("resume = (%q, %q, %v) for a workDir that no longer exists, want a refusal naming deja show", dir, cmd, err)
 	}
 }
 
@@ -228,9 +295,61 @@ func TestResumeCursorSplitsCLIFromIDE(t *testing.T) {
 	}
 }
 
-// gemini takes the session uuid deja indexes, and scopes the lookup to a hash
-// of the working directory it cannot invert — so the command carries no cd.
+// gemini finds a session only from the directory it ran in (#4211); the
+// store records it in projects.json and in the project folder's .project_root.
+func TestResumeGeminiRunsInTheProjectDirectory(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".gemini")
+	t.Setenv("DEJA_GEMINI_ROOT", root)
+	work := filepath.Join(t.TempDir(), "проект app")
+	chats := filepath.Join(root, "tmp", "app", "chats")
+	for _, d := range []string{work, chats} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(chats, "session-2026-10-01T12-50-a5bc80ac.jsonl")
+	s := model.Session{Harness: "gemini", ID: "a5bc80ac-786c", Project: "app", Path: path}
+
+	// .project_root alone, as the folder writes it.
+	if err := os.WriteFile(filepath.Join(root, "tmp", "app", ".project_root"), []byte(work), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, cmd, err := resumeCommand(s)
+	if err != nil || cmd != "gemini --resume a5bc80ac-786c" || dir != work {
+		t.Fatalf("resume = (%q, %q, %v), want the command run in %q", dir, cmd, err, work)
+	}
+	// projects.json is the fallback when the folder keeps no .project_root.
+	other := filepath.Join(t.TempDir(), "other")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reg := `{"projects":{` + jsonString(other) + `:"app"}}`
+	if err := os.WriteFile(filepath.Join(root, "projects.json"), []byte(reg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if dir, _, _ := resumeCommand(s); dir != work {
+		t.Fatalf("dir = %q, want .project_root's %q over the registry", dir, work)
+	}
+	if err := os.Remove(filepath.Join(root, "tmp", "app", ".project_root")); err != nil {
+		t.Fatal(err)
+	}
+	if dir, _, _ := resumeCommand(s); dir != other {
+		t.Fatalf("dir = %q, want the registry's %q", dir, other)
+	}
+	// A directory that is gone is refused: gemini would not find the
+	// session from anywhere else.
+	if err := os.RemoveAll(other); err != nil {
+		t.Fatal(err)
+	}
+	if dir, cmd, err := resumeCommand(s); err == nil || !strings.Contains(err.Error(), "deja show") {
+		t.Fatalf("resume = (%q, %q, %v) for a directory that is gone, want a refusal naming deja show", dir, cmd, err)
+	}
+}
+
+// An older store keys the project folder by a hash of the path and records
+// nothing to invert — the command carries no cd.
 func TestResumeGeminiPrintsNoDirectory(t *testing.T) {
+	t.Setenv("DEJA_GEMINI_ROOT", t.TempDir())
 	dir, cmd, err := resumeCommand(model.Session{Harness: "gemini", ID: "a5bc80ac-786c", Project: "app", Path: "/g/tmp/app/chats/s.jsonl"})
 	if err != nil {
 		t.Fatalf("gemini resume: %v", err)

@@ -109,6 +109,15 @@ func formatResumeCommand(dir, cmdline string) string {
 // from a session store cannot alter the command deja builds or prints.
 var resumeIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
+// hermesProfilePattern and hermesReservedProfiles are Hermes' own
+// _PROFILE_ID_RE and _RESERVED_NAMES (hermes_cli/profiles.py): a directory
+// outside them is not a profile `hermes -p` will open, and `-p default` opens
+// the root rather than profiles/default.
+var (
+	hermesProfilePattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	hermesReservedProfiles = map[string]bool{"hermes": true, "default": true, "test": true, "tmp": true, "root": true, "sudo": true}
+)
+
 // openclawKeyPattern matches a session key (agent:<id>:<name>). Colons are
 // what separates a key's parts, so the id pattern is too strict here — and
 // anything looser than this would let a key read off disk carry shell
@@ -200,18 +209,30 @@ func resumeCommand(s model.Session) (string, string, error) {
 		return "", "gjc --resume " + s.ID, nil
 	case "hermes":
 		// Hermes takes the same session ID deja indexes, so this resumes the
-		// exact conversation rather than the most recent one.
+		// exact conversation rather than the most recent one — from the
+		// profile whose store holds it (#4248).
+		if p, dir := sources.HermesResumeProfile(s.Path); p != "" {
+			if dir && (!hermesProfilePattern.MatchString(p) || hermesReservedProfiles[p]) {
+				return "", "", fmt.Errorf("session %s is in profiles/%s, a name Hermes does not take as a profile (`-p default` is the root), so `hermes -p` cannot reopen it — `deja show %s` has the conversation", digest.Short(s.ID), p, digest.Short(s.ID))
+			}
+			return "", "hermes -p " + p + " --resume " + s.ID, nil
+		}
 		return "", "hermes --resume " + s.ID, nil
 	case "aider":
 		dir := filepath.Dir(s.Path)
 		return "", "", fmt.Errorf("aider has no session resume — run aider in %s and it continues the same history", dir)
 	case "gemini":
-		// No cd: gemini scopes its session list by a hash of the working
-		// directory, and the store keeps only that hash — there is nothing to
-		// invert back into a path. Run from the wrong directory it says "No
-		// previous sessions found for this project" rather than opening the
-		// wrong one.
-		return "", "gemini --resume " + s.ID, nil
+		// gemini finds a session only from the directory it ran in: anywhere
+		// else it says "No previous sessions found for this project" (#4211).
+		// Current stores record that directory in projects.json and
+		// .project_root; an older one keyed by a hash of it has nothing to
+		// invert, and gets no cd. A recorded directory that is gone is
+		// refused, as qwen's is (#4259).
+		dir, err := recordedResumeDir(s, sources.GeminiProjectDir(s.Path), "gemini --resume")
+		if err != nil {
+			return "", "", err
+		}
+		return dir, "gemini --resume " + s.ID, nil
 	case "cursor":
 		if strings.HasSuffix(s.Path, ".jsonl") {
 			// A CLI transcript is named after the chat id `--resume` takes.
@@ -303,7 +324,21 @@ func resumeCommand(s model.Session) (string, string, error) {
 		}
 		return "", "reasonix --resume " + s.Path, nil
 	case "qwen":
-		return qwenProjectDirFor(s), "qwen -r " + s.ID, nil
+		// qwen keys its sessions by the directory they ran in: run anywhere
+		// else, `qwen -r <id>` answers "No saved session found". Unlike
+		// opencode (#4201) there is no running it from elsewhere, so with the
+		// directory gone this refuses, as it does for a Cursor CLI chat (#4259).
+		short := digest.Short(s.ID)
+		dir, recorded := sources.QwenSessionDir(s.Path)
+		if recorded {
+			if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+				return "", "", fmt.Errorf("qwen session %s ran in %s, which is gone, and `qwen -r` finds a session only from there — `deja show %s` has the conversation", short, dir, short)
+			}
+		}
+		if dir == "" {
+			return "", "", fmt.Errorf("qwen session %s: deja cannot tell which directory it ran in, and `qwen -r` finds a session only from there — `deja show %s` has the conversation", short, short)
+		}
+		return dir, "qwen -r " + s.ID, nil
 	case "openclaw":
 		key, err := sources.OpenClawSessionKey(s.Path, s.ID)
 		if err != nil {
@@ -320,7 +355,14 @@ func resumeCommand(s model.Session) (string, string, error) {
 		}
 		return "", "openclaw chat --session " + key, nil
 	case "kimi":
-		return "", "kimi --session " + s.ID, nil
+		// In the directory the session was created in: Kimi Code refuses a
+		// session from anywhere else (#4274), so a workDir that is gone is
+		// refused rather than printed without the cd.
+		dir, err := recordedResumeDir(s, sources.KimiSessionDir(s.Path), "kimi --session")
+		if err != nil {
+			return "", "", err
+		}
+		return dir, "kimi --session " + s.ID, nil
 	case "goose":
 		return "", "goose session --resume --session-id " + s.ID, nil
 	case "crush":
@@ -343,10 +385,29 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "copilot":
 		return "", "copilot --resume=" + s.ID, nil
 	case "copilot-chat":
+		// VS Code lists only the open workspace's chats, so the folder comes
+		// first (#4223).
+		if dir := sources.CopilotChatWorkspaceDir(s.Path); dir != "" {
+			return "", "", fmt.Errorf("copilot-chat sessions reopen in VS Code: open the workspace (code %s), then Chat: Show Chats", shellQuoteIfNeeded(dir))
+		}
 		return "", "", fmt.Errorf("copilot-chat sessions reopen from Chat: Show Chats, not the terminal")
 	default:
 		return "", "", fmt.Errorf("don't know how to resume %q sessions", s.Harness)
 	}
+}
+
+// recordedResumeDir is the directory a session recorded, for an agent that
+// opens a session only from there: dir when it exists, an error naming
+// `deja show` when it is gone, and "" when nothing was recorded.
+func recordedResumeDir(s model.Session, dir, command string) (string, error) {
+	if dir == "" {
+		return "", nil
+	}
+	if existingDir(dir) == "" {
+		short := digest.Short(s.ID)
+		return "", fmt.Errorf("%s session %s ran in %s, which is gone, and `%s` finds a session only from there — `deja show %s` has the conversation", s.Harness, short, dir, command, short)
+	}
+	return dir, nil
 }
 
 // existingDir is p when it is a directory on this machine, else "": a cd into
@@ -381,20 +442,6 @@ func claudeProjectDirFor(s model.Session) string {
 		return ""
 	}
 	return sources.ClaudeSessionDir(s.Path)
-}
-
-// qwenProjectDirFor recovers the original working directory from the
-// transcript location. qwen scopes its session list to the current project,
-// so `qwen -r <id>` finds nothing when run from anywhere else.
-func qwenProjectDirFor(s model.Session) string {
-	if s.Path == "" {
-		return ""
-	}
-	base := sources.QwenProjectDirBase(s.Path)
-	if base == "" {
-		return ""
-	}
-	return sources.ResolveEncodedPath(base)
 }
 
 // cursorProjectDirFor recovers the working directory a CLI transcript belongs

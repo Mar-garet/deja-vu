@@ -286,7 +286,7 @@ func doctorWiringExe(w io.Writer) {
 func doctorCodexHook(w io.Writer) {
 	st := codexHookWiringState()
 	hooksPath, status, missing, hooks := st.path, st.state, st.missing, st.hooks
-	if st.absent {
+	if st.absent || status == "missing" || status == "plugin" {
 		// The plugin ships the same hooks under its own root, and codex trusts
 		// those the same way. Nothing was installed here, and nothing is
 		// missing either.
@@ -1756,7 +1756,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"amp", sources.AmpSettingsFile(), doctorJSONWired(ampServersKey), doctorJSONDejaKeys(ampServersKey)},
 		{"prime", primeSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"openclaw", filepath.Join(sources.OpenClawStateDir(), "openclaw.json"), doctorOpenClawWired, nil},
-		{"copilot", guidancePath("copilot"), doctorFileWired, nil},
+		{"copilot", copilotMCPConfigPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"vscode", doctorVSCodeMCPPath(), doctorJSONWired("servers"), doctorJSONDejaKeys("servers")},
 		{"hermes", filepath.Join(sources.HermesHome(), "config.yaml"), doctorHermesWired, nil},
 		{"goose", filepath.Join(gooseConfigDir(), "config.yaml"), doctorGooseWired, nil},

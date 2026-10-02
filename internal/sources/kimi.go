@@ -2,8 +2,11 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -92,6 +95,54 @@ func kimiPersonsOrigin(origin any) bool {
 	return kind == "" || kind == "user" || strings.HasPrefix(kind, "user") || trigger == "user-slash"
 }
 
+// kimiSessionState reads the state.json beside a wire.jsonl at
+// .../sessions/<workDirKey>/<sessionId>/agents/main/wire.jsonl.
+func kimiSessionState(path string) (st kimiState, ok bool) {
+	sessionDir := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+	b, err := os.ReadFile(filepath.Join(sessionDir, "state.json"))
+	if err != nil || json.Unmarshal(b, &st) != nil {
+		return kimiState{}, false
+	}
+	return st, true
+}
+
+// KimiSessionDir is the directory a Kimi Code session was created in, for the
+// cd in front of `kimi --session`: Kimi refuses a session from any other
+// directory (#4274).
+func KimiSessionDir(path string) string {
+	if path == "" {
+		return ""
+	}
+	st, _ := kimiSessionState(path)
+	return st.WorkDir
+}
+
+// kimiExit is the footer kimi-code's Bash tool writes on a non-zero exit,
+// with the truncation note on the same line when the output was cut. A
+// timeout or an interrupt ends with its own message and carries no code.
+var kimiExit = regexp.MustCompile(`^Command failed with exit code: (\d+)\.`)
+
+// kimiExitCode reads the status off a Bash result: the footer on its last
+// line, ahead of the saved-output reference a truncated result carries, and
+// only on a result flagged isError, so a clean run whose output quotes the
+// footer is not taken for a failure. 0 when there is none.
+func kimiExitCode(r map[string]any) int {
+	if isErr, _ := r["isError"].(bool); !isErr {
+		return 0
+	}
+	out, _ := r["output"].(string)
+	if i := strings.LastIndex(out, "\n\n[Full output saved]\n"); i >= 0 {
+		out = out[:i]
+	}
+	out = strings.TrimRight(out, "\n")
+	m := kimiExit.FindStringSubmatch(strings.TrimSpace(out[strings.LastIndex(out, "\n")+1:]))
+	if m == nil {
+		return 0
+	}
+	code, _ := strconv.Atoi(m[1])
+	return code
+}
+
 func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error) {
 	// .../sessions/<workDirKey>/<sessionId>/agents/main/wire.jsonl
 	sessionDir := filepath.Dir(filepath.Dir(filepath.Dir(path)))
@@ -100,15 +151,16 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 		ID:      filepath.Base(sessionDir),
 		Path:    path,
 	}
-	var st kimiState
-	if b, err := os.ReadFile(filepath.Join(sessionDir, "state.json")); err == nil {
-		if json.Unmarshal(b, &st) == nil {
-			s.Title = strings.TrimSpace(st.Title)
-			s.Project = projectName(st.WorkDir)
-			s.Touch(parseTimeAny(st.CreatedAt))
-			s.Touch(parseTimeAny(st.UpdatedAt))
-		}
+	if st, ok := kimiSessionState(path); ok {
+		s.Title = strings.TrimSpace(st.Title)
+		s.Project = projectName(st.WorkDir)
+		s.Touch(parseTimeAny(st.CreatedAt))
+		s.Touch(parseTimeAny(st.UpdatedAt))
 	}
+	// A Bash call and its result are separate loop events joined by
+	// toolCallId; the command record is kept by id so the exit status the
+	// result reports can ride on it (#4262).
+	shellAt := map[string]int{}
 	// Streamed assistant text accumulates across content.part events and is
 	// flushed on step.end — or at EOF, so a response mid-stream when the
 	// indexer runs is not lost (the remainder lands on the next incremental
@@ -211,26 +263,41 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 						records = append(records, model.Message{Role: RoleEdit, Text: span, Time: t})
 					}
 				}
+				shell := -1
 				if IndexCommands() {
 					for _, cmd := range commandsIn(part, kimiDialect) {
+						shell = len(records)
 						records = append(records, model.Message{Role: RoleCommand, Text: cmd, Time: t})
 					}
 				}
+				id, _ := e["toolCallId"].(string)
+				// An id seen again belongs to this call now, recorded or not.
+				delete(shellAt, id)
 				if len(records) == 0 {
 					return
 				}
 				flush()
 				s.Touch(t)
+				if shell >= 0 && id != "" {
+					shellAt[id] = len(s.Messages) + shell
+				}
 				s.Messages = append(s.Messages, records...)
 			case "tool.result":
 				// Every observed result shape carries its text under
 				// `output` — plain, with a note, truncated, or flagged
 				// isError. The error ones are kept on purpose: the error a
 				// command hit is exactly what a later search reaches for.
+				r, _ := e["result"].(map[string]any)
+				id, _ := e["toolCallId"].(string)
+				if i, ok := shellAt[id]; ok {
+					if code := kimiExitCode(r); code > 0 {
+						s.Messages[i].Text += fmt.Sprintf("  → exit %d", code)
+					}
+					delete(shellAt, id)
+				}
 				if !IndexToolOutput() {
 					return
 				}
-				r, _ := e["result"].(map[string]any)
 				out, _ := r["output"].(string)
 				if out = strings.TrimSpace(out); out == "" {
 					return
