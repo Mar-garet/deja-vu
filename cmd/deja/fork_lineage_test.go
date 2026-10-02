@@ -280,7 +280,9 @@ func TestABackgroundedForksRecallLeavesOutASourceThatWentOn(t *testing.T) {
 	if before, _ := callMCPTool(dir, "recall", q); !strings.Contains(before, "aaaaaaaa") {
 		t.Fatalf("the fixture never served the source, so this proves nothing:\n%s", before)
 	}
-	runHookPrompt(dir, strings.NewReader(`{"session_id":"`+fork+`","hook_event_name":"UserPromptSubmit","cwd":"/w/p","prompt":"keep going in the background"}`), io.Discard)
+	if err := runHookPrompt(dir, strings.NewReader(`{"session_id":"`+fork+`","hook_event_name":"UserPromptSubmit","cwd":"/w/p","prompt":"keep going in the background"}`), io.Discard); err != nil {
+		t.Fatal(err)
+	}
 	runHookSessionEnd(dir, strings.NewReader(`{"session_id":"`+source+`","hook_event_name":"SessionEnd","reason":"prompt_input_exit"}`))
 	out, err := callMCPTool(dir, "recall", q)
 	if err != nil {
