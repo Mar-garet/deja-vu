@@ -485,6 +485,10 @@ import (
 //
 // 60 also: an OpenClaw <id>.trajectory.jsonl is no longer read as a session
 // (#4477).
+//
+// 60 also: a failed command carries its `→ exit N` in claude, the pi family,
+// goose, cline, kiro-cli, zed and copilot-chat, and a copilot-chat terminal
+// call its output (#4487, #4501, #4496, #4502, #4505, #4507, #4493).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
