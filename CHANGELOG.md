@@ -199,6 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Reasonix session keeps the files it changed with `notebook_edit`, `delete_range`, `delete_symbol` and `move_file` (both paths), the cell a notebook edit wrote and the lines a `delete_range` removed, so `deja files`, `blame` and `restore` see them (#4541).
 - With `deja install reasonix-auto`, a file's history also arrives after a Reasonix `notebook_edit`, `delete_range`, `delete_symbol` or `move_file`; the hook ran for them and said nothing (#4541).
 - OpenClaw starts without the two `[plugins]` warnings about deja on every run: `deja install openclaw-auto` names the plugin in `plugins.load.paths`, which OpenClaw counts as provenance, and leaves `plugins.allow` alone (#4579).
+- `deja doctor` no longer calls OpenClaw auto-recall wired when deja's plugin is gone from `~/.openclaw/extensions`; the row says stale and how to put it back, since the hook pack alone recalls only in gateway mode (#4580).
 
 ## [0.21.4] - 2026-09-29
 
