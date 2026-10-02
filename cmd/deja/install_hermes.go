@@ -245,8 +245,15 @@ func installHermesMCP(exe string, uninstall bool) (installResult, error) {
 			// Before a `...` document end, where #4260 puts the plugins block
 			// too: a key after it is a second document Hermes cannot parse.
 			block := "\nmcp_servers:\n" + entry
-			if i := strings.LastIndex("\n"+next, "\n...\n"); i >= 0 {
-				next = next[:i] + strings.TrimPrefix(block, "\n") + next[i:]
+			end, at := -1, 0
+			for _, line := range strings.SplitAfter(next, "\n") {
+				if yamlDocumentEnd(line) {
+					end = at
+				}
+				at += len(line)
+			}
+			if end >= 0 {
+				next = next[:end] + strings.TrimPrefix(block, "\n") + next[end:]
 			} else {
 				next += block
 			}
@@ -265,6 +272,9 @@ func installHermesMCP(exe string, uninstall bool) (installResult, error) {
 	// The file's own final newline, the way both goose writers keep it: this
 	// was the only writer that did not, so a config whose deja block ended it
 	// came back without one (#2606, #2730).
+	if !uninstall {
+		note = withOtherDejaNames(note, yamlDejaEntryNames(next, "mcp_servers:"))
+	}
 	a, werr := writeIfChanged(path, old, []byte(keepTrailingNewline(lfText(old), next)))
 	return installResult{Path: path, Action: a, Note: note}, werr
 }

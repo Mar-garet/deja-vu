@@ -11,10 +11,11 @@
 // setup runs the 1.x plugin and wires its hooks to 2.x's seams, so both majors
 // run the same code: the session digest and the per-prompt recall go in on
 // `session` "context", the pre-compaction index on "compaction", the spawn and
-// after-tool lines on `tool` "execute.before" and "execute.after".
+// after-tool lines on `tool` "execute.before" and "execute.after", the end of
+// a turn on `event` "subscribe" and dispose on the cleanup setup returns.
 
 import { DejaPlugin } from "./index.js"
-import { jsonSchema, resultText, TOOL_SPECS, v1Messages, v1ToolName } from "./lib.js"
+import { jsonSchema, resultText, TOOL_SPECS, turnEnded, v1Messages, v1ToolName } from "./lib.js"
 
 // A 2.x server plugin has no channel to the TUI, so the toasts go nowhere.
 const noToast = { tui: { showToast: async () => {} } }
@@ -98,6 +99,23 @@ async function setup(ctx) {
             : []
       event.result = { ...result, content: [...content, { type: "text", text: extra }] }
     })
+  }
+
+  // 2.x has no event hook or dispose in a plugin's table: the events come from
+  // ctx.event and the exit is the cleanup setup returns, which `opencode run`
+  // awaits. Without them a session stamped live was never ended (#4571).
+  const stop = new AbortController()
+  if (hooks.event && typeof ctx.event?.subscribe === "function") {
+    ;(async () => {
+      for await (const event of ctx.event.subscribe({ signal: stop.signal })) {
+        const id = turnEnded(event)
+        if (id) await hooks.event({ event: { type: "session.idle", properties: { sessionID: id } } })
+      }
+    })().catch(() => {})
+  }
+  return async () => {
+    stop.abort()
+    await hooks.dispose?.()
   }
 }
 

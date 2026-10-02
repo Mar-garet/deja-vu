@@ -87,8 +87,7 @@ func TestTheRepairRewritesTheCommandFile(t *testing.T) {
 // out of the config by hand (#2693).
 func TestTheRepairLeavesAGooseCommandTakenOutByHand(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setTestHome(t, home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	old := filepath.Join(home, "old", "deja")

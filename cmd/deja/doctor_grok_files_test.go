@@ -34,6 +34,8 @@ func TestDoctorDoesNotCallGroksOwnFilesUnrecognised(t *testing.T) {
 	for _, name := range []string{
 		"chat_history.jsonl", "events.jsonl", "rewind_points.jsonl", "prompt_context.json",
 		"announcement_state.json", "signals.json", "resources_state.json",
+		// Grok Build 1.0.41 writes two more per session (#4586).
+		"usage.json", "tool_definitions.json",
 	} {
 		write(filepath.Join(dir, name), "{}\n")
 	}

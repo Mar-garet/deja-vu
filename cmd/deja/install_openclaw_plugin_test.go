@@ -185,7 +185,7 @@ console.log(JSON.stringify(quiet ?? null));
 
 // Compaction throws away the blocks a session was shown, and the list that
 // stops them repeating outlives it. before_compaction fires in the plugin —
-// measured on OpenClaw 2026.7.1-2, with the session key on the hook context —
+// measured on OpenClaw 2026.7.1-2, with the session id on the hook context —
 // and nothing is read back from it, which is all a compaction hook can carry.
 func TestOpenClawPluginForgetsOnCompaction(t *testing.T) {
 	js := openclawPluginJS("/bin/deja")
@@ -195,7 +195,7 @@ func TestOpenClawPluginForgetsOnCompaction(t *testing.T) {
 	// The whole call, not the pieces: the digest handler carries the same
 	// session-id expression, so half of this matches even when the forget has
 	// lost it and would clear nothing.
-	if !strings.Contains(js, `ask(["hook-precompact"], { session_id: ctx?.sessionKey || ctx?.sessionId || "" })`) {
+	if !strings.Contains(js, `ask(["hook-precompact"], { session_id: ctx?.sessionId || ctx?.sessionKey || "" })`) {
 		t.Fatalf("the forget is not the one deja means — no hook-precompact with this session:\n%s", js)
 	}
 }

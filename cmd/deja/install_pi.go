@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
@@ -55,6 +56,57 @@ func installPiShapedExtension(agentDir, exe string, uninstall bool) (installResu
 	next := []byte(piExtensionTS(exe))
 	a, err := writeIfChanged(path, old, next)
 	return installResult{Path: path, Action: a}, err
+}
+
+// installPiMCP writes the server into ~/.pi/agent/mcp.json. pi has no MCP of
+// its own; that file is read by the pi-mcp-adapter package, so without it in
+// pi's packages the entry is a file nothing reads, and install says so (#4583).
+func installPiMCP(exe string, uninstall bool) (installResult, error) {
+	r, err := installMCPJSON(filepath.Join(sources.PiConfigDir(), "mcp.json"), exe, uninstall)
+	if err != nil || uninstall || piMCPAdapterInstalled() {
+		return r, err
+	}
+	note := piNoAdapterNote
+	if r.Note != "" {
+		note = r.Note + "; " + note
+	}
+	r.Note = note
+	return r, nil
+}
+
+const piNoAdapterNote = "pi reads this file only through the pi-mcp-adapter package — `pi install npm:pi-mcp-adapter`"
+
+// piMCPAdapterInstalled reports whether pi loads pi-mcp-adapter: a package
+// source naming it in the user's settings.json or the project's. pi takes a
+// source as a string or as {source: …}, from npm, git or a local path. It
+// also loads an extension listed under "extensions" or sitting in an
+// extensions/ directory beside settings.json.
+func piMCPAdapterInstalled() bool {
+	dirs := []string{sources.PiConfigDir()}
+	if cwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, filepath.Join(cwd, ".pi"))
+	}
+	for _, dir := range dirs {
+		cfg := readJSONConfig(filepath.Join(dir, "settings.json"))
+		pkgs, _ := jsonAt(cfg, "packages").([]any)
+		exts, _ := jsonAt(cfg, "extensions").([]any)
+		for _, pkg := range append(pkgs, exts...) {
+			src, _ := pkg.(string)
+			if m, ok := pkg.(map[string]any); ok {
+				src, _ = m["source"].(string)
+			}
+			if strings.Contains(src, "pi-mcp-adapter") {
+				return true
+			}
+		}
+		entries, _ := os.ReadDir(filepath.Join(dir, "extensions"))
+		for _, e := range entries {
+			if strings.Contains(e.Name(), "pi-mcp-adapter") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func piExtensionTS(exe string) string {
@@ -143,8 +195,10 @@ export default function (pi: any) {
       if (!injected) {
         // The session goes with it: hook-context marks the one starting as
         // live, which keeps it out of its own MCP recall on this first turn
-        // (#4394, as #4246 and #4273 did for Hermes and opencode).
-        const raw = run(["hook-context"], JSON.stringify({ session_id: sessionID(), cwd: process.cwd() }));
+        // (#4394, as #4246 and #4273 did for Hermes and opencode). pi has no
+        // MCP of its own, so the lead names the shell command, not the tool
+        // (#4584).
+        const raw = run(["hook-context"], JSON.stringify({ session_id: sessionID(), cwd: process.cwd(), deja_shell: true }));
         let digest = "";
         let receipt = "";
         try {

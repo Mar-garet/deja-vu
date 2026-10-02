@@ -78,6 +78,11 @@ func autoWirings() []autoWiring {
 		// whole of auto-recall here — there is no digest hook to look for.
 		{"crush", func() string { return crushConfigPath() }, "hook-tool", ""},
 		{"grok", func() string { return grokHooksPath() }, "hook-context", ""},
+		// Copilot CLI keeps hooks with the rest of its user settings; the row
+		// follows them to config.json while they have not moved yet. The flag
+		// is part of the marker: a plain hook-context line answers in Claude's
+		// envelope, which Copilot runs and drops.
+		{"copilot", func() string { return copilotHooksPath() }, "hook-context --copilot", ""},
 		// ZCode keeps its hooks in the same file as its server map, and the
 		// line deja writes ends in `--strict` — its schema discards a whole
 		// response over one key it does not know.
@@ -102,6 +107,7 @@ func autoWirings() []autoWiring {
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
 	"cursor": true, "qwen": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+	"copilot": true,
 }
 
 // autoUnwired reports whether a row's file holds no deja wiring at all: it is
@@ -260,6 +266,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		state = "stale"
 	case a.name == "zcode" && !zcodeHooksRun(b):
 		state = "stale"
+	case a.name == "openclaw" && openclawPluginMissing():
+		state = "stale"
 	default:
 		state = "wired"
 	}
@@ -272,6 +280,21 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		binaryMissing = true
 	}
 	return state, binaryMissing
+}
+
+// openclawPluginDir is where openclaw-auto puts deja's plugin.
+func openclawPluginDir() string {
+	return filepath.Join(sources.OpenClawStateDir(), "extensions", openclawPluginID)
+}
+
+// openclawPluginMissing reports whether the plugin half of openclaw-auto is
+// gone. The row's file is the hook pack, which fires only in gateway mode; the
+// plugin carries the digest and per-prompt recall under `openclaw agent
+// --local` and `openclaw chat`, and OpenClaw says nothing when the entry in
+// openclaw.json names a plugin that is not there (#4580).
+func openclawPluginMissing() bool {
+	_, err := os.Stat(filepath.Join(openclawPluginDir(), "index.mjs"))
+	return err != nil
 }
 
 // aiderWiring is the aider row's state when the context file and the read:
@@ -373,6 +396,8 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no enabled record in %s — `deja install reasonix-auto`)\n", a.name, "stale", reportPath(path), reportPath(reasonixStatePath()))
 		case a.name == "zcode" && !zcodeHooksRun(b):
 			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's hook is not under hooks.events with hooks.enabled on — `deja install zcode-auto`)\n", a.name, "stale", reportPath(path))
+		case a.name == "openclaw" && openclawPluginMissing():
+			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's plugin is not in %s — `openclaw agent --local` and `openclaw chat` get no recall; `deja install openclaw-auto`)\n", a.name, "stale", reportPath(path), reportPath(openclawPluginDir()))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
 			if off := autoWiringSwitchedOff(a.name); off != "" {
@@ -391,17 +416,22 @@ func doctorAutoRecall(w io.Writer) {
 		if a.marker == "" {
 			continue
 		}
+		launcher := doctorLauncherNote(path, a.name+"-auto")
 		if missing := reasonixRuntimeMissingFor(a.name); missing != "" {
 			fmt.Fprintf(w, "  %-12s runs %s, which is not there — `deja install reasonix-auto` rewrites it for this binary\n", "", missing)
 		} else if exe := hookExeNote(path, a.name+"-auto"); exe != "" {
-			fmt.Fprintf(w, "  %-12s %s\n", "", exe)
+			// When the binary that is gone is the launcher, the note below
+			// says so; printing both named one file twice (#4245).
+			if launcher == "" || !hookExeIsLauncher(path) {
+				fmt.Fprintf(w, "  %-12s %s\n", "", exe)
+			}
 		} else if other := otherBinaryNote(path, a.name+"-auto"); other != "" {
 			// The quieter half of the same question: the binary is there and is
 			// not this one, which works until that file goes (#3656).
 			fmt.Fprintf(w, "  %-12s %s\n", "", other)
 		}
-		if note := doctorLauncherNote(path, a.name+"-auto"); note != "" {
-			fmt.Fprintf(w, "  %-12s %s\n", "", note)
+		if launcher != "" {
+			fmt.Fprintf(w, "  %-12s %s\n", "", launcher)
 		}
 	}
 }

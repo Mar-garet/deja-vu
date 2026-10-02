@@ -39,6 +39,24 @@ func TestGooseEditAndWriteCallsLeaveEditAndWroteRecords(t *testing.T) {
 			wroteLines: []string{"pool := make(chan conn, maxPoolSize)"},
 		},
 		{
+			// goose 1.10–1.25 takes a unified diff on str_replace, and its
+			// schema calls that the preferred way to edit (#4287).
+			name: "text_editor str_replace diff",
+			raw: `[{"type":"toolRequest","id":"t5","toolCall":{"status":"success","value":{"name":"developer__text_editor","arguments":` +
+				`{"command":"str_replace","path":"/tmp/proj/retry.go","diff":"--- a/retry.go\n+++ b/retry.go\n@@ -1 +1,3 @@\n-func retry() {}\n+func retry() {\n+\tfor i := 0; i < 3; i++ {}\n+}\n"}}}}]`,
+			edit:       "/tmp/proj/retry.go\nfunc retry() {}",
+			wroteLines: []string{"\tfor i := 0; i < 3; i++ {}"},
+		},
+		{
+			// The diff wins over old_str and new_str when a call has both,
+			// as it does in goose's text_editor.
+			name: "text_editor str_replace diff over old_str",
+			raw: `[{"type":"toolRequest","id":"t6","toolCall":{"status":"success","value":{"name":"developer__text_editor","arguments":` +
+				`{"command":"str_replace","path":"/tmp/proj/retry.go","old_str":"zzz","new_str":"yyy","diff":"--- a/retry.go\n+++ b/retry.go\n@@ -1 +1 @@\n-func retry() {}\n+func retry() { backoff() }\n"}}}}]`,
+			edit:       "/tmp/proj/retry.go\nfunc retry() {}",
+			wroteLines: []string{"func retry() { backoff() }"},
+		},
+		{
 			name: "text_editor write",
 			raw: `[{"type":"toolRequest","id":"t3","toolCall":{"status":"success","value":{"name":"developer__text_editor","arguments":` +
 				`{"command":"write","path":"/w/app/pool.go","file_text":"package app\n\nconst maxPoolSize = 40 // raised after the load test\n"}}}}]`,
@@ -88,6 +106,50 @@ func TestGooseTextEditorReadsOnlyWhatTheCommandTakes(t *testing.T) {
 			if m.Role == RoleEdit || m.Role == RoleWrote {
 				t.Errorf("%s: %s record %q, want none", command, m.Role, m.Text)
 			}
+		}
+	}
+}
+
+// A diff naming several files is applied under the call's path, which is then
+// a directory: each file gets its own edit and wrote record (#4287).
+func TestGooseTextEditorMultiFileDiff(t *testing.T) {
+	raw := `[{"type":"toolRequest","id":"t7","toolCall":{"status":"success","value":{"name":"developer__text_editor","arguments":` +
+		`{"command":"str_replace","path":"/tmp/proj","diff":"--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-old a\n+retryBudget := 3 * time.Second\n--- a/b.go\n+++ b/b.go\n@@ -1 +1 @@\n-old b\n+poolSize := runtime.NumCPU() * 4\n"}}}}]`
+	s := gooseSessionFrom(t, "assistant", raw)
+	var edits, wrote []string
+	for _, m := range s.Messages {
+		switch m.Role {
+		case RoleEdit:
+			edits = append(edits, m.Text)
+		case RoleWrote:
+			wrote = append(wrote, m.Text)
+		}
+	}
+	if strings.Join(edits, "|") != "/tmp/proj/a.go\nold a|/tmp/proj/b.go\nold b" {
+		t.Errorf("edit records %q", edits)
+	}
+	if len(wrote) != 2 || !strings.HasPrefix(wrote[0], "/tmp/proj/a.go\n") || !strings.HasPrefix(wrote[1], "/tmp/proj/b.go\n") {
+		t.Errorf("wrote records %q", wrote)
+	}
+}
+
+// The diff's headers go under the base goose uses, in the path's own
+// convention, without repeating the directories the two share.
+func TestGooseTextEditorDiffPaths(t *testing.T) {
+	for _, tc := range []struct{ call, header, want string }{
+		{"/w/proj/retry.go", "b/retry.go", "/w/proj/retry.go"},
+		{"/w/proj/src/retry.go", "b/src/retry.go", "/w/proj/src/retry.go"},
+		{"/w/proj/src", "b/src/a.go", "/w/proj/src/a.go"},
+		{"/w/proj", "b/pkg/a.go", "/w/proj/pkg/a.go"},
+		{`C:\w\proj\src\retry.go`, "b/src/retry.go", `C:\w\proj\src\retry.go`},
+		{"/w/proj/retry.go", "/abs/other.go", "/abs/other.go"},
+		// A relative path is under goose's working directory, and a file's
+		// base is that directory, not the file.
+		{"main.go", "b/util.go", "util.go"},
+	} {
+		diff := "--- " + tc.header + "\n+++ " + tc.header + "\n@@ -1 +1 @@\n-x := 1\n+x := 2\n"
+		if files, _, _ := gooseTextEditorDiff(tc.call, diff); len(files) != 1 || files[0] != tc.want {
+			t.Errorf("%s with %s: files %q, want %q", tc.call, tc.header, files, tc.want)
 		}
 	}
 }

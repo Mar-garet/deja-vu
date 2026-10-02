@@ -491,9 +491,11 @@ import (
 // a renamed Cline CLI session takes its new title (#4319), and a thin harness
 // title is not retaken from an appended turn (#4452); rows already held
 // change only on a rebuild.
+//
 // 60 also: a failed command carries its `→ exit N` in claude, the pi family,
 // goose, cline, kiro-cli, zed and copilot-chat, and a copilot-chat terminal
 // call its output (#4487, #4501, #4496, #4502, #4505, #4507, #4493).
+//
 // 60 also: a Claude Code PowerShell call is a command and a NotebookEdit call
 // leaves files and wrote records (#4489).
 //
@@ -590,6 +592,58 @@ import (
 // 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
 // call leaves files records, notebook_edit a wrote record and delete_range an
 // edit record from its result's diff (#4541).
+//
+// 60 also: a Grok Build `grok -p` session, which grok marks "headless", is no
+// longer stored with that as its spawn kind (#4585).
+//
+// 60 also: a Copilot Chat reply keeps the file and symbol names VS Code draws
+// inline, from its inlineReference parts (#4589).
+//
+// 60 also: a Copilot Chat agent edit reads as the edited file's name in the
+// reply, not as an empty code fence (#4590).
+//
+// 60 also: a Codex sub-agent's rollout records the thread that spawned it as
+// its parent (#4547).
+//
+// 60 also: a Codex fork records the thread it was forked from, and every
+// session keeps a fingerprint of the turn it opens with (#4549).
+//
+// 60 also: an OpenClaw 2026.7 reset or delete archive, stamped
+// 2026-10-01T15-18-21.294Z rather than with a number, is read (#4482).
+//
+// 60 also: a Codex rollout grown by records with no message moves the
+// session's updated time on an append, as a rebuild does (#4166).
+//
+// 60 also: a session whose id two files share takes its Started and Updated
+// from both, whichever sorts first (#4253).
+//
+// 60 also: a Codex rollout compressed in place, or a transcript rewritten
+// under its name in another form, is a move on an update with nothing else
+// removed; its old path and records go (#4252).
+//
+// 60 also: removing one of two transcripts that share an id re-reads the
+// other, so the runs both held stay and the row moves to it (#4310).
+//
+// 60 also: with DEJA_INCLUDE_SUBAGENTS=1, Kimi Code and Qwen Code sub-agent
+// logs are read as sub-agent sessions of their parent (#4483).
+//
+// 60 also: a goose text_editor str_replace sent as a unified diff leaves edit
+// and wrote records (#4287).
+// 60 also: a session renamed to a thin title in the same pass as a new turn
+// takes the title a rebuild gives it (#4592).
+//
+// 60 also: a row shared by two files keeps the span of the one that does not
+// own it, so reading the owner again leaves Updated where a rebuild has it
+// (#4574).
+//
+// 60 also: a Crush call the user denied leaves no command, files, edit or
+// wrote record (#4575).
+//
+// 60 also: an omp patch-mode update that renames its file records the
+// written lines under the new path and both paths as files (#4576).
+//
+// 60 also: an omp patch edit with no op is the update omp reads it as, and
+// its lines are recorded (#4576).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
@@ -743,6 +797,13 @@ type SessionMeta struct {
 	// like something they said (#1100). Additive: an older manifest decodes
 	// with it false, and the line then reads as it did before.
 	AgentTitle bool `json:",omitempty"`
+	// SharedStarted and SharedUpdated are the span of the files that share
+	// this row's id and do not own it, a Gemini resume stub beside its
+	// transcript. A pass that reads only the owner builds the row from that
+	// file again, and the stub's later Updated was gone until a rebuild
+	// (#4574).
+	SharedStarted time.Time `json:",omitzero"`
+	SharedUpdated time.Time `json:",omitzero"`
 	// OrigID is the id a session had on the machine it came from. Import
 	// renames every session to imported-<hash>, so a promoted note stopped
 	// looking like one the moment it crossed a machine boundary and every rule
@@ -758,6 +819,11 @@ type SessionMeta struct {
 	Kind   string `json:",omitempty"`
 	Parent string `json:",omitempty"`
 	Agent  string `json:",omitempty"`
+	// Opening identifies the turn the session opens with. A fork copies the
+	// turns it was forked from, times included, so a fork and its source open
+	// alike, and recall reads that to keep a fork's source off its page (#4549).
+	// Additive: an older manifest decodes with it zero, which matches nothing.
+	Opening uint64 `json:",omitempty"`
 	// From is the machine this session was worked on. Every imported session
 	// read as "from elsewhere" and nothing more, so with three machines
 	// exchanging history there was no way to ask what the server did, and no

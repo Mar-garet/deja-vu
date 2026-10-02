@@ -288,7 +288,9 @@ func jsoncEntryText(entry map[string]any) (string, error) {
 // this path dropping an env block, flipping `disabled`, writing a second entry
 // beside one under another name, and saying none of it (#2740).
 func writeJSONCEntry(path string, old []byte, blockKey string, want map[string]any, uninstall bool) (installResult, error) {
-	text := string(old)
+	// LF text: the scanners below test for '\n', and in a CRLF file they met
+	// '\r' and wrote a `   \r` line that uninstall kept (#4553).
+	text := lfText(old)
 	var root map[string]any
 	if err := json.Unmarshal([]byte(jsoncToJSON(text)), &root); err != nil {
 		return installResult{}, configParseError(path, err)
@@ -491,6 +493,19 @@ func jsoncRemoveKey(text, blockKey, key string, dropFrom int) (string, error) {
 			return text, nil
 		}
 		cut := zedEntrySpan(text, chain)
+		// A block that was the last key leaves the comma in front of it
+		// dangling, the same as a last scalar below.
+		if text[cut[1]-1] != ',' {
+			blank := stripJSONComments(text)
+			for i := cut[0] - 1; i >= 0; i-- {
+				if c := blank[i]; c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+					continue
+				} else if c == ',' {
+					cut[0] = i
+				}
+				break
+			}
+		}
 		return closeEmptied(text[:cut[0]]+text[cut[1]:], keys), nil
 	}
 	block, have := walkJSONCKeys(text, open, keys)
@@ -498,6 +513,9 @@ func jsoncRemoveKey(text, blockKey, key string, dropFrom int) (string, error) {
 		return text, nil
 	}
 	at := jsoncScalarValue(text, block, key)
+	if at == nil {
+		at = jsoncListValue(text, block, key)
+	}
 	if at == nil {
 		return text, nil
 	}
@@ -594,6 +612,66 @@ func jsoncScalarValue(text string, block *zedSpan, key string) *[2]int {
 	return nil
 }
 
+// jsoncListValue is where a list setting's value sits inside a block, from
+// its '[' to one past the matching ']', or nil when the key is not there or
+// holds something else. OpenClaw's plugins.load.paths is the one deja edits
+// (#4579).
+func jsoncListValue(text string, block *zedSpan, key string) *[2]int {
+	want := `"` + key + `"`
+	depth := 0
+	for i := block.valueOpen + 1; i < block.valueEnd-1; i++ {
+		if j := zedSkipComment(text, i); j != i {
+			i = j - 1
+			continue
+		}
+		switch text[i] {
+		case '"':
+			end := zedStringEnd(text, i)
+			if end < 0 {
+				return nil
+			}
+			if depth == 0 && text[i:end] == want && jsoncIsKey(text, end) {
+				v := end
+				for v < len(text) && (text[v] == ' ' || text[v] == '\t' || text[v] == '\n' || text[v] == '\r' || text[v] == ':') {
+					v++
+				}
+				if v >= len(text) || text[v] != '[' {
+					return nil
+				}
+				level := 0
+				for k := v; k < block.valueEnd-1; k++ {
+					if j := zedSkipComment(text, k); j != k {
+						k = j - 1
+						continue
+					}
+					switch text[k] {
+					case '"':
+						e := zedStringEnd(text, k)
+						if e < 0 {
+							return nil
+						}
+						k = e - 1
+					case '[', '{':
+						level++
+					case ']', '}':
+						level--
+						if level == 0 {
+							return &[2]int{v, k + 1}
+						}
+					}
+				}
+				return nil
+			}
+			i = end - 1
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+		}
+	}
+	return nil
+}
+
 // jsoncIsKey reports whether the string that ends at `end` is a key rather
 // than a value. A string value equal to the key's name is not the key, and
 // writing over it left `{"label": "enabled"true}` behind (#2745).
@@ -630,6 +708,10 @@ func readableStrictJSON(paths ...string) error {
 		// (#3696).
 		b, err := readConfig(path)
 		if err != nil {
+			return err
+		}
+		// And one it cannot write, for the same reason (#4558).
+		if err := configWritable(path); err != nil {
 			return err
 		}
 		if len(bytes.TrimSpace(b)) == 0 {

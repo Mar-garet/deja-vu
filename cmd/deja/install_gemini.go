@@ -166,7 +166,7 @@ func restoreGeminiHooksSwitch() error {
 	if cfg, _ := geminiHooksConfig(old); cfg["enabled"] != true {
 		return nil
 	}
-	next, err := jsoncSetFlag(string(old), "hooksConfig", "enabled", false)
+	next, err := jsoncSetFlag(lfText(old), "hooksConfig", "enabled", false)
 	if err != nil {
 		return fmt.Errorf("gemini settings: %w", err)
 	}
@@ -219,7 +219,7 @@ func disableGeminiHooksIfOurs() error {
 	if _, ok := root["hooks"]; ok {
 		return nil
 	}
-	text := string(old)
+	text := lfText(old)
 	open := zedTopLevelOpen(text)
 	if open < 0 {
 		return nil
@@ -363,7 +363,7 @@ func enableGeminiHooksJSONC(path string, old []byte) error {
 			return fmt.Errorf("gemini settings: %q is not a switch deja can turn on — left as it was", "hooksConfig.enabled")
 		}
 	}
-	next, err := jsoncSetFlag(string(old), "hooksConfig", "enabled", true)
+	next, err := jsoncSetFlag(lfText(old), "hooksConfig", "enabled", true)
 	if err != nil {
 		return fmt.Errorf("gemini settings: %w", err)
 	}

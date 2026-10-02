@@ -37,7 +37,10 @@ import (
 //
 // PostToolUse has changed since 1.0.5: grok 1.0.41's hook docs say its
 // context goes to the model with the tool's result, so a failed command gets
-// the fix pair there too (#4499).
+// the fix pair there too (#4499). Session start and the prompt have not: on
+// 1.0.41 they still drop additionalContext, so hook-context and hook-prompt
+// answer nothing under grok rather than a receipt for memory that never
+// arrived (#4588, grokDropsContext).
 func grokHooksPath() string {
 	return filepath.Join(sources.GrokHome(), "hooks", "deja.json")
 }

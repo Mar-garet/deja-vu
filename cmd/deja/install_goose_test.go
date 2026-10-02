@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func gooseConf(t *testing.T, cfg string) string {
+func gooseConf(t *testing.T, goose string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(cfg, "goose", "config.yaml"))
+	b, err := os.ReadFile(filepath.Join(goose, "config.yaml"))
 	if err != nil {
 		t.Fatalf("config.yaml missing: %v", err)
 	}
@@ -18,15 +18,11 @@ func gooseConf(t *testing.T, cfg string) string {
 }
 
 func TestInstallGooseWritesTheExtension(t *testing.T) {
-	home := t.TempDir()
-	cfg := filepath.Join(home, "cfg")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", cfg)
+	goose := gooseHomeForTest(t)
 	if _, err := installGoose("/bin/deja", false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	conf := gooseConf(t, cfg)
+	conf := gooseConf(t, goose)
 	// Goose keys extensions by name and skips anything not enabled; a stdio
 	// entry without cmd is rejected at load.
 	for _, want := range []string{"extensions:", "  deja:", "enabled: true", "type: stdio", "cmd: "} {
@@ -45,16 +41,12 @@ func TestInstallGooseWritesTheExtension(t *testing.T) {
 // metacharacter in it must be quoted, or Goose cannot load the extension it was
 // just handed.
 func TestInstallGooseQuotesThePath(t *testing.T) {
-	home := t.TempDir()
-	cfg := filepath.Join(home, "cfg")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", cfg)
+	goose := gooseHomeForTest(t)
 	exe := "/opt/deja: v#2/deja"
 	if _, err := installGoose(exe, false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	conf := gooseConf(t, cfg)
+	conf := gooseConf(t, goose)
 	if !strings.Contains(conf, `"/opt/deja: v#2/deja"`) {
 		t.Fatalf("exe path is not YAML-quoted, so Goose cannot parse it:\n%s", conf)
 	}
@@ -65,12 +57,8 @@ func TestInstallGooseQuotesThePath(t *testing.T) {
 }
 
 func TestInstallGooseKeepsOtherExtensions(t *testing.T) {
-	home := t.TempDir()
-	cfg := filepath.Join(home, "cfg")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", cfg)
-	dir := filepath.Join(cfg, "goose")
+	goose := gooseHomeForTest(t)
+	dir := goose
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +69,7 @@ func TestInstallGooseKeepsOtherExtensions(t *testing.T) {
 	if _, err := installGoose("/bin/deja", false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	conf := gooseConf(t, cfg)
+	conf := gooseConf(t, goose)
 	for _, want := range []string{"GOOSE_PROVIDER: openai", "  memory:", "type: builtin", "  deja:"} {
 		if !strings.Contains(conf, want) {
 			t.Fatalf("install dropped %q:\n%s", want, conf)
@@ -90,7 +78,7 @@ func TestInstallGooseKeepsOtherExtensions(t *testing.T) {
 	if _, err := installGoose("/bin/deja", true); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
-	conf = gooseConf(t, cfg)
+	conf = gooseConf(t, goose)
 	if strings.Contains(conf, "deja") {
 		t.Fatalf("uninstall left our entry:\n%s", conf)
 	}
@@ -102,15 +90,11 @@ func TestInstallGooseKeepsOtherExtensions(t *testing.T) {
 // .goosehints is read once when a session starts, so the file has to exist
 // before the first run rather than being written on demand.
 func TestInstallGooseAutoWritesHints(t *testing.T) {
-	home := t.TempDir()
-	cfg := filepath.Join(home, "cfg")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", cfg)
+	goose := gooseHomeForTest(t)
 	if _, err := installGooseAuto("/bin/deja", false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	hints := filepath.Join(cfg, "goose", "AGENTS.md")
+	hints := filepath.Join(goose, "AGENTS.md")
 	b, err := os.ReadFile(hints)
 	if err != nil {
 		t.Fatalf("hints not written: %v", err)
@@ -130,15 +114,11 @@ func TestInstallGooseAutoWritesHints(t *testing.T) {
 // The hook is what makes plain `goose` recall: it runs before Goose reads the
 // hints file, so refreshing it there lands in the same session.
 func TestInstallGooseAutoWritesTheHook(t *testing.T) {
-	home := t.TempDir()
-	cfg := filepath.Join(home, "cfg")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", cfg)
+	gooseHomeForTest(t)
 	if _, err := installGooseAuto("/bin/deja", false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	hook := filepath.Join(home, ".agents", "plugins", "deja", "hooks", "hooks.json")
+	hook := filepath.Join(homeDir(), ".agents", "plugins", "deja", "hooks", "hooks.json")
 	b, err := os.ReadFile(hook)
 	if err != nil {
 		t.Fatalf("hook not written: %v", err)
@@ -178,17 +158,13 @@ func TestInstallGooseAutoWritesTheHook(t *testing.T) {
 // Under the wrapper the digest goes to the MOIM file, which Goose re-reads
 // every turn; writing the hints too would inject the same text twice.
 func TestGooseRecallPathFollowsMOIM(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
-	t.Setenv("GOOSE_MOIM_MESSAGE_FILE", "")
+	goose := gooseHomeForTest(t)
 	// AGENTS.md in goose's config directory: the `.goosehints` beside it never
 	// reached the model on goose 1.48.
-	if got := gooseRecallPath(); !strings.HasSuffix(got, filepath.Join("goose", "AGENTS.md")) {
+	if got := gooseRecallPath(); got != filepath.Join(goose, "AGENTS.md") {
 		t.Fatalf("without MOIM the target is %q", got)
 	}
-	moim := filepath.Join(home, "recall.md")
+	moim := filepath.Join(t.TempDir(), "recall.md")
 	t.Setenv("GOOSE_MOIM_MESSAGE_FILE", moim)
 	if got := gooseRecallPath(); got != moim {
 		t.Fatalf("with MOIM set the target is %q, want %q", got, moim)

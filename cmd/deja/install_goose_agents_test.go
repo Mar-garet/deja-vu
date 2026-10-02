@@ -15,14 +15,14 @@ import (
 // ancestor's do not. So the block existed, was refreshed every session, and
 // never reached the model.
 func TestGooseRecallGoesWhereGooseReadsIt(t *testing.T) {
-	cfg := gooseHomeForTest(t)
+	goose := gooseHomeForTest(t)
 	if _, err := installGooseAuto("/bin/deja", false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(cfg, "goose", "AGENTS.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(goose, "AGENTS.md")); err != nil {
 		t.Errorf("nothing at the path goose reads: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(cfg, "goose", ".goosehints")); err == nil {
+	if _, err := os.Stat(filepath.Join(goose, ".goosehints")); err == nil {
 		t.Error("the file goose does not read was written anyway")
 	}
 }
@@ -31,8 +31,8 @@ func TestGooseRecallGoesWhereGooseReadsIt(t *testing.T) {
 // write. A stale copy of somebody's history, in a file nothing reads, is the
 // worst of both — invisible and wrong.
 func TestGooseRecallClearsTheFileItUsedToWrite(t *testing.T) {
-	cfg := gooseHomeForTest(t)
-	retired := filepath.Join(cfg, "goose", ".goosehints")
+	goose := gooseHomeForTest(t)
+	retired := filepath.Join(goose, ".goosehints")
 	if err := os.MkdirAll(filepath.Dir(retired), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -56,8 +56,8 @@ func TestGooseRecallClearsTheFileItUsedToWrite(t *testing.T) {
 // nothing to remove — on install, on uninstall, and on every hook-goose turn,
 // which is where it was seen (#3196).
 func TestGooseLeavesTheReadersOwnRetiredHints(t *testing.T) {
-	cfg := gooseHomeForTest(t)
-	retired := filepath.Join(cfg, "goose", ".goosehints")
+	goose := gooseHomeForTest(t)
+	retired := filepath.Join(goose, ".goosehints")
 	if err := os.MkdirAll(filepath.Dir(retired), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -106,8 +106,8 @@ func TestGooseLeavesTheReadersOwnRetiredHints(t *testing.T) {
 // uninstall takes the block out rather than the file — removing it would delete
 // whatever they had written there.
 func TestGooseRecallLeavesTheRestOfAgentsAlone(t *testing.T) {
-	cfg := gooseHomeForTest(t)
-	path := filepath.Join(cfg, "goose", "AGENTS.md")
+	goose := gooseHomeForTest(t)
+	path := filepath.Join(goose, "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -158,13 +158,35 @@ func TestGooseRecallReplacesItsOwnBlock(t *testing.T) {
 	}
 }
 
+// gooseHomeForTest gives the test a home of its own and returns goose's config
+// directory under it, as goose resolves it on this OS.
 func gooseHomeForTest(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	cfg := filepath.Join(home, "cfg")
+	setTestHome(t, home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	t.Setenv("GOOSE_PATH_ROOT", "")
+	t.Setenv("GOOSE_MOIM_MESSAGE_FILE", "")
+	return gooseConfigDir()
+}
+
+// setTestHome points every home a resolver reads at home: HOME, USERPROFILE
+// and the APPDATA pair, where goose keeps its config on Windows (#4286). A
+// test setting only HOME read the package-wide APPDATA, so one test's goose
+// config turned up in another's.
+func setTestHome(t *testing.T, home string) {
+	t.Helper()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", cfg)
-	t.Setenv("GOOSE_MOIM_MESSAGE_FILE", "")
-	return cfg
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+}
+
+// homeConfigPath is rel under home, except a file in goose's config
+// directory, which is where gooseConfigDir puts it on this OS.
+func homeConfigPath(home, rel string) string {
+	if r, ok := strings.CutPrefix(rel, ".config/goose/"); ok {
+		return filepath.Join(gooseConfigDir(), filepath.FromSlash(r))
+	}
+	return filepath.Join(home, filepath.FromSlash(rel))
 }

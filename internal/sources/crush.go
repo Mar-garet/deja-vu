@@ -155,7 +155,7 @@ func ParseCrushDBSince(db string, t time.Time) ([]model.Session, error) {
 				s.Parent = r.Parent
 			}
 			byID[r.SessionID] = s
-			joins[r.SessionID] = &crushJoin{exits: commandExits{}, changes: map[string][]int{}, dropped: map[int]bool{}}
+			joins[r.SessionID] = &crushJoin{exits: commandExits{}, changes: map[string][]int{}, calls: map[string][]int{}, dropped: map[int]bool{}}
 			order = append(order, r.SessionID)
 		}
 		at := unixGuess(r.CreatedAt)
@@ -228,13 +228,22 @@ type crushResult struct {
 	failed        bool
 }
 
+// denied is the result crush stores when the user refuses a permission
+// prompt (internal/agent/tools/tools.go NewPermissionDeniedResponse): the call
+// never ran, so nothing it names was run, read or changed (#4575).
+func (r crushResult) denied() bool {
+	return r.failed && strings.TrimSpace(r.content) == "User denied permission"
+}
+
 // crushJoin pairs a session's calls with their results, which crush keeps as
 // separate parts on separate rows (#4532). A bash result ends "Exit code N"
-// when the command failed (internal/agent/tools/bash.go formatOutput), and an
-// edit or write whose result is an error changed nothing.
+// when the command failed (internal/agent/tools/bash.go formatOutput), an
+// edit or write whose result is an error changed nothing, and a call the user
+// denied leaves no record at all.
 type crushJoin struct {
 	exits   commandExits
 	changes map[string][]int
+	calls   map[string][]int
 	dropped map[int]bool
 }
 
@@ -242,6 +251,7 @@ func (j *crushJoin) add(s *model.Session, recs []crushRecord, results []crushRes
 	for _, r := range recs {
 		s.Touch(r.Time)
 		if r.call != "" {
+			j.calls[r.call] = append(j.calls[r.call], len(s.Messages))
 			switch r.Role {
 			case RoleCommand:
 				j.exits[r.call] = append(j.exits[r.call], len(s.Messages))
@@ -257,6 +267,11 @@ func (j *crushJoin) add(s *model.Session, recs []crushRecord, results []crushRes
 				j.dropped[i] = true
 			}
 		}
+		if r.denied() {
+			for _, i := range j.calls[r.call] {
+				j.dropped[i] = true
+			}
+		}
 		if code, ok := statusCode(lastLine(crushStripCWD(r.content)), "Exit code ", ""); ok {
 			j.exits.stamp(s.Messages, r.call, "", code)
 		}
@@ -265,10 +280,12 @@ func (j *crushJoin) add(s *model.Session, recs []crushRecord, results []crushRes
 		// the earlier call's.
 		delete(j.exits, r.call)
 		delete(j.changes, r.call)
+		delete(j.calls, r.call)
 	}
 }
 
-// drop takes out the changes whose result refused them.
+// drop takes out the changes whose result refused them and the calls the user
+// denied.
 func (j *crushJoin) drop(s *model.Session) {
 	if len(j.dropped) == 0 {
 		return
@@ -319,7 +336,7 @@ func crushMessages(role, parts string, at time.Time) ([]crushRecord, []crushResu
 				continue
 			}
 			if IndexToolPaths() && args.FilePath != "" {
-				out = append(out, crushRecord{Message: model.Message{Role: RoleFiles, Text: crushPlainText(args.FilePath), Time: at}})
+				out = append(out, crushRecord{model.Message{Role: RoleFiles, Text: crushPlainText(args.FilePath), Time: at}, p.Data.ID})
 			}
 			// edit, multiedit and write carry both sides of the change, which is
 			// what restore and blame read (#4377), and lsp_replace_symbol the

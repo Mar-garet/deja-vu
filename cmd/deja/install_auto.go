@@ -48,6 +48,10 @@ var codexHookWiring = []struct{ Event, Sub, Matcher string }{
 	// just lost is the memory recall refuses to send again. Codex fires it with
 	// trigger "auto", the same shape Claude sends.
 	{"PreCompact", "hook-precompact", "manual|auto"},
+	// Codex fires SessionEnd on exit (measured on 0.149.0). Without it the
+	// session just quit kept its live stamp, and the next session's MCP recall
+	// left it out for the rest of the window (#4545, #4210).
+	{"SessionEnd", "hook-session-end", ""},
 }
 
 func installCodexHooks(exe string, uninstall bool) (installResult, error) {
@@ -296,6 +300,12 @@ export default {
     // is empty is still asked only a few times.
     const empties = new Map()
     const emptyRetries = 3
+    // Every session this plugin stamped live, ended when its turn is: 2.x has
+    // no event hook or dispose in the table 1.x reads, so the #4546 end never
+    // ran here and a finished session stayed out of the next one's MCP recall
+    // for twenty minutes (#4571).
+    const live = new Set()
+    const endSession = (id) => runHook("hook-session-end", JSON.stringify({ session_id: id }), cwd)
 
     // Session digest: fold into the first system block rather than
     // appending a second one. An OpenAI-compatible endpoint that requires
@@ -305,6 +315,7 @@ export default {
     await ctx.session.hook("context", async (event) => {
       try {
         const key = event.sessionID || "default"
+        if (event.sessionID) live.add(event.sessionID)
         if (!cache.has(key)) {
           // The session id rides along so the digest leaves this session
           // out: the context hook runs after the first message is stored,
@@ -346,10 +357,13 @@ export default {
         if (!last) return
         const parts = (last.content || []).filter((p) => p?.type === "text" && p.text)
         const prompt = parts.map((p) => p.text).join("\n").trim()
-        if (!prompt) return
+        // A turn with no text, an image alone, still goes to hook-prompt:
+        // that call is what stamps the session live again after its last
+        // turn ended it (#4573).
+        if (event.sessionID) live.add(event.sessionID)
         const payload = { prompt, session_id: event.sessionID || "", cwd }
         const raw = await runHook("hook-prompt", JSON.stringify(payload))
-        if (!raw.trim()) return
+        if (!prompt || !raw.trim()) return
         const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
         if (!extra) return
         parts[parts.length - 1].text += "\n\n" + extra
@@ -449,6 +463,31 @@ export default {
         // memory is optional: never break a tool call over it
       }
     })
+
+    // A turn is over when its execution ends: 2.0.22 publishes
+    // session.execution.succeeded, .failed or .interrupted, and none of 1.x's
+    // session.idle, which its schema still carries.
+    const stop = new AbortController()
+    if (typeof ctx.event?.subscribe === "function") {
+      ;(async () => {
+        for await (const event of ctx.event.subscribe({ signal: stop.signal })) {
+          const ends = ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted", "session.idle"]
+          const id = ends.includes(event?.type) ? event.data?.sessionID : ""
+          // Out of live only once ended: opencode run shuts down a few
+          // milliseconds after the turn, and the cleanup ends what is left.
+          if (id && live.has(id)) {
+            await endSession(id)
+            live.delete(id)
+          }
+        }
+      })().catch(() => {})
+    }
+    // opencode run awaits this before it exits.
+    return async () => {
+      stop.abort()
+      for (const id of live) await endSession(id)
+      live.clear()
+    }
   },
 }
 `, exe)
@@ -541,15 +580,39 @@ export const DejaRecall = async ({ $, client, directory }) => {
   // few times.
   const empties = new Map()
   const emptyRetries = 3
+  // Every session this plugin stamped live. opencode never says a session
+  // ended, so without ending them here the stamp sat out its whole window and
+  // the next session's MCP recall left a finished one out (#4546).
+  const live = new Set()
+  const endSession = (id) => $%secho ${JSON.stringify({ session_id: id })} | %q hook-session-end%s.quiet()
+  // The session that spawned each one, asked of opencode once. A task
+  // sub-agent's digest and recall led with its parent, which is live and
+  // asking through it (#4548).
+  const parents = new Map()
+  const parentOf = async (id) => {
+    if (!id) return ""
+    if (!parents.has(id)) {
+      let parent = ""
+      try {
+        const res = await client?.session?.get?.({ path: { id } })
+        parent = res?.data?.parentID || ""
+      } catch {
+        // no parent to leave out
+      }
+      parents.set(id, parent)
+    }
+    return parents.get(id)
+  }
   return {
     "experimental.chat.system.transform": async (input, output) => {
       try {
         const key = input.sessionID || "default"
+        if (input.sessionID) live.add(input.sessionID)
         if (!cache.has(key)) {
           // The session id rides along so the digest leaves this session
           // out: the transform runs after the first message is stored, and
           // the index can already hold it (#4199).
-          const raw = await $%scd ${cwd} && echo ${JSON.stringify({ session_id: input.sessionID || "", cwd })} | %q %s%s.text()
+          const raw = await $%scd ${cwd} && echo ${JSON.stringify({ session_id: input.sessionID || "", parent_session_id: await parentOf(input.sessionID), cwd })} | %q %s%s.text()
           let ctx = "", receipt = ""
           try {
             const parsed = JSON.parse(raw)
@@ -616,14 +679,17 @@ export const DejaRecall = async ({ $, client, directory }) => {
         if (!last) return
         const parts = (last.parts || []).filter((p) => p?.type === "text" && p.text)
         const prompt = parts.map((p) => p.text).join("\n").trim()
-        if (!prompt) return
+        // A turn with no text, an image alone, still goes to hook-prompt:
+        // that call is what stamps the session live again after session.idle
+        // ended it (#4573).
         // The session id travels with the payload so recall can skip what it
         // already showed this session. Without it every message re-injects the
         // same block: measured on a real store, half of all injections were a
         // word-for-word repeat, and all but five of those came within a minute.
         const sessionID = input?.sessionID || last?.info?.sessionID || ""
-        const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, cwd })} | %s%q hook-prompt%s.text()
-        if (!raw.trim()) return
+        if (sessionID) live.add(sessionID)
+        const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, parent_session_id: await parentOf(sessionID), cwd })} | %s%q hook-prompt%s.text()
+        if (!prompt || !raw.trim()) return
         const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
         if (!extra) return
         parts[parts.length - 1].text += "\n\n" + extra
@@ -709,9 +775,35 @@ export const DejaRecall = async ({ $, client, directory }) => {
         // memory is optional: never break a tool call over it
       }
     },
+    // A turn is over when opencode publishes session.idle, and the next prompt
+    // stamps the session again before the model can ask anything, so the
+    // session is history to everyone else in between.
+    event: async ({ event }) => {
+      try {
+        const id = event?.type === "session.idle" ? event.properties?.sessionID : ""
+        if (!id) return
+        await endSession(id)
+        // Ended, so dispose does not spawn deja for it again on the way out.
+        live.delete(id)
+      } catch {
+        // memory is optional: never break the session over it
+      }
+    },
+    // opencode run exits without waiting for the event above, and it does
+    // wait for dispose: a one-shot run ends what it started here.
+    dispose: async () => {
+      for (const id of live) {
+        try {
+          await endSession(id)
+        } catch {
+          // memory is optional
+        }
+      }
+      live.clear()
+    },
   }
 }
-`, "`", exe, "hook-context", "`", "`", exe, "warmup-status", "`", "`", exe, "`", "`", "", exe, "`", "`", "", exe, "`", "`", "", exe, "`", "`", "", exe, "`")
+`, "`", exe, "`", "`", exe, "hook-context", "`", "`", exe, "warmup-status", "`", "`", exe, "`", "`", "", exe, "`", "`", "", exe, "`", "`", "", exe, "`", "`", "", exe, "`")
 }
 
 // Gemini CLI and Qwen Code both run a command before the agent loop, which is
@@ -959,6 +1051,11 @@ func installKimiAuto(exe string, uninstall bool) (installResult, error) {
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
+	}
+	if !uninstall {
+		if err := tomlInlineKey(lfText(old), "[[hooks]]"); err != nil {
+			return installResult{}, configParseError(path, err)
+		}
 	}
 	s := strings.TrimRight(removeKimiHookBlock(lfText(old)), "\n")
 	if !uninstall {

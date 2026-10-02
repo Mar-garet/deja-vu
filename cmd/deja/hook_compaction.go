@@ -245,6 +245,10 @@ func emitCompactionRecovery(dir, sessionID, cwd, event string, shape hookToolSha
 			Version int    `json:"version"`
 			Context string `json:"context"`
 		}{1, packet})
+	case hookToolCopilot:
+		out, _ = json.Marshal(struct {
+			AdditionalContext string `json:"additionalContext"`
+		}{packet})
 	default:
 		var response sessionStartHookResponse
 		response.HookSpecificOutput.HookEventName = event

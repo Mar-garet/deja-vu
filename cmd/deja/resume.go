@@ -74,7 +74,11 @@ func runResume(dir string, args []string, stdout io.Writer) error {
 			// answer, the caveat is for the person reading.
 			fmt.Fprintf(os.Stderr, "deja: %s\n", note)
 		}
-		fmt.Fprintln(stdout, formatResumeCommand(dir, cmdline))
+		line, ok := resumeLine(runtime.GOOS, dir, cmdline)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "deja: run it from %q — the directory's name has characters the printed line cannot carry, so it leaves out the cd\n", dir)
+		}
+		fmt.Fprintln(stdout, line)
 		return nil
 	}
 	parts, err := resumeArgv(cmdline)
@@ -98,10 +102,11 @@ func runResume(dir string, args []string, stdout io.Writer) error {
 // on, a trailing \ (fish reads \' as a quote, which turned the next quoted
 // word inside out), a leading - (an option to roo, not its value) and a byte
 // that is not UTF-8 (--exec would read it back as U+FFFD). The bare set has
-// no , or @: PowerShell reads a,b as two arguments and @x as a splat.
+// no , or @: PowerShell reads a,b as two arguments and @x as a splat. A word
+// cmd.exe would expand is refused too (cmdExpands).
 func resumeWord(s string) (word string, ok bool) {
 	if s == "" || !utf8.ValidString(s) || strings.ContainsAny(s, "'\"$`‘’‚‛“”„") ||
-		strings.HasPrefix(s, "-") || strings.HasSuffix(s, `\`) {
+		strings.HasPrefix(s, "-") || strings.HasSuffix(s, `\`) || cmdExpands(s) {
 		return "", false
 	}
 	bare := true
@@ -160,16 +165,54 @@ var resumeCaveats = map[string]string{
 	"continue": "continue forks rather than continues: the history comes back under a new session id",
 }
 
-func formatResumeCommand(dir, cmdline string) string {
+// resumeLine is the printed command: a cd into dir, then cmdline. ok is false
+// when dir holds a character no quoting carries into the shell the line is
+// pasted into; the line is then cmdline alone and the caller says where to
+// run it (#4591).
+//
+// Windows wraps the line in powershell.exe so it runs from cmd and PowerShell
+// alike. The PowerShell it is pasted into expands $ and backtick escapes in
+// the outer double-quoted -Command and ends it on " and its curly forms, and
+// neither shell's escaping works in the other, so those leave the cd out. The
+// inner path is single-quoted, and PowerShell ends that on any of ' and
+// U+2018 to U+201B, each read literally when doubled.
+//
+// fish reads \' and \\ inside single quotes as escapes where sh, bash and zsh
+// keep both bytes, so a backslash in a POSIX path has no form all of them
+// read alike: `a\'\';echo hi;#` ran echo in fish.
+func resumeLine(goos, dir, cmdline string) (string, bool) {
 	if dir == "" {
-		return cmdline
+		return cmdline, true
 	}
-	if runtime.GOOS == "windows" {
-		dir = "'" + strings.ReplaceAll(dir, "'", "''") + "'"
-		return fmt.Sprintf(`powershell.exe -NoProfile -Command "Set-Location -LiteralPath %s -ErrorAction Stop; %s"`, dir, cmdline)
+	for _, r := range dir {
+		if actsOnATerminal(r) {
+			return cmdline, false
+		}
 	}
-	return fmt.Sprintf("cd %s && %s", shellQuote(dir), cmdline)
+	if goos == "windows" {
+		if strings.ContainsAny(dir, "\"$`\u201c\u201d\u201e") || cmdExpands(dir) {
+			return cmdline, false
+		}
+		dir = "'" + psSingleQuoted.Replace(dir) + "'"
+		return fmt.Sprintf(`powershell.exe -NoProfile -Command "Set-Location -LiteralPath %s -ErrorAction Stop; %s"`, dir, cmdline), true
+	}
+	if strings.Contains(dir, `\`) {
+		return cmdline, false
+	}
+	return fmt.Sprintf("cd %s && %s", shellQuote(dir), cmdline), true
 }
+
+// cmdExpands reports whether cmd.exe could read part of s as a variable: it
+// expands %name% even inside double quotes, and !name! under delayed
+// expansion, before PowerShell sees the line. The value is the user's, not
+// the path's, and one holding a quote (a user named O'Brien) ended the
+// single-quoted path early, so the rest of the name ran as PowerShell. A
+// lone % or ! expands nothing.
+func cmdExpands(s string) bool {
+	return strings.Count(s, "%") > 1 || strings.Count(s, "!") > 1
+}
+
+var psSingleQuoted = strings.NewReplacer("'", "''", "\u2018", "\u2018\u2018", "\u2019", "\u2019\u2019", "\u201a", "\u201a\u201a", "\u201b", "\u201b\u201b")
 
 // resumeIDPattern matches every supported harness's session identifiers
 // (UUIDs, ses_... ids, hex prefixes). Anything else — whitespace, shell
@@ -207,6 +250,12 @@ func resumeCommand(s model.Session) (string, string, error) {
 	}
 	if !resumeIDPattern.MatchString(s.ID) {
 		return "", "", fmt.Errorf("session id %q contains characters deja will not place in a command", digest.Short(s.ID))
+	}
+	// A Kimi or Qwen sub-agent log is a session in deja under
+	// DEJA_INCLUDE_SUBAGENTS=1, but neither client opens one on its own; the
+	// id deja gives it is one they have never seen (#4483).
+	if s.Kind == "subagent" && (s.Harness == "kimi" || s.Harness == "qwen") && s.Parent != "" {
+		return "", "", fmt.Errorf("session %s is a sub-agent run, which %s does not reopen on its own — `deja resume %s` reopens the session that spawned it", digest.Short(s.ID), s.Harness, s.Parent)
 	}
 	switch s.Harness {
 	case "claude":

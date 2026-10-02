@@ -48,6 +48,19 @@ func installGrokUserSettings(exe string, uninstall bool) (installResult, error) 
 			kept = append(kept, s)
 		}
 	}
+	// Another entry that runs deja is said, not doubled in silence (#4556).
+	var note string
+	if !uninstall {
+		var others []string
+		for _, s := range kept {
+			if m, ok := s.(map[string]any); ok && entryIsDejaServer(m) {
+				if id, _ := m["id"].(string); id != "" {
+					others = append(others, id)
+				}
+			}
+		}
+		note = withOtherDejaNames("", others)
+	}
 	if !uninstall {
 		cmd, args := mcpCommandArgs(exe)
 		anyArgs := make([]any, 0, len(args))
@@ -86,5 +99,5 @@ func installGrokUserSettings(exe string, uninstall bool) (installResult, error) 
 		return installResult{}, err
 	}
 	a, werr := writeIfChanged(path, old, next)
-	return installResult{Path: path, Action: a}, werr
+	return installResult{Path: path, Action: a, Note: note}, werr
 }

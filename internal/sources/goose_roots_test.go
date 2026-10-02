@@ -145,3 +145,31 @@ func TestGooseRootIsTheOneGooseWritesOrTheOneThatExists(t *testing.T) {
 		}
 	}
 }
+
+// goose takes GOOSE_PATH_ROOT and XDG_DATA_HOME only when absolute
+// (paths.rs validated_path_root, etcetera's env_var_or_none); a relative one is
+// skipped for the default, not read against wherever deja runs (#4285).
+func TestGooseDataDirsSkipARelativeRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("GOOSE_PATH_ROOT", filepath.Join("rel", "root"))
+	for _, d := range GooseDataDirs() {
+		if !filepath.IsAbs(d) {
+			t.Errorf("a relative GOOSE_PATH_ROOT gave the candidate %q", d)
+		}
+	}
+	t.Setenv("GOOSE_PATH_ROOT", "")
+	t.Setenv("XDG_DATA_HOME", filepath.Join("rel", "data"))
+	for _, d := range GooseDataDirs() {
+		if !filepath.IsAbs(d) {
+			t.Errorf("a relative XDG_DATA_HOME gave the candidate %q", d)
+		}
+	}
+	if runtime.GOOS != "windows" {
+		if want := filepath.Join(home, ".local", "share", "goose"); GooseDataDirs()[0] != want {
+			t.Errorf("first candidate = %q, want the default %q", GooseDataDirs()[0], want)
+		}
+	}
+}

@@ -15,8 +15,9 @@ response that is mid-stream when indexing runs is not lost; the next pass
 reads the file whole when the stream goes on, so the reply is stored once
 (#4445). `tool.result`
 events keep their `output` text under the `tool-output` role, error results
-included. Sub-agent histories under `agents/agent-*` and media are out of
-scope.
+included. Sub-agent histories under `agents/<agent-id>/wire.jsonl` are read
+only with `DEJA_INCLUDE_SUBAGENTS=1`, each as a session of its own naming the
+parent session (#4483). Media is out of scope.
 
 - **MCP**: `deja install kimi` writes `mcpServers.deja` into
   `$KIMI_CODE_HOME/mcp.json` (common JSON shape, existing entries preserved).

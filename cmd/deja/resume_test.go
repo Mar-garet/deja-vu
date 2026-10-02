@@ -81,7 +81,7 @@ func TestResumeCommandPerHarness(t *testing.T) {
 
 func TestFormatResumeCommand(t *testing.T) {
 	dir := filepath.Join("tmp", "project's dir")
-	got := formatResumeCommand(dir, "claude --resume 019f")
+	got := resumeCmdLine(dir, "claude --resume 019f")
 	if runtime.GOOS == "windows" {
 		if !strings.HasPrefix(got, "powershell.exe -NoProfile") || !strings.Contains(got, "project''s dir") || !strings.Contains(got, "-ErrorAction Stop") || !strings.Contains(got, "claude --resume 019f") {
 			t.Fatalf("Windows resume command = %q", got)
@@ -516,4 +516,10 @@ func TestResumeHermes(t *testing.T) {
 	if cmd != "hermes --resume 20260727_135519_a55c71" {
 		t.Fatalf("cmd = %q", cmd)
 	}
+}
+
+// resumeCmdLine is the line runResume prints on this machine.
+func resumeCmdLine(dir, cmdline string) string {
+	line, _ := resumeLine(runtime.GOOS, dir, cmdline)
+	return line
 }

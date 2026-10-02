@@ -39,7 +39,10 @@
 <h1>Copilot CLI</h1>
 <ul>
 <li><strong>ID</strong>: <code>copilot</code></li>
-<li><strong>Store</strong>: <code>~/.copilot/session-state/&lt;sessionId&gt;/events.jsonl</code></li>
+<li><strong>Store</strong>: <code>${COPILOT_HOME:-~/.copilot}/session-state/&lt;sessionId&gt;/events.jsonl</code>;</li>
+</ul>
+<p><code>COPILOT_HOME</code> also moves the MCP config, the skill and the hooks below</p>
+<ul>
 <li><strong>Read override</strong>: <code>DEJA_COPILOT_ROOT</code> (points at the <code>session-state</code> directory)</li>
 <li><strong>Format</strong>: append-only JSONL, one event per line, each <code>{type, data, timestamp}</code></li>
 </ul>
@@ -65,15 +68,25 @@
 <ul>
 <li><strong>MCP</strong>: <code>deja install copilot</code> writes <code>mcpServers.deja</code> into</li>
 </ul>
-<p><code>~/.copilot/mcp-config.json</code>.</p>
+<p><code>${COPILOT_HOME:-~/.copilot}/mcp-config.json</code>.</p>
 <ul>
-<li><strong>Skill</strong>: <code>~/.copilot/skills/deja-history/SKILL.md</code>, loaded on demand;</li>
+<li><strong>Skill</strong>: <code>~/.copilot/skills/deja-history/SKILL.md</code> (under <code>$COPILOT_HOME</code></li>
 </ul>
+<p>when set), loaded on demand;</p>
 <p>Copilot invokes a skill by name, so it is also the <code>/deja-history</code> command.</p>
 <ul>
-<li><strong>Auto-recall</strong>: none. Copilot CLI exposes no hook that can inject context,</li>
+<li><strong>Auto-recall</strong>: <code>deja install copilot-auto</code> adds a <code>sessionStart</code> command</li>
 </ul>
-<p>so MCP plus the skill is the whole install.</p>
+<p>hook (<code>deja hook-context --copilot</code>) under <code>hooks</code> in</p>
+<p><code>~/.copilot/settings.json</code>. Copilot puts the <code>additionalContext</code> it prints in</p>
+<p>front of the first request as its own message and keeps it for the session;</p>
+<p>the payload names the session as <code>sessionId</code> and sends <code>source: &#34;resume&#34;</code></p>
+<p>on <code>copilot --resume</code>. It also adds <code>preMcpToolCall</code> (<code>deja hook-mcp-call</code>)</p>
+<p>and <code>sessionEnd</code> (<code>deja hook-session-end</code>): the MCP server is told nothing</p>
+<p>about who is calling, so the first marks the session live before each MCP</p>
+<p>request and recall leaves it out, and the second clears the mark. A</p>
+<p><code>preMcpToolCall</code> hook&#39;s output becomes the request&#39;s <code>_meta</code>, so it prints</p>
+<p>nothing. <code>COPILOT_HOME</code> moves all of these files.</p>
 <ul>
 <li><strong>Resume</strong>: <code>copilot --resume=&lt;sessionId&gt;</code>.</li>
 <li><strong>Handoff</strong>: exec.</li>
@@ -91,9 +104,22 @@
 <li>A session directory can outlive its <code>events.jsonl</code>; the discovery walk only</li>
 </ul>
 <p>picks up files that exist.</p>
+<ul>
+<li>Since 1.0.79 user settings live in <code>settings.json</code> and <code>config.json</code> is</li>
+</ul>
+<p>managed by the CLI. On each start it moves user keys still in <code>config.json</code></p>
+<p>across, and a <code>hooks</code> key there replaces the one in <code>settings.json</code> whole, so</p>
+<p>while the reader&#39;s hooks are still in <code>config.json</code> deja writes its entry</p>
+<p>beside them.</p>
+<ul>
+<li>A hook answer in Claude Code&#39;s <code>hookSpecificOutput</code> envelope is run and</li>
+</ul>
+<p>logged as a success, and its context reaches nobody: Copilot reads only a</p>
+<p>top-level <code>additionalContext</code>.</p>
 <p>Specified in <a href="https://github.com/vshulcz/deja-vu/issues/655">#655</a>, work</p>
-<p>records added in <a href="https://github.com/vshulcz/deja-vu/pull/1231">#1231</a>.</p>
-<p><strong>Last verified:</strong> 2026-08-14</p>
+<p>records added in <a href="https://github.com/vshulcz/deja-vu/pull/1231">#1231</a>,</p>
+<p>auto-recall in <a href="https://github.com/vshulcz/deja-vu/issues/4231">#4231</a>.</p>
+<p><strong>Last verified:</strong> 2026-10-01</p>
 
 <hr>
 <p>deja reads this format and thirty-four others, and turns what it finds into memory your

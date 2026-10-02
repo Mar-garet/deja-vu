@@ -86,8 +86,12 @@ func installContinue(exe string, uninstall bool) (installResult, error) {
 	if crlf {
 		next = strings.ReplaceAll(next, "\n", "\r\n")
 	}
+	var note string
+	if !uninstall {
+		note = withOtherDejaNames("", yamlDejaEntryNames(next, "mcpServers:"))
+	}
 	a, err := writeIfChanged(path, old, []byte(next))
-	return installResult{Path: path, Action: a}, err
+	return installResult{Path: path, Action: a, Note: note}, err
 }
 
 // appendYAMLListItem puts item at the end of key's block, or writes the key

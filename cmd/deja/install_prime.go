@@ -66,16 +66,24 @@ func installPrimeMCPAt(path, exe string, uninstall bool) (installResult, error) 
 	var note string
 	if uninstall {
 		delete(servers, "deja")
+		removeAdoptedDejaEntries(path, "mcpServers", servers)
+		note = leftDejaEntriesNote(servers)
 		if len(servers) == 0 {
 			delete(root, "mcpServers")
 		}
 	} else {
+		// deja under another name is adopted, not doubled (#4556).
+		key := dejaEntryKey(servers)
+		if key != "deja" {
+			noteBlockAdded(path, "mcpServers."+key)
+		}
 		command, args := mcpCommandArgs(exe)
 		// type: "stdio" explicitly: prime-agent's settings carry both stdio and
 		// http servers under the same key, and its docs write the type out.
 		entry := map[string]any{"type": "stdio", "command": command, "args": args}
-		note = keepSwitch(servers["deja"], entry)
-		servers["deja"] = entry
+		note = keepSwitch(servers[key], entry)
+		servers[key] = entry
+		note = withOtherDejaEntries(note, servers, key)
 	}
 	next, err := marshalConfigLike(old, root)
 	if err != nil {

@@ -23,10 +23,9 @@ func TestInstallLeavesAFileEndingAsItFoundIt(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.target, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
+			setTestHome(t, home)
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-			path := filepath.Join(home, filepath.FromSlash(tc.rel))
+			path := homeConfigPath(home, tc.rel)
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				t.Fatal(err)
 			}

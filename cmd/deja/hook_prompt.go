@@ -51,6 +51,13 @@ type promptHookInput struct {
 	// read as no session at all, the cooldown was never recorded and the same
 	// block went out on every prompt of the conversation (#3287).
 	ConversationID string `json:"conversation_id"`
+	// ParentSessionID is the session that spawned this one, from a host that
+	// knows: the opencode plugin asks opencode for a task session's parent.
+	// That session is live and asking through this one (#4548).
+	ParentSessionID string `json:"parent_session_id"`
+	// TranscriptPath is the asker's transcript, read for what a session the
+	// index does not hold yet was forked from (#4549).
+	TranscriptPath string `json:"transcript_path"`
 	// CWD is what the harness says the project is. Reading only the
 	// environment meant a host that sends the payload without exporting
 	// CLAUDE_PROJECT_DIR recalled nothing (#759).
@@ -177,6 +184,15 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	// Written down for the surfaces that are told no session id: this hook drops
 	// the caller's own session by hand below, and the MCP tool cannot (#3945).
 	markSessionLive(dir, input.SessionID)
+	// A turn that is only an image reaches here with no prompt so the stamp
+	// above is renewed (#4573). opencode has no text part to put an answer
+	// in, so the compaction packet waits for a turn or tool call that can
+	// carry it rather than being marked delivered and dropped.
+	// Grok discards what this hook returns. Answering anyway logged memory as
+	// arrived and marked it shown to a session that never saw it (#4588).
+	if strings.TrimSpace(string(input.Prompt)) == "" || grokDropsContext() {
+		return nil
+	}
 	if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "UserPromptSubmit", shape, stdout); delivered {
 		return err
 	}
@@ -277,8 +293,11 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	for id := range inProject {
 		skip[id] = true
 	}
-	if input.SessionID != "" {
-		skip[input.SessionID] = true
+	// The asker and what counts as it: a spawn's parent, a sub-agent's parent,
+	// the sub-agents it spawned (#4548), a fork's source (#4549).
+	self := askerLineage(dir, input.SessionID, input.TranscriptPath, input.ParentSessionID)
+	for id := range self {
+		skip[id] = true
 	}
 	ranked, matched, strong, naming, idfOf, err := index.ProjectRelevantNaming(dir, digest.ProjectNameCandidates(cwd), terms, prompt.Candidates, skip)
 	// The rule every other surface applies: a promoted note goes in front of
@@ -378,7 +397,7 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 			// store, and it was scanned in full only to be dropped on the next
 			// line. Measured on a 1149-session store, moving these two checks up
 			// takes the hook's median from 181 ms to 136 ms.
-			if s.ID == input.SessionID {
+			if self[s.ID] {
 				continue
 			}
 			if !search.SpeechCarriesAnyTerm(s, leadTerms) {

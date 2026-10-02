@@ -31,6 +31,8 @@ func hermeticEnv(t *testing.T) string {
 	// with HERMES_HOME exported never has a test read or write their Hermes.
 	t.Setenv("HERMES_HOME", "")
 	t.Setenv("REASONIX_HOME", "")
+	// Copilot CLI moves its home with COPILOT_HOME, and deja follows it.
+	t.Setenv("COPILOT_HOME", "")
 	t.Setenv("REASONIX_STATE_HOME", "")
 	t.Setenv("DEJA_REASONIX_ROOT", "")
 	// Windows resolvers read APPDATA rather than the home directory — goose's
@@ -65,6 +67,7 @@ func hermeticEnv(t *testing.T) string {
 	t.Setenv("DEJA_GROK_ROOT", filepath.Join(tmp, "grok"))
 	t.Setenv("DEJA_QWEN_ROOT", filepath.Join(tmp, "qwen"))
 	t.Setenv("DEJA_COPILOT_ROOT", filepath.Join(tmp, "copilot"))
+	t.Setenv("COPILOT_HOME", "")
 	// Zed resolves its store through the platform data directory, which on
 	// macOS sits under the home directory but on Linux follows XDG_DATA_HOME.
 	// Both are pinned so a contributor's own threads never reach a golden.
