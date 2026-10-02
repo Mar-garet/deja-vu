@@ -792,12 +792,15 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// — the one thing `doctor` exists to rule out (#701).
 	// printFilesSkippingIn is printFiles for a harness that has more than one
 	// transcript root and declines some of its own files by a rule.
-	printFilesSkippingIn := func(name, loc string, roots []string, present bool, seen []string, skipped func(string) bool) {
+	// Files named in beside are the store's own bookkeeping, as for
+	// printFilesBeside below.
+	printFilesSkippingIn := func(name, loc string, roots []string, present bool, seen []string, skipped func(string) bool, beside ...string) {
 		detail := doctorCount(len(seen), "file")
+		placed := append(append([]string{}, seen...), beside...)
 		unread := 0
 		byRule := 0
 		for _, root := range roots {
-			u, b := unplacedFiles(root, seen, skipped)
+			u, b := unplacedFiles(root, placed, skipped)
 			unread += u
 			byRule += b
 		}
@@ -818,8 +821,8 @@ func doctorHarnesses(w io.Writer, dir string) {
 		printRow(name, loc, present, detail)
 	}
 	// printFilesSkipping is its one-root form.
-	printFilesSkipping := func(name, path string, present bool, seen []string, skipped func(string) bool) {
-		printFilesSkippingIn(name, path, []string{path}, present, seen, skipped)
+	printFilesSkipping := func(name, path string, present bool, seen []string, skipped func(string) bool, beside ...string) {
+		printFilesSkippingIn(name, path, []string{path}, present, seen, skipped, beside...)
 	}
 	printFiles := func(name, path string, present bool, seen []string) {
 		printFilesSkipping(name, path, present, seen, nil)
@@ -959,7 +962,8 @@ func doctorHarnesses(w io.Writer, dir string) {
 	senpiRoot := sources.SenpiRoot()
 	printFiles("senpi", senpiRoot, doctorExists(senpiRoot), sources.SenpiSessionFiles())
 	kimchiRoot := sources.KimchiRoot()
-	printFiles("kimchi", kimchiRoot, doctorExists(kimchiRoot), sources.KimchiSessionFiles())
+	// Its sub-agent runs are skipped on purpose and named as such (#4401).
+	printFilesSkipping("kimchi", kimchiRoot, doctorExists(kimchiRoot), sources.KimchiSessionFiles(), sources.KimchiSubagentFile)
 	commandRoot := sources.CommandCodeRoot()
 	// The checkpoint stream beside each transcript is named rather than left to
 	// the unread count: it is not a conversation, and "1 not recognised here"
@@ -984,8 +988,12 @@ func doctorHarnesses(w io.Writer, dir string) {
 		zcodeDetail += ", CLI store present" + doctorDBPrereqNote(sqlite)
 	}
 	printRow("zcode", zcodeLoc, doctorExists(zcodeRoot) || zcodeHasDB, zcodeDetail)
+	// gjc's scope file sits in every project directory and its sub-agent
+	// passes are skipped on purpose; counted as unread, the row reported one
+	// file per project that deja had no reason to read (#4393).
 	gjcRoot := sources.GjcRoot()
-	printFiles("gjc", gjcRoot, doctorExists(gjcRoot), sources.GjcSessionFiles())
+	printFilesSkipping("gjc", gjcRoot, doctorExists(gjcRoot), sources.GjcSessionFiles(),
+		sources.GjcSubagentPath, sources.GjcScopeFiles()...)
 
 	// Kiro's two clients write different files under one root, and the row says
 	// which of them answered: a CLI user and an IDE user have nothing in common

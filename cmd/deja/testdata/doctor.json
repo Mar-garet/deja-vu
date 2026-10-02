@@ -212,7 +212,9 @@
     {
       "name": "kilocode",
       "state": "missing",
-      "paths": null,
+      "paths": [
+        "<tmp>/home/.local/share/kilo/kilo.db"
+      ],
       "files": 0,
       "indexed_sessions": 0
     },
@@ -263,7 +265,8 @@
       "name": "zcode",
       "state": "missing",
       "paths": [
-        "<tmp>/home/.zcode/projects"
+        "<tmp>/home/.zcode/projects",
+        "<tmp>/home/.zcode/cli/db/db.sqlite"
       ],
       "files": 0,
       "indexed_sessions": 0

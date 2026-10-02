@@ -3241,15 +3241,13 @@ func carryRedactions(m *Manifest, old Manifest, skip map[string]bool) {
 //
 // The path settles it for goose and cursor, which name the database as the
 // session's path. opencode names the project directory, so nothing about its
-// path says "database" — the key names the harness, and opencode has no
-// per-file kind to confuse it with (#2033).
+// path says "database" — the key names the harness (#2033). The same holds for
+// every store read through OpenCode's schema (opencodeSchemaDBs).
 func fromDatabase(r Record) bool {
-	// The key first, and only for opencode: it has one store and no per-file
-	// kind, so nothing else carries an "opencode:" key and no path can
-	// contradict it. Asking the path first got this wrong for an opencode
+	// The key first: asking the path first got this wrong for an opencode
 	// project that lives inside another harness's root — a versioned ~/.claude,
 	// say — where harnessForPath answers with that harness's kind.
-	if h, _, ok := strings.Cut(r.Key, ":"); ok && h == "opencode" {
+	if h, _, ok := strings.Cut(r.Key, ":"); ok && inOpencodeSchemaDB(h, r.SourcePath) {
 		return true
 	}
 	// A path that names a per-file kind settles it: two transcripts in
@@ -3303,7 +3301,9 @@ func readWholeThisPass(r Record) bool {
 	}
 	// opencode's records name a project directory or, from older passes, a
 	// diff file; either way the session is the store's, read whole (#4207).
-	if h, _, ok := strings.Cut(r.Key, ":"); ok && h == "opencode" {
+	// Kilo's and ZCode's are the same store shape (#4396); a record from their
+	// transcript files is not a store's and never reaches this.
+	if h, _, ok := strings.Cut(r.Key, ":"); ok && opencodeSchemaDBs[h] != nil {
 		return passWholeStores[h]
 	}
 	if storeHarness(r.SourcePath) != "" {
@@ -3365,7 +3365,7 @@ func rereadsWholeSessions(p string) bool {
 		return true
 	}
 	switch storeHarness(p) {
-	case "opencode":
+	case "opencode", "kilocode", "zcode":
 		// Read by session since #4207: a reply's text lands in a part created
 		// before the last pass, so only a touched session read whole carries
 		// it, and adding that to what the index held doubled the turns. Its
@@ -3418,8 +3418,13 @@ func resolveStoreHarness(p string) string {
 	if sources.IsHermesPGStore(p) {
 		return "hermes"
 	}
+	for h, db := range opencodeSchemaDBs {
+		if p == db() {
+			return h
+		}
+	}
 	switch harnessForPath(p) {
-	case "opencode", "opencode-diff":
+	case "opencode-diff":
 		// A diff file is read as its session from the database (#4207), so it
 		// is that store's as much as the database file is.
 		return "opencode"
@@ -3451,6 +3456,51 @@ func passStorePaths() map[string]string {
 }
 
 var passStores map[string]string
+
+// opencodeSchemaDBs are the databases read through OpenCode's schema, by
+// harness. A session from one names its project directory as its path, not the
+// database, so only the harness in its key says where it came from. Kilo CLI
+// and ZCode vendor that schema, and knowing opencode's alone left their
+// sessions re-read whole on every write to the database and appended to the
+// records already held: a Kilo session doubled on each pass (#4396).
+var opencodeSchemaDBs = map[string]func() string{
+	"opencode": sources.OpencodeDB,
+	"kilocode": sources.KiloDB,
+	"zcode":    sources.ZCodeDB,
+}
+
+// inOpencodeSchemaDB reports whether a session of harness h whose path is p
+// came out of that harness's OpenCode-schema database.
+func inOpencodeSchemaDB(h, p string) bool {
+	db, ok := opencodeSchemaDBs[h]
+	if !ok {
+		return false
+	}
+	if p == db() {
+		return true
+	}
+	// opencode's diff files, Kilo's task files and ZCode's transcripts carry
+	// the same harness name; anything else is a project directory. A diff
+	// record still counts as the database's through storeHarness, which files
+	// the diff path under that store.
+	return !opencodeSchemaOwnFile(h, p)
+}
+
+// opencodeSchemaOwnFile reports whether p is one of harness h's own files
+// rather than its database or a project directory. Named, for the reason
+// isGooseStore gives, and because fromDatabase asks it of every record held:
+// asking the registry what a project directory was cost ~68 µs a record.
+func opencodeSchemaOwnFile(h, p string) bool {
+	switch h {
+	case "opencode":
+		return isOpencodeDiff(p)
+	case "kilocode":
+		return strings.EqualFold(filepath.Base(p), "api_conversation_history.json")
+	case "zcode":
+		return strings.EqualFold(filepath.Ext(p), ".jsonl")
+	}
+	return false
+}
 
 func resolveStorePaths() map[string]string {
 	out := map[string]string{sources.GrokDB(): "grok", sources.ZedDB(): "zed"}
@@ -4629,7 +4679,9 @@ func harnessForPath(p string) string {
 // (grok, hermes, zed) read their store whole on every pass, for the life of
 // the index (#2075).
 func setDatabaseStoreWatermarks(files map[string]FileState, sessions map[string]SessionMeta) {
-	setStoreLastUpdated(files, sessions, "opencode", sources.OpencodeDB())
+	for h, db := range opencodeSchemaDBs {
+		setStoreLastUpdated(files, sessions, h, db())
+	}
 	setStoreLastUpdated(files, sessions, "goose", sources.GooseDB())
 	// grok's database had a since-the-watermark parser in the registry and
 	// nothing ever stamped it, so every pass read the store whole — the pass
@@ -4675,12 +4727,12 @@ func setDatabaseStoreWatermarks(files map[string]FileState, sessions map[string]
 // Cursor keeps one database per workspace, and both it and goose record the
 // store path in Path, so the row says which one it came from. opencode records
 // the project directory instead (#2033) — and has a single database, so there
-// the harness is the store.
+// the harness is the store, less any transcript files of its own (#4396).
 func sessionInStore(s SessionMeta, harness, db string) bool {
-	if harness == "opencode" {
-		// A row the diff files gave carries a file's mtime, which says nothing
-		// about how far the database has been read (#4207).
-		return !isOpencodeDiff(s.Path)
+	if _, ok := opencodeSchemaDBs[harness]; ok {
+		// Not a row the diff files gave: it carries a file's mtime, which
+		// says nothing about how far the database has been read (#4207).
+		return inOpencodeSchemaDB(harness, s.Path)
 	}
 	return s.Path == db
 }

@@ -402,6 +402,14 @@ import (
 //
 // 60 also: a CodeWhale edit_file call written with search/replace, its own
 // argument names, leaves an edit and a wrote record (#4404).
+// 60 also: a Kilo CLI or ZCode session doubled in the index on each pass after
+// a write to its database (#4396); the copies already held go only on a
+// rebuild.
+// 60 also: a Kimchi sub-agent run is skipped rather than indexed as a session
+// of its own (#4401); runs already held go only on a rebuild.
+// 60 also: pi, omp, OpenClaw, gjc, prime, senpi and Kimchi sessions carry
+// their tool calls as files, commands and edits (#4113); a finished
+// transcript is not re-read, so a rebuild.
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

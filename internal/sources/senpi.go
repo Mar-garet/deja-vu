@@ -1,6 +1,9 @@
 package sources
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,11 +85,52 @@ func KimchiRoot() string {
 	return EnvPath("DEJA_KIMCHI_ROOT", filepath.Join(KimchiConfigDir(), "sessions"))
 }
 
-// KimchiSessionFiles lists the transcripts.
+// KimchiSessionFiles lists the transcripts, sub-agent runs excluded unless
+// they are asked for.
 func KimchiSessionFiles() []string {
-	return walkFiles(KimchiRoot(), func(p string) bool {
-		return strings.HasSuffix(p, ".jsonl")
-	})
+	return walkFiles(KimchiRoot(), kimchiWanted)
+}
+
+// KimchiUnderRoot lets the registry claim a path for incremental ingest.
+func KimchiUnderRoot(p string) bool {
+	return underRoot(p, KimchiRoot(), ".jsonl") && kimchiWanted(p)
+}
+
+func kimchiWanted(p string) bool {
+	if !strings.HasSuffix(p, ".jsonl") {
+		return false
+	}
+	return os.Getenv("DEJA_INCLUDE_SUBAGENTS") == "1" || !KimchiSubagentFile(p)
+}
+
+// KimchiSubagentFile reports whether a transcript is a run of Kimchi's `Agent`
+// tool. Kimchi writes those beside the parent in the same project directory,
+// so the path cannot tell; the run carries `parentSession` on its header and a
+// `kimchi:subagent-session` entry right after it. A fork has the first and not
+// the second, and is a session of its own. Skipped the way Claude Code's, Cursor's
+// and gjc's sub-agents are: a sub-agent's restatement of the task competes
+// with the parent for recall (#4401).
+func KimchiSubagentFile(p string) bool {
+	f, err := os.Open(p)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 4096)
+	head, _ := r.ReadBytes('\n')
+	// Only a header naming a parent is worth a second line.
+	if !bytes.Contains(head, []byte(`"parentSession"`)) {
+		return false
+	}
+	next, _ := r.ReadBytes('\n')
+	var m struct {
+		Type       string `json:"type"`
+		CustomType string `json:"customType"`
+	}
+	if json.Unmarshal(next, &m) != nil {
+		return false
+	}
+	return m.Type == "custom" && m.CustomType == "kimchi:subagent-session"
 }
 
 func LoadKimchi() []model.Session { return parseFiles(KimchiSessionFiles(), ParseKimchiFile) }

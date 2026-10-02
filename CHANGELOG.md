@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- pi, omp, OpenClaw, gjc, prime-agent, senpi and Kimchi sessions carry their tool calls: the files read and written, the commands run with how they ended, and the replaced text of each edit, so `deja files`, `deja how`, `deja restore` and `deja blame` answer for them. gjc's hashline edits are read too. The index rebuilds once (#4113).
+
 ### Fixed
 
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name. The same goes for every agent whose sessions are filed under such a folder name (Claude Code without a cwd, Cursor CLI, pi, omp and others): `my_org/app` is no longer indexed as `org/app`. The index rebuilds once (#4402).
@@ -31,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Crush `edit`, `multiedit` and `write` calls are indexed with the text they replaced and wrote, so `deja restore` and `deja blame` see Crush sessions; before, only the path was kept (#4377).
 - A new Crush message no longer re-reads the whole project store: deja asks crush.db only for the sessions that moved since the last pass. One turn in a 3000-session store replaced all 3000 and took 8 s (#4381).
 - Crush loads the deja-search skill instead of dropping it with a warning on every start: the copy deja installs no longer carries the nested OpenClaw `metadata` block, which the Agent Skills spec types as strings (#4378).
+- A gjc, pi, omp or prime-agent session no longer gets itself back as the top hit of its own first MCP recall. The extension asked for the session-start digest without the session id, so the session was not marked live until a later hook; the pi npm package had the same gap (#4394).
+- Kimchi sub-agent runs are no longer indexed as sessions of their own, where a sub-agent's restatement of the task competed with the session that spawned it. They are skipped the way Claude Code's and gjc's are, `DEJA_INCLUDE_SUBAGENTS=1` takes them, and `deja doctor` names them as skipped. The index rebuilds once (#4401).
+- `deja resume` on a gjc or Kimchi session `cd`s into the directory the session ran in, read from the transcript header. From anywhere else gjc refused the session and Kimchi offered to fork it, so the printed command did not reopen it (#4395, #4400).
+- `deja doctor` no longer reports one unrecognised gjc file per project. gjc 0.18's `.gjc-managed-session-scope.v2.json` is left out of the count, and sub-agent passes are named as skipped, the way Claude Code's are (#4393).
+- A Kilo CLI or ZCode session is held once in the index. Every write to `kilo.db` sent each session back through `deja index`, which appended it again, so `deja show` printed it twice and `deja how` counted each command twice. The index rebuilds once (#4396).
+- `deja doctor --json` reports Kilo CLI's and ZCode's database: a store held only there read `"state": "missing"` with no paths while the text row said found (#4397).
+- `deja install kilocode` and `deja install opencode` no longer put a comma after an opening brace in a `.jsonc` config whose last key already ends in a comma (`"shim": {,`). Kilo and opencode refused to start with that file, and uninstall left the comma behind (#4399).
 - Resuming a recent session reads the session-start digest from the cache instead of rebuilding it, and keeps doing so after the cache refreshes; a resume took 24-41 ms against 0.1-0.2 ms for a new session (#4224).
 - `deja install codex-auto` that drops a second copy of deja's hook moves the Codex trust pins of your hooks after it along with them, so your hook keeps its approval instead of picking up the dropped copy's pin (#4227).
 - An Amp thread keeps its tool calls: the commands it ran, the files it read, edited or created, and what the commands printed, so `how`, `files`, `blame` and `restore` find them. Each turn also takes its own time instead of the thread's start. The index rebuilds once (#4356).
