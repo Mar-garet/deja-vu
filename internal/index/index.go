@@ -599,6 +599,10 @@ import (
 //
 // 60 also: a session whose id two files share takes its Started and Updated
 // from both, whichever sorts first (#4253).
+//
+// 60 also: a Codex rollout compressed in place, or a transcript rewritten
+// under its name in another form, is a move on an update with nothing else
+// removed; its old path and records go (#4252).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

@@ -3824,7 +3824,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		lastIngestFiles = 0
 		return nil
 	}
-	if len(removed) == 0 && canAppendIncremental(changed, old.Files) {
+	if len(removed) == 0 && !rewrittenInPlace(kept, changed, old.Files) && canAppendIncremental(changed, old.Files) {
 		filesTouched, messages, unreadable, err := appendIncremental(dir, harness, scope, old, files, changed)
 		if IsCorrupt(err) {
 			if progress != nil {
@@ -4680,6 +4680,33 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 		buildSessionFactsFromIndex(dir)
 	}
 	return filesTouched, messages, unreadable, nil
+}
+
+// rewrittenInPlace reports whether a kept file has a new one beside it under
+// the same name in another form: Codex compressing x.jsonl to x.jsonl.zst,
+// Gemini rewriting x.json as x.jsonl. That is the file moving, which only the
+// replacement path's rename rule pairs up; the append path wrote the new
+// file's records beside the old ones and kept the dead path (#4252).
+func rewrittenInPlace(kept map[string]bool, changed, held map[string]FileState) bool {
+	if len(kept) == 0 {
+		return false
+	}
+	stems := map[string]bool{}
+	for p := range kept {
+		stems[fileStem(p)] = true
+	}
+	for p := range changed {
+		if _, ok := held[p]; !ok && stems[fileStem(p)] {
+			return true
+		}
+	}
+	return false
+}
+
+// fileStem is p without its compression suffix and its extension.
+func fileStem(p string) string {
+	p = strings.TrimSuffix(p, ".zst")
+	return strings.TrimSuffix(p, filepath.Ext(p))
 }
 
 // carriesWork reports whether any of these sessions holds a command or the
