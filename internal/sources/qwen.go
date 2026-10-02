@@ -211,7 +211,8 @@ var qwenDialect = toolDialect{
 	oldKey:    "old_string",
 	// read_many_files names no file under file_path: Gemini CLI 0.60 takes
 	// its paths and globs as a list under `include` (#4494).
-	pathListKey: "include",
+	pathListKey:   "include",
+	pathListGlobs: true,
 }
 
 // qwenNoteShellCalls maps the id of each shell call among parts to the

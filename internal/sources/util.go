@@ -615,6 +615,10 @@ type toolDialect struct {
 	// read_files takes "files", whose elements each name a path under pathKey.
 	// Empty means a call names at most one file.
 	pathListKey string
+	// pathListGlobs says that list mixes globs with paths, as gemini's
+	// read_many_files include does; a glob names no file the session
+	// touched (#4494).
+	pathListGlobs bool
 }
 
 // isShellTool reports whether a call is the shell, under any name the harness
@@ -744,9 +748,7 @@ func toolPathStrings(in map[string]any, d toolDialect) []string {
 	for _, it := range items {
 		switch e := it.(type) {
 		case string:
-			// A glob names no file the session touched; gemini's
-			// read_many_files takes both in one list (#4494).
-			if e != "" && !strings.ContainsAny(e, "*?[{") {
+			if e != "" && !(d.pathListGlobs && strings.ContainsAny(e, "*?[{")) {
 				out = append(out, e)
 			}
 		case map[string]any:

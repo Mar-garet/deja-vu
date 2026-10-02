@@ -264,3 +264,12 @@ func TestGeminiReadManyFilesDirectoriesAndRelativePaths(t *testing.T) {
 		t.Errorf("files records = %q, want the two files, the relative one under the project", got)
 	}
 }
+
+// The glob filter is read_many_files' own: Command Code's read_multiple_files
+// takes plain paths, and a Next.js route file is named with brackets (#4494).
+func TestPathListKeepsBracketedFiles(t *testing.T) {
+	got := toolPathStrings(map[string]any{"paths": []any{"/tmp/proj/app/[id]/page.tsx"}}, commandCodeDialect)
+	if len(got) != 1 || got[0] != "/tmp/proj/app/[id]/page.tsx" {
+		t.Errorf("paths = %q, want the bracketed route file", got)
+	}
+}
