@@ -61,3 +61,18 @@ func TestInstallKilocodeAutoWritesThePluginKiloLoads(t *testing.T) {
 		t.Errorf("uninstall left the plugins directory it made: %v", err)
 	}
 }
+
+// A deja.js in Kilo's plugins directory that deja did not generate is the
+// reader's: uninstall leaves it.
+func TestUninstallKilocodeAutoLeavesAPluginItDidNotWrite(t *testing.T) {
+	hermeticEnv(t)
+	path := filepath.Join(kilocodeCLIConfigDir(), "plugins", "deja.js")
+	theirs := "export const Mine = async () => ({})\n"
+	writeFileMkdir(t, path, theirs)
+	if _, err := captureRun(t, "uninstall", "kilocode-auto"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, path); got != theirs {
+		t.Errorf("uninstall removed or changed a plugin deja did not write: %q", got)
+	}
+}
