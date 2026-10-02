@@ -409,7 +409,7 @@ func allHarnesses() []Harness {
 			Name: "kimchi", Load: LoadKimchi, Files: KimchiSessionFiles,
 			Kinds: []FileKind{{
 				Name:      "kimchi",
-				Match:     func(p string) bool { return underRoot(p, KimchiRoot(), ".jsonl") },
+				Match:     KimchiUnderRoot,
 				Parse:     fullParse(ParseKimchiFile),
 				ParseFrom: offsetParse(ParseKimchiFileFromOffset),
 			}},

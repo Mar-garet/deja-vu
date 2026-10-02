@@ -468,7 +468,7 @@ func doctorSQLite3() doctorComponent {
 // storeNeedsSQLite3 names the harnesses deja reads through the sqlite3 CLI.
 func storeNeedsSQLite3(name string) bool {
 	switch name {
-	case "opencode", "cursor", "grok", "hermes", "goose", "zed":
+	case "opencode", "cursor", "grok", "hermes", "goose", "zed", "kilocode", "zcode":
 		return true
 	}
 	return false
@@ -546,7 +546,10 @@ func doctorStoreChecks() []doctorStoreCheck {
 		// (#999).
 		{"cline", sources.ClineStoreRoots(), sources.ClineSessionFiles(), sources.ParseClineFile},
 		{"roo", sources.RooRoots(), sources.RooTaskFiles(), sources.ParseRooTask},
-		{"kilocode", sources.KiloRoots(), sources.KiloTaskFiles(), sources.ParseKiloTask},
+		// The extension's tasks and the CLI's database, both: built from the
+		// tasks alone, the row said "missing" with no paths on a machine whose
+		// every Kilo session is in the database (#4397).
+		{"kilocode", append(sources.KiloRoots(), sources.KiloDB()), sources.KiloSessionFiles(), doctorProbeKilo},
 		{"cherrystudio", sources.CherryStudioAllRoots(), sources.CherryStudioSessionFiles(), sources.ParseCherryStudioFile},
 		// One row for both Kiro clients: the probe picks the reader from the
 		// path, the way the ingest does.
@@ -554,11 +557,11 @@ func doctorStoreChecks() []doctorStoreCheck {
 		{"senpi", []string{sources.SenpiRoot()}, sources.SenpiSessionFiles(), sources.ParseSenpiFile},
 		{"kimchi", []string{sources.KimchiRoot()}, sources.KimchiSessionFiles(), sources.ParseKimchiFile},
 		{"commandcode", []string{sources.CommandCodeRoot()}, sources.CommandCodeSessionFiles(), sources.ParseCommandCodeFile},
-		// The transcripts, not the file list: that list now carries the CLI
-		// database too, and the transcript reader answers zero for it — which
-		// made the row read `parsed-zero` about a store whose every session
-		// deja had just indexed (#3675). Kilo's row draws the same line.
-		{"zcode", []string{sources.ZCodeRoot()}, sources.ZCodeTranscriptFiles(), sources.ParseZCodeFile},
+		// The transcripts and the database, each probed with its own reader:
+		// the transcript reader answers zero for the database, which made the
+		// row read `parsed-zero` (#3675), and leaving the database out made it
+		// read `missing` for a CLI-only store (#4397).
+		{"zcode", []string{sources.ZCodeRoot(), sources.ZCodeDB()}, sources.ZCodeSessionFiles(), doctorProbeZCode},
 		{"gjc", []string{sources.GjcRoot()}, sources.GjcSessionFiles(), sources.ParseGjcFile},
 		{"codewhale", sources.CodeWhaleRoots(), sources.CodeWhaleSessionFiles(), sources.ParseCodeWhaleFile},
 		{"reasonix", sources.ReasonixRoots(), sources.ReasonixSessionFiles(), sources.ParseReasonixFile},
@@ -592,6 +595,23 @@ func doctorProbeKiro(path string) ([]model.Session, error) {
 		return sources.ParseKiroIDEFile(path)
 	}
 	return sources.ParseKiroCLIFile(path)
+}
+
+// doctorProbeKilo and doctorProbeZCode read the newest file with the reader
+// its path belongs to: the CLI database through OpenCode's schema, anything
+// else as the extension task or transcript it is.
+func doctorProbeKilo(path string) ([]model.Session, error) {
+	if path == sources.KiloDB() {
+		return sources.ParseKiloDB(path)
+	}
+	return sources.ParseKiloTask(path)
+}
+
+func doctorProbeZCode(path string) ([]model.Session, error) {
+	if path == sources.ZCodeDB() {
+		return sources.ParseZCodeDB(path)
+	}
+	return sources.ParseZCodeFile(path)
 }
 
 // doctorProbeZed reads the thread store the way the indexer does, so the row

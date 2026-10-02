@@ -57,7 +57,20 @@ Messages use a wrapper envelope:
 
 ### Content
 
-`message.content` is an array of typed blocks. deja extracts `text` from blocks where `"type": "text"`. Blocks with `"type": "thinking"` or `"type": "toolCall"` are skipped.
+`message.content` is an array of typed blocks. deja extracts `text` from blocks where `"type": "text"`. Blocks with `"type": "thinking"` are skipped.
+
+### Tool calls
+
+A `toolCall` block carries `name` and `arguments`. deja reads them for pi and every harness built on it (omp, OpenClaw, gjc, prime, senpi, Kimchi), so `deja files`, `how`, `restore` and `blame` have something to go on (#4113):
+
+| `name` | Arguments | deja records |
+| --- | --- | --- |
+| `read` | `path` | the file |
+| `edit` | `path`, `edits[].oldText` / `newText` (older pi: one `oldText` / `newText` pair) | the file, the replaced span, the written lines |
+| `write` | `path`, `content` | the file and the written lines |
+| `bash` (OpenClaw: `exec`) | `command` | the command, and `→ exit N` from the matching `toolResult` (`details.exitCode` when there is one, `exit 0` for a result that is not an error) |
+
+A relative `path` resolves against the header's `cwd`. gjc's `edit` takes one `input` string in its hashline form instead; see the gjc entry.
 
 ### Timestamps
 

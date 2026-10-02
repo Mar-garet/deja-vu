@@ -2,6 +2,7 @@ package sources
 
 import (
 	"encoding/json"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -48,21 +49,28 @@ func parsePiShaped(path string, offset int64, harness, project string, useHeader
 		Project: project,
 		Path:    path,
 	}
-	err := scanJSONLWithHeaderFromOffsetFunc(path, offset, headerLookahead, isPiHeader, func(m map[string]any) { piShapedLine(&s, m, useHeaderCwd) })
+	r := newPiReader(&s, useHeaderCwd)
+	err := scanJSONLWithHeaderFromOffsetFunc(path, offset, headerLookahead, isPiHeader, r.line)
+	r.finish()
 	if len(s.Messages) == 0 {
 		return nil, err
 	}
 	return []model.Session{s}, err
 }
 
-// piShapedLine folds one transcript line into s: the session header and the
-// user/assistant/toolResult messages. Shared by the JSONL transcripts and
-// OpenClaw's SQLite store, whose event_json rows are the same lines.
-func piShapedLine(s *model.Session, m map[string]any, useHeaderCwd bool) {
+// line folds one transcript line into the session: the header, the
+// user/assistant/toolResult messages, and the tool calls the assistant made.
+// Shared by the JSONL transcripts and OpenClaw's SQLite store, whose
+// event_json rows are the same lines.
+func (r *piReader) line(m map[string]any) {
+	s := r.s
 	typ, _ := m["type"].(string)
 	switch typ {
 	case "session":
-		applyPiHeader(s, m, useHeaderCwd)
+		applyPiHeader(s, m, r.useHeaderCwd)
+		if cwd, _ := m["cwd"].(string); cwd != "" {
+			r.cwd = cwd
+		}
 	case "message":
 		msg, ok := m["message"].(map[string]any)
 		if !ok {
@@ -88,6 +96,12 @@ func piShapedLine(s *model.Session, m map[string]any, useHeaderCwd bool) {
 		txt := textFromContent(msg["content"])
 		if txt != "" {
 			s.Messages = append(s.Messages, model.Message{Role: outRole, Text: txt, Time: t})
+		}
+		switch role {
+		case "assistant":
+			r.toolCalls(msg["content"], t)
+		case "toolResult":
+			r.toolResult(msg, t)
 		}
 	}
 }
@@ -121,6 +135,15 @@ func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
 func isPiHeader(m map[string]any) bool {
 	typ, _ := m["type"].(string)
 	return typ == "session"
+}
+
+// PiHeaderCwd is the working directory a pi-shaped transcript's `session`
+// header records, or "" when it records none. gjc and Kimchi reopen a session
+// only from that directory, so resume runs there (#4395, #4400).
+func PiHeaderCwd(path string) string {
+	m := leadingJSONLHeader(path, math.MaxInt64, headerLookahead, isPiHeader)
+	cwd, _ := m["cwd"].(string)
+	return cwd
 }
 
 // piProjectName derives the project display name from the encoded directory
