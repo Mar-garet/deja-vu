@@ -1,6 +1,7 @@
 package index
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -53,4 +54,49 @@ func TestCodexTailWithNoMessageMovesUpdatedAsARebuildDoes(t *testing.T) {
 	parityPass(t, dir, false)
 	sameSpanAsRebuild(t, dir, "codex:"+id)
 	sameAsRebuild(t, dir)
+}
+
+// Two files under one id, a Gemini resume stub beside its transcript. The
+// full build took the other file's span into the row only when the row's
+// owner was read second, so Updated came from the file names' order, and an
+// update, which takes every file's span, matched only one of the two (#4253).
+func TestASharedIDsSpanDoesNotDependOnWhichFileSortsFirst(t *testing.T) {
+	var spans []string
+	for _, tc := range []struct{ name, real, stub string }{
+		{"stub after", "session-b-008140a7.jsonl", "session-z-008140a7.jsonl"},
+		{"stub first", "session-b-008140a7.jsonl", "session-a-008140a7.jsonl"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := hermeticIndexEnv(t)
+			write(t, filepath.Join(geminiChats(), tc.real), geminiOriginal())
+			write(t, filepath.Join(geminiChats(), tc.stub), geminiStub())
+			dir := filepath.Join(tmp, "idx")
+			if err := Ensure(dir, "", true, nil); err != nil {
+				t.Fatal(err)
+			}
+			s, u := spanOf(t, dir, "gemini:"+resumeID)
+			spans = append(spans, s.Format(time.RFC3339Nano)+".."+u.Format(time.RFC3339Nano))
+
+			// The same files reached a pass at a time.
+			inc := filepath.Join(tmp, "inc")
+			if err := os.Rename(filepath.Join(geminiChats(), tc.stub), filepath.Join(tmp, "stub")); err != nil {
+				t.Fatal(err)
+			}
+			if err := Ensure(inc, "", true, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(filepath.Join(tmp, "stub"), filepath.Join(geminiChats(), tc.stub)); err != nil {
+				t.Fatal(err)
+			}
+			if err := Ensure(inc, "", false, nil); err != nil {
+				t.Fatal(err)
+			}
+			if is, iu := spanOf(t, inc, "gemini:"+resumeID); !is.Equal(s) || !iu.Equal(u) {
+				t.Errorf("an update holds %s..%s, the full build %s..%s", is, iu, s, u)
+			}
+		})
+	}
+	if len(spans) == 2 && spans[0] != spans[1] {
+		t.Errorf("the full build's span follows the file names: %s with the stub sorting after, %s with it first", spans[0], spans[1])
+	}
 }

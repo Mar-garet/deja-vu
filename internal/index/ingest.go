@@ -678,6 +678,8 @@ func rebuildWithTombstones(dir string, harness string, scope string, files map[s
 			}
 			if owns {
 				m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
+			} else {
+				widenSpan(m.Sessions, key, s)
 			}
 			if collided {
 				markShared(m.Sessions, key)
@@ -1653,6 +1655,8 @@ func writeSessionsWithSync(tmp, dir string, ss []model.Session, files map[string
 			}
 			if owns {
 				m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
+			} else {
+				widenSpan(m.Sessions, key, s)
 			}
 			if collided {
 				markShared(m.Sessions, key)
@@ -2675,6 +2679,24 @@ var evicted atomic.Int64
 // disappeared since the last build, and clears the counter.
 func ReportEvictedFiles() int {
 	return int(evicted.Swap(0))
+}
+
+// widenSpan takes the span of a file that shares key's id and does not own
+// its row into that row. The owner merges the earlier files' span in when it
+// is read second, so without this the row's Started and Updated followed the
+// file names' order, where an update takes every file's span (#4253).
+func widenSpan(sessions map[string]SessionMeta, key string, s model.Session) {
+	meta, ok := sessions[key]
+	if !ok {
+		return
+	}
+	if !s.Started.IsZero() && (meta.Started.IsZero() || s.Started.Before(meta.Started)) {
+		meta.Started = s.Started
+	}
+	if s.Updated.After(meta.Updated) {
+		meta.Updated = s.Updated
+	}
+	sessions[key] = meta
 }
 
 // claimSession is attributeSession for a session read this pass. A transcript
@@ -4166,8 +4188,11 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		}
 		if owns {
 			m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
-		} else if _, present := m.Sessions[key]; !present {
-			m.Sessions[key] = held
+		} else {
+			if _, present := m.Sessions[key]; !present {
+				m.Sessions[key] = held
+			}
+			widenSpan(m.Sessions, key, s)
 		}
 		if collided {
 			markShared(m.Sessions, key)

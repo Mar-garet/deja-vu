@@ -596,6 +596,9 @@ import (
 //
 // 60 also: a Codex rollout grown by records with no message moves the
 // session's updated time on an append, as a rebuild does (#4166).
+//
+// 60 also: a session whose id two files share takes its Started and Updated
+// from both, whichever sorts first (#4253).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
