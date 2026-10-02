@@ -431,8 +431,8 @@ import (
 // 60 also: a ZCode CLI session keeps its Bash, Read, Edit and Write calls
 // (#4428).
 //
-// 60 also: ZCode's legacy snapshots under ~/.zcode/v2/sessions are read
-// (#4432).
+// 60 also: ZCode's legacy snapshots under ~/.zcode/v2/sessions are read, and
+// one rewritten is held once (#4432).
 //
 // 60 also: Roo and Kilo extension tasks read apply_patch, search_replace,
 // edit_file and edit calls into files, edit and wrote records (#4419).
