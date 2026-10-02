@@ -527,8 +527,10 @@ signal. Both degrade quietly, which is why the report names them.
 without anyone asking, one row per harness deja can wire. `state` is `wired`,
 `stale` (deja's file or entry is there and no longer calls the hook, which is
 how a dead integration looks), `missing` (no file, or a client config such as
-Kimi's `config.toml` or Qwen's `settings.json` with no deja hook in it), or
-`plugin` (the harness carries its own).
+Kimi's `config.toml` or Qwen's `settings.json` with no deja hook in it),
+`plugin` (the harness carries its own), or `installed` (the `kiro` row: deja's
+agent is there and `chat.defaultAgent` is not `deja`, so it runs only in a chat
+started with `--agent deja`).
 The `aider` row is `stale` when the context file is there and `~/.aider.conf.yml`
 has no `read:` entry for it, and `broken` when the entry is there and the file
 is not, which makes aider print an error on every start.

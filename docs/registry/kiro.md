@@ -23,7 +23,7 @@ row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
 `ToolUse` or `Response` assistant side. `kiro-cli chat --resume-id
 <conversation_id>` reopens a row.
 
-**Last verified:** 2026-10-01
+**Last verified:** 2026-10-02
 
 ## Known quirks and drift
 
@@ -76,9 +76,9 @@ row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
 - Wiring: `deja install kiro` writes the server into
   `~/.kiro/settings/mcp.json`, which the CLI and the IDE both read — the same
   file `kiro-cli mcp add --scope global` writes. One thing the installer
-  cannot do for you: a custom agent (`~/.kiro/agents/<name>.json`) does not
-  inherit global servers, so the entry has to be repeated in that agent's own
-  `mcpServers` block, and the install note says so.
+  cannot do for you: a custom agent (`~/.kiro/agents/<name>.json`) reads the
+  global servers only when it sets `"includeMcpJson": true`, and the install
+  note says so. The agent `kiro-auto` writes sets it.
 - Guidance: `deja install kiro` writes `~/.kiro/steering/deja.md`, the global
   half of steering — scanned for every project, alongside the workspace one.
   It is four lines on purpose. A steering document declares an inclusion mode,
@@ -88,18 +88,35 @@ row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
   front of every turn whether it is wanted or not, which is why it names the
   tool and stops rather than carrying the full skill deja writes where a skill
   is loaded on demand.
-- Auto-recall is still a gap, and not for lack of a hook system: Kiro's agent
-  hooks are per-workspace and fire on file events, not before a prompt, so
-  they need a per-project install, which deja does not have yet. The global
-  steering file above names the tool; it does not carry recall.
+- Auto-recall: `deja install kiro-auto` writes the above and an agent of
+  deja's own, `~/.kiro/agents/deja.json` (`tools: ["*"]`, `includeMcpJson`),
+  with two hooks: `agentSpawn` runs `deja hook-context --plain` and
+  `userPromptSubmit` runs `deja hook-prompt --plain`. kiro-cli adds what those
+  print to the model's context, the agentSpawn output for the whole
+  conversation; what `preToolUse` and `postToolUse` print is not sent, so
+  there is no pre-edit line. The hooks run in that agent only:
+  `kiro-cli chat --agent deja`, or `kiro-cli agent set-default deja`. The
+  built-in `kiro_default` takes no hooks from a file (a `kiro_default.json` is
+  ignored), and deja does not switch `chat.defaultAgent`, which would trade
+  the default agent's prompt for its own. `deja doctor` reads the row as
+  `installed` until `chat.defaultAgent` is `deja`, and uninstall removes that
+  setting when it names deja's agent. The IDE's `.kiro/hooks/` are a
+  different system: per workspace, fired on file events (#4304).
 
 ## Measured on a live install
+
+`kiro-cli` 2.22.0 with its own mock model (`KIRO_MOCK_CHAT_RESPONSE`), after
+`deja install kiro-auto`: `kiro-cli chat --no-interactive --agent deja` sent a
+request whose context carried the `<deja-recall>` digest naming the earlier
+kiro session in that directory and its answer. A probe agent with all five
+hooks echoing a marker showed the agentSpawn and userPromptSubmit markers in
+the request and the preToolUse and postToolUse ones nowhere.
 
 `kiro-cli` 2.22.0 (homebrew cask), in a hermetic HOME:
 
 - `deja install kiro` writes `~/.kiro/settings/mcp.json` and
   `~/.kiro/steering/deja.md`, and says the one thing a reader has to know: a
-  custom agent in `~/.kiro/agents/*.json` does not inherit global MCP servers.
+  custom agent in `~/.kiro/agents/*.json` reads the global MCP servers only with `"includeMcpJson": true`.
 - `--resume-id <SESSION_ID>` is in its own help, which is the command
   `deja resume` prints for a CLI session. `-r`, `--resume-picker` are beside it.
 - What could not be checked: `kiro-cli mcp list` refuses before a login

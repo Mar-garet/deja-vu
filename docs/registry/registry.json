@@ -851,7 +851,7 @@
         "fixtures/registry/kiro/w-api/sess_00000000-0000-4000-8000-000000000000/messages.jsonl"
       ],
       "parser_source": "internal/sources/kiro.go",
-      "last_verified": "2026-10-01",
+      "last_verified": "2026-10-02",
       "display_name": "Kiro",
       "capabilities": {
         "mcp": true,
@@ -864,8 +864,9 @@
       },
       "gaps": {
         "auto": {
-          "state": "todo",
-          "why": "Kiro's agent hooks are per-workspace and fire on file events (`.kiro/hooks/`), not before a prompt, so there is no session-start surface a global install can write. Tracked in #3651."
+          "state": "blocked",
+          "why": "Only in an agent chosen for it: `deja install kiro-auto` writes a `deja` agent whose agentSpawn and userPromptSubmit hooks carry the digest and per-prompt recall, but a plain `kiro-cli chat` starts the built-in kiro_default, which takes no hooks from a file. It fires with `kiro-cli chat --agent deja` or after `kiro-cli agent set-default deja`; deja does not switch the default for you (#4304).",
+          "source": "https://github.com/vshulcz/deja-vu/issues/4304"
         },
         "skill": {
           "state": "impossible",
@@ -893,7 +894,7 @@
         "fixtures/registry/kilocode/kilo.sql"
       ],
       "parser_source": "internal/sources/kilo.go",
-      "last_verified": "2026-09-17",
+      "last_verified": "2026-10-02",
       "display_name": "Kilo Code",
       "capabilities": {
         "mcp": true,
@@ -907,7 +908,7 @@
       "gaps": {
         "auto": {
           "state": "blocked",
-          "why": "Kilo Code has no hook surface: a search of Kilo-Org/kilocode finds none, and the extension is a Roo fork whose hooks are still in flight upstream (Roo PRs #10785, #11128, #11663). Recall arrives when the model calls the tool rather than on its own (#3643).",
+          "why": "Half of it: the CLI gets the session digest from `deja install kilocode-auto`, which writes opencode's plugin into `~/.config/kilo/plugins` (#4398). The extension has no hook surface: it is a Roo fork whose hooks are still in flight upstream (Roo PRs #10785, #11128, #11663), so in the editor recall arrives when the model calls the tool.",
           "source": "https://github.com/RooCodeInc/Roo-Code/pull/11663"
         }
       }

@@ -61,13 +61,15 @@ sboms:
     documents:
       - "${artifact}.spdx.json"
 
-# Keyless cosign signature over the checksum file; the .sig and .pem land in
-# the release assets so consumers (and scorecards) can verify without keys.
+# Keyless cosign signature over the checksum file. The sigstore bundle holds
+# the signature, the certificate and the transparency-log entry in one asset
+# that consumers (and scorecards) verify without keys. cosign 3 ignores
+# --output-signature and --output-certificate, so the old .sig/.pem pair would
+# not be written at all (#4577).
 signs:
   - cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
-    args: ["sign-blob", "--yes", "--output-signature", "${signature}", "--output-certificate", "${certificate}", "${artifact}"]
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--yes", "--bundle", "${signature}", "${artifact}"]
     artifacts: checksum
 
 # The nightly publishes a rolling `nightly` tag. Left visible, it becomes the
