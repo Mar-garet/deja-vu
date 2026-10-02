@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja doctor` finds the Hermes 0.17 store, one `state.db` under `~/.hermes` with no `profiles/` directory, instead of calling it missing while it is indexed and `--json` says ok (#4244).
 - deja follows `COPILOT_HOME`: Copilot CLI sessions under it are indexed, and `deja install copilot`, the skill and `deja doctor` use its `mcp-config.json` instead of `~/.copilot` (#4240).
 - The index swap tests count the waits the swap asks for instead of wall time, so a loaded runner no longer fails `TestASwapThatCannotRenameKeepsTheOldIndex` (#4160).
 - `go test ./cmd/deja` passes on a machine with opencode installed. Install asked the real `opencode --version`, which wrote its log into the test home, and doctor judged a test plugin by the installed major; the suite now reads as a machine with no opencode unless a test names a version (#4155).
