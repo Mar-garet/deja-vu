@@ -191,6 +191,12 @@ func TestDSHNameMissingKeepsAFileURLsDrive(t *testing.T) {
 		{"file://C:/nowhere/gone.js", "C:/nowhere/gone.js"},
 		{"file:///C:/nowhere/gone.js", "C:/nowhere/gone.js"},
 		{"file:///nowhere/gone.js", "/nowhere/gone.js"},
+		{"file://localhost/nowhere/gone.js", "/nowhere/gone.js"},
+		{"file://localhost/C:/nowhere/gone.js", "C:/nowhere/gone.js"},
+		{"file:///C:/no%20where/gone.js", "C:/no where/gone.js"},
+		// A host other than localhost is a share, as Node's fileURLToPath
+		// reads it on Windows; dropping it named a local path instead.
+		{"file://nas/share/gone.js", "//nas/share/gone.js"},
 	} {
 		got := dshNameMissing(c.name)
 		if want := filepath.FromSlash(c.want); len(got) != 1 || got[0] != want {
