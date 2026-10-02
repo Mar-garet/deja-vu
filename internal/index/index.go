@@ -541,6 +541,8 @@ import (
 // 60 also: a failed CodeWhale bash command carries its `→ exit N` (#4537).
 //
 // 60 also: a failed Command Code command carries its `→ exit N` (#4539).
+//
+// 60 also: a pi-family powershell call leaves a command record (#4523).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

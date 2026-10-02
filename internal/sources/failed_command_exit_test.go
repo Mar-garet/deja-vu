@@ -249,6 +249,9 @@ func TestAFailedResultForAStoredCallIsReadWithItsCall(t *testing.T) {
 		{"commandcode", commandCodeCall, commandCodeResult("Exit code: 1\nFAIL"), false},
 		{"commandcode", commandCodeCall, commandCodeResult("ok"), true},
 		{"commandcode", "", commandCodeCall + commandCodeResult("Exit code: 1\nFAIL"), true},
+		// A PowerShell run is the shell since #4523.
+		{"kimchi", piCall("c1", "powershell", `{"command":"go vet ./retry"}`) + "\n", piResult("c1", "powershell", "vet: unreachable\n\nCommand exited with code 1", `{}`, true) + "\n", false},
+		{"kimchi", piCall("c1", "powershell", `{"command":"go vet ./retry"}`) + "\n", piResult("c1", "powershell", "ok", `{}`, false) + "\n", true},
 	} {
 		p := filepath.Join(t.TempDir(), "s.jsonl")
 		body := `{"type":"user","sessionId":"c1","timestamp":"2026-10-01T10:00:00Z","message":{"role":"user","content":"fix the retry loop"}}` + "\n" + c.head

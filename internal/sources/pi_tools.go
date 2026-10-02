@@ -15,11 +15,12 @@ import (
 // `edits[].oldText/newText` (an older pi put one pair at the top level), and
 // the shell is `bash`, or `exec` in OpenClaw, with the line under `command`.
 // The reader kept the text and skipped these calls, so files, commands and
-// edits were empty for all six (#4113).
+// edits were empty for all six (#4113). The pi-coding-agent under Kimchi and
+// Senpi also has `powershell`, with bash's {command, timeout} (#4523).
 var piDialect = toolDialect{
 	pathKey:    "path",
 	pathTools:  map[string]bool{"read": true, "edit": true, "write": true},
-	shellTools: map[string]bool{"bash": true, "exec": true},
+	shellTools: map[string]bool{"bash": true, "exec": true, "powershell": true},
 	editTools:  map[string]bool{"edit": true, "write": true},
 	oldKey:     "oldText",
 	newKey:     "newText",
