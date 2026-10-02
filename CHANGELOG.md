@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `deja install kilocode-auto` starts each Kilo CLI session with the project digest. Kilo kept opencode's plugin loader, so it writes opencode's plugin into `~/.config/kilo/plugins`, always in the 1.x shape Kilo loads, next to everything `deja install kilocode` writes (#4398).
 - `deja install copilot-auto` adds a `sessionStart` hook to Copilot CLI, so a new or resumed session starts with the project digest, as it does in Claude Code and Gemini CLI. The hook goes under `hooks` in `~/.copilot/settings.json` (or in `config.json` while your own hooks are still there, since Copilot moves them over on start), and uninstall gives the file back byte for byte. It also wires `preMcpToolCall` and `sessionEnd`, so MCP recall leaves out the session asking it however long that session runs (#4231, #4551).
 - ZCode's older sessions, the snapshots under `~/.zcode/v2/sessions` that the current runtime leaves until you restore them, are indexed, and `deja doctor` counts them. Deleted ones are skipped, and one already restored into the CLI database is read from there (#4432).
 - pi, omp, OpenClaw, gjc, prime-agent, senpi and Kimchi sessions carry their tool calls: the files read and written, the commands run with how they ended, and the replaced text of each edit, so `deja files`, `deja how`, `deja restore` and `deja blame` answer for them. gjc's hashline edits are read too. The index rebuilds once (#4113).

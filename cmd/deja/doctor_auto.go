@@ -37,6 +37,8 @@ func autoWirings() []autoWiring {
 		{"opencode", func() string {
 			return filepath.Join(opencodeConfigHome(), "opencode", "plugins", "deja.js")
 		}, "hook-context", ""},
+		// Kilo CLI loads the same plugin from its own config directory (#4398).
+		{"kilocode", func() string { return filepath.Join(kilocodeCLIConfigDir(), "plugins", "deja.js") }, "hook-context", ""},
 		{"cursor", func() string { return filepath.Join(sources.CursorCLIHome(), "hooks.json") }, "hook-context", ""},
 		{"gemini", func() string {
 			return filepath.Join(sources.GeminiHome(), "extensions", "deja", "hooks", "hooks.json")

@@ -54,6 +54,16 @@
 <p><code>✓ deja connected</code> once it is there. The skill goes in</p>
 <p><code>~/.kilocode/skills/deja-history/SKILL.md</code> and the command in</p>
 <p><code>&lt;config&gt;/kilo/commands/deja.md</code>.</p>
+<ul>
+<li><strong>Auto-recall</strong>: <code>deja install kilocode-auto</code> does all of the above and adds</li>
+</ul>
+<p><code>&lt;config&gt;/kilo/plugins/deja.js</code>. Kilo CLI kept opencode&#39;s plugin loader (it</p>
+<p>globs <code>{plugin,plugins}/*.{ts,js}</code> in each config directory), so the file is</p>
+<p>opencode-auto&#39;s plugin: the session digest folded into the system prompt,</p>
+<p>per-prompt recall, the file and failed-command lines after a tool, and the</p>
+<p>session-end stamp. It is always the opencode 1.x shape, whichever opencode is</p>
+<p>on PATH: Kilo 7.8.3 refuses the 2.x default export with &#34;must default export</p>
+<p>an object with server()&#34; (#4398).</p>
 <p>Verified on <code>@kilocode/cli</code> 7.7.3. A real <code>kilo run</code> session landed in</p>
 <p><code>~/.local/share/kilo/kilo.db</code>, deja indexed it and recall returned the phrase</p>
 <p>that was typed; <code>deja resume</code> printed <code>kilo -s &lt;id&gt;</code> and running it brought the</p>
@@ -67,7 +77,11 @@
 <p>for a skill — so the command file, the server and both skills coexist under the</p>
 <p>same word. Gemini&#39;s flat namespace is the opposite case and needed the command</p>
 <p>file dropped there (#3665).</p>
-<p><strong>Last verified:</strong> 2026-09-17</p>
+<p>Verified on <code>@kilocode/cli</code> 7.8.3 with <code>deja install kilocode-auto</code>: a `kilo</p>
+<p>run` in a project with one earlier Kilo session sent the model a system</p>
+<p>message opening with the <code>&lt;deja-recall&gt;</code> digest naming that session, and the</p>
+<p>reply answered from it.</p>
+<p><strong>Last verified:</strong> 2026-10-02</p>
 <p>Kilo Code is a Roo Code fork that vendors OpenCode — <code>packages/opencode</code> is</p>
 <p>1,780 files inside the Kilo repository — and <code>packages/kilo-vscode/src/legacy-migration</code></p>
 <p>reads the task directory to import it into the database. So the task files are</p>
@@ -129,10 +143,10 @@
 <p>with the CLI and no editor gets the CLI config, the skill and the command,</p>
 <p>and a note saying no editor host carried the extension.</p>
 <ul>
-<li>No hooks: a search of Kilo-Org/kilocode finds no hook surface, and the extension is a Roo fork</li>
+<li>Hooks are the CLI&#39;s only: the extension is a Roo fork whose hooks are still in flight</li>
 </ul>
-<p>whose hooks are still in flight upstream, so recall arrives when the model calls the tool rather</p>
-<p>than on its own.</p>
+<p>upstream, so in the editor recall arrives when the model calls the tool. The CLI&#39;s plugin</p>
+<p>is the <code>kilocode-auto</code> file above.</p>
 
 <hr>
 <p>deja reads this format and thirty-four others, and turns what it finds into memory your
