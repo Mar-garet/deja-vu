@@ -602,8 +602,10 @@ func claudeWroteRecords(raw json.RawMessage) []string {
 				FilePath     string `json:"file_path"`
 				NotebookPath string `json:"notebook_path"`
 				NewString    string `json:"new_string"`
-				// NotebookEdit's written side: the cell's new source.
+				// NotebookEdit's written side: the cell's new source, which
+				// a delete carries too and Claude Code discards (#4489).
 				NewSource string `json:"new_source"`
+				EditMode  string `json:"edit_mode"`
 				// A Write hands over the whole file, which is how a new file
 				// enters a repository — and a commit that adds a file is the
 				// case the replaced side can say nothing at all about.
@@ -620,7 +622,10 @@ func claudeWroteRecords(raw json.RawMessage) []string {
 		if path == "" {
 			continue
 		}
-		written := []string{part.Input.NewString, part.Input.Content, part.Input.NewSource}
+		written := []string{part.Input.NewString, part.Input.Content}
+		if part.Input.EditMode != "delete" {
+			written = append(written, part.Input.NewSource)
+		}
 		for _, e := range part.Input.Edits {
 			written = append(written, e.NewString)
 		}

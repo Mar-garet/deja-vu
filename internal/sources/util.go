@@ -837,7 +837,8 @@ func wroteRecordsIn(v any, d toolDialect) []string {
 		newText, _ := in[d.newSpanKey()].(string)
 		content, _ := in[d.contentSpanKey()].(string)
 		written := []string{newText, content}
-		if d.newKeyAlt != "" {
+		// A NotebookEdit delete carries new_source and writes none of it.
+		if mode, _ := in["edit_mode"].(string); d.newKeyAlt != "" && mode != "delete" {
 			alt, _ := in[d.newKeyAlt].(string)
 			written = append(written, alt)
 		}
