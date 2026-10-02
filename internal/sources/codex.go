@@ -502,6 +502,23 @@ func codexCall(s *model.Session, payload map[string]any, calls map[string]int, t
 	}
 }
 
+// codexResumes sends a rollout back for a whole read when its tail holds the
+// failed exit of a command called before it (#4443).
+var codexResumes = resumesUnlessAnswering(`"function_call`, func(m map[string]any) ([]string, string) {
+	payload, _ := m["payload"].(map[string]any)
+	id, _ := payload["call_id"].(string)
+	switch typ, _ := payload["type"].(string); typ {
+	case "function_call":
+		return []string{id}, ""
+	case "function_call_output":
+		out, _ := payload["output"].(string)
+		if c := codexExit.FindStringSubmatch(out); c != nil && c[1] != "0" {
+			return nil, id
+		}
+	}
+	return nil, ""
+})
+
 // codexExit reads the outcome Codex prints above the output. exec_command says
 // "Process exited with code N" on every run including zero; apply_patch says
 // "Exit code: N".

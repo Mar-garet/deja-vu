@@ -220,3 +220,59 @@ func TestLineWrittenDuringAPassIsReadOnce(t *testing.T) {
 		})
 	}
 }
+
+// A tool result that lands in the pass after its call still settles the call:
+// the exit status on the command, a refused edit taken back (#4443).
+func TestToolResultInTheNextPassSettlesItsCall(t *testing.T) {
+	cases := []struct {
+		name, env, file string
+		head, call, res string
+	}{
+		{
+			name: "codex", env: "DEJA_CODEX_ROOT",
+			file: "sessions/2026/07/17/rollout-2026-07-17T09-00-00-0199aaaa-bbbb-7ccc-8ddd-eeeeffff0001.jsonl",
+			head: `{"timestamp":"2026-07-17T09:00:00.000Z","type":"session_meta","payload":{"id":"0199aaaa-bbbb-7ccc-8ddd-eeeeffff0001","cwd":"/tmp/proj"}}` + "\n" +
+				`{"timestamp":"2026-07-17T09:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"fix the retry loop"}]}}` + "\n",
+			call: `{"timestamp":"2026-07-17T09:02:00.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"go vet ./retry\"}","call_id":"call_3"}}` + "\n",
+			res:  `{"timestamp":"2026-07-17T09:02:01.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_3","output":"Process exited with code 2\nOutput:\nvet: unreachable"}}` + "\n",
+		},
+		{
+			name: "copilot", env: "DEJA_COPILOT_ROOT",
+			file: "session-state/0199cccc-0000-7000-8000-000000000001/events.jsonl",
+			head: `{"type":"session.start","timestamp":"2026-07-17T09:00:00Z","data":{"sessionId":"0199cccc-0000-7000-8000-000000000001","startTime":"2026-07-17T09:00:00Z","context":{"cwd":"/tmp/proj"}}}` + "\n" +
+				`{"type":"user.message","timestamp":"2026-07-17T09:00:01Z","data":{"content":"fix the retry loop"}}` + "\n",
+			call: `{"type":"tool.execution_start","timestamp":"2026-07-17T09:02:00Z","data":{"toolCallId":"tc1","toolName":"bash","arguments":{"command":"go vet ./retry"}}}` + "\n",
+			res:  `{"type":"tool.execution_complete","timestamp":"2026-07-17T09:02:01Z","data":{"toolCallId":"tc1","success":true,"result":{"content":"vet: unreachable"},"toolTelemetry":{"metrics":{"exit_code":2}}}}` + "\n",
+		},
+		{
+			name: "pi bash", env: "DEJA_PI_ROOT",
+			file: "--tmp-proj--/s-retry.jsonl",
+			head: `{"type":"session","version":3,"id":"s-retry","timestamp":"2026-09-01T09:00:00Z","cwd":"/tmp/proj"}` + "\n" +
+				`{"type":"message","id":"u1","timestamp":"2026-09-01T09:00:01Z","message":{"role":"user","content":[{"type":"text","text":"fix the retry loop"}]}}` + "\n",
+			call: `{"type":"message","id":"a1","timestamp":"2026-09-01T09:02:00Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c-vet","name":"bash","arguments":{"command":"go vet ./retry"}}]}}` + "\n",
+			res:  `{"type":"message","id":"r1","timestamp":"2026-09-01T09:02:01Z","message":{"role":"toolResult","toolCallId":"c-vet","toolName":"bash","content":[{"type":"text","text":"vet: unreachable"}],"details":{"exitCode":2},"isError":true}}` + "\n",
+		},
+		{
+			name: "pi refused edit", env: "DEJA_PI_ROOT",
+			file: "--tmp-proj--/s-retry.jsonl",
+			head: `{"type":"session","version":3,"id":"s-retry","timestamp":"2026-09-01T09:00:00Z","cwd":"/tmp/proj"}` + "\n" +
+				`{"type":"message","id":"u1","timestamp":"2026-09-01T09:00:01Z","message":{"role":"user","content":[{"type":"text","text":"fix the retry loop"}]}}` + "\n",
+			call: `{"type":"message","id":"a1","timestamp":"2026-09-01T09:02:00Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c-edit","name":"edit","arguments":{"path":"/tmp/proj/retry.go","edits":[{"oldText":"for {","newText":"for i := 0; i < 3; i++ {"}]}}]}}` + "\n",
+			res:  `{"type":"message","id":"r1","timestamp":"2026-09-01T09:02:01Z","message":{"role":"toolResult","toolCallId":"c-edit","toolName":"edit","content":[{"type":"text","text":"oldText not found"}],"isError":true}}` + "\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := parityEnv(t, map[string]string{tc.env: "store"})
+			f := filepath.Join(tmp, "store", filepath.FromSlash(tc.file))
+			parityWrite(t, f, tc.head, false)
+			inc := filepath.Join(tmp, "inc")
+			parityPass(t, inc, false)
+			parityWrite(t, f, tc.call, true)
+			parityPass(t, inc, false)
+			parityWrite(t, f, tc.res, true)
+			parityPass(t, inc, false)
+			sameAsRebuild(t, inc)
+		})
+	}
+}

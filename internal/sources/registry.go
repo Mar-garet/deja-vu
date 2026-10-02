@@ -1,6 +1,8 @@
 package sources
 
 import (
+	"bytes"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"time"
@@ -71,6 +73,43 @@ func dbParseFrom(full func(string) ([]model.Session, error), since func(string, 
 	}
 }
 
+// resumesUnlessAnswering is the Resumes of a format that files a tool call and
+// its result as two lines joined by an id. A tail that answers a call made
+// before it cannot be read on its own: the call is stored already, without the
+// exit status or the refusal its result carries, and only a read that holds
+// both marks it (#4443). hint is a substring every call and result line holds,
+// so the rest of the tail is not decoded; answers gives the ids of the calls a
+// line makes and the id of the call it answers, when the answer changes what
+// the call recorded.
+func resumesUnlessAnswering(hint string, answers func(m map[string]any) (calls []string, answered string)) func(string, int64) bool {
+	return func(path string, offset int64) bool {
+		if offset <= 0 {
+			return true
+		}
+		made := map[string]bool{}
+		ok := true
+		_ = scanJSONLBytes(path, offset, func(line []byte) {
+			if !ok || !bytes.Contains(line, []byte(hint)) {
+				return
+			}
+			var m map[string]any
+			d := json.NewDecoder(bytes.NewReader(line))
+			d.UseNumber()
+			if d.Decode(&m) != nil {
+				return
+			}
+			calls, answered := answers(m)
+			for _, id := range calls {
+				made[id] = true
+			}
+			if answered != "" && !made[answered] {
+				ok = false
+			}
+		})
+		return ok
+	}
+}
+
 func hasBase(p, base string) bool { return filepath.Base(p) == base }
 
 // underRoot is the plain claim a single-root harness makes: this path is inside
@@ -133,6 +172,7 @@ func allHarnesses() []Harness {
 					},
 					Parse:     fullParse(ParseCodexRollout),
 					ParseFrom: offsetParse(ParseCodexRolloutFromOffset),
+					Resumes:   codexResumes,
 				},
 			},
 		},
@@ -377,6 +417,7 @@ func allHarnesses() []Harness {
 					Match:     cherryStudioPiFile,
 					Parse:     fullParse(ParseCherryStudioFile),
 					ParseFrom: offsetParse(ParseCherryStudioPiFileFromOffset),
+					Resumes:   piResumes,
 				},
 				{
 					Name:  "cherrystudio-dsh",
@@ -394,6 +435,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return underRoot(p, SenpiRoot(), ".jsonl") },
 				Parse:     fullParse(ParseSenpiFile),
 				ParseFrom: offsetParse(ParseSenpiFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -403,6 +445,7 @@ func allHarnesses() []Harness {
 				Match:     GjcUnderRoot,
 				Parse:     fullParse(ParseGjcFile),
 				ParseFrom: offsetParse(ParseGjcFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -412,6 +455,7 @@ func allHarnesses() []Harness {
 				Match:     KimchiUnderRoot,
 				Parse:     fullParse(ParseKimchiFile),
 				ParseFrom: offsetParse(ParseKimchiFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -542,6 +586,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return strings.HasSuffix(p, ".jsonl") && strings.HasPrefix(p, PiRoot()) },
 				Parse:     fullParse(ParsePiFile),
 				ParseFrom: offsetParse(ParsePiFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -551,6 +596,7 @@ func allHarnesses() []Harness {
 				Match:     isPrimeFile,
 				Parse:     fullParse(ParsePrimeFile),
 				ParseFrom: offsetParse(ParsePrimeFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -560,6 +606,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return strings.HasSuffix(p, ".jsonl") && underOmpRoot(p) },
 				Parse:     fullParse(ParseOmpFile),
 				ParseFrom: offsetParse(ParseOmpFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -569,6 +616,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return openclawTranscript(OpenClawRoot(), p) },
 				Parse:     fullParse(ParseOpenClawFile),
 				ParseFrom: offsetParse(ParseOpenClawFileFromOffset),
+				Resumes:   piResumes,
 			}, {
 				// The per-agent SQLite store the 2026.8 flip made canonical;
 				// the JSONL kind above is what older installs and archives hold.
@@ -587,6 +635,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return hasBase(p, "events.jsonl") && strings.HasPrefix(p, CopilotRoot()) },
 				Parse:     fullParse(ParseCopilotFile),
 				ParseFrom: offsetParse(ParseCopilotFileFromOffset),
+				Resumes:   copilotResumes,
 			}},
 		},
 		{

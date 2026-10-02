@@ -287,6 +287,33 @@ func (r *piReader) toolResult(msg map[string]any, t time.Time) {
 	}
 }
 
+// piResumes sends a pi-shaped transcript back for a whole read when its tail
+// holds the result of a shell, edit or write call made before it: the result
+// is what marks the command's exit and keeps or drops the edit (#4443).
+var piResumes = resumesUnlessAnswering(`"toolCall`, func(m map[string]any) ([]string, string) {
+	msg, _ := m["message"].(map[string]any)
+	switch role, _ := msg["role"].(string); role {
+	case "assistant":
+		var ids []string
+		items, _ := msg["content"].([]any)
+		for _, it := range items {
+			if c, ok := it.(map[string]any); ok && c["type"] == "toolCall" {
+				if id, _ := c["id"].(string); id != "" {
+					ids = append(ids, id)
+				}
+			}
+		}
+		return ids, ""
+	case "toolResult":
+		name, _ := msg["toolName"].(string)
+		if name == "" || piDialect.shellTools[name] || piDialect.editTools[name] {
+			id, _ := msg["toolCallId"].(string)
+			return nil, id
+		}
+	}
+	return nil, ""
+})
+
 func piExitCode(v any) (int, bool) {
 	switch n := v.(type) {
 	case float64:

@@ -244,6 +244,24 @@ func jsonInt(v any) (int, bool) {
 // whole shape rather than the phrase.
 var copilotShellExitRe = regexp.MustCompile(`<shellId:[^>]*completed with exit code (\d+)>`)
 
+// copilotResumes sends an event log back for a whole read when its tail holds
+// the failed exit of a command started before it (#4443).
+var copilotResumes = resumesUnlessAnswering(`"tool.execution_`, func(m map[string]any) ([]string, string) {
+	data, _ := m["data"].(map[string]any)
+	id, _ := data["toolCallId"].(string)
+	switch typ, _ := m["type"].(string); typ {
+	case "tool.execution_start":
+		return []string{id}, ""
+	case "tool.execution_complete":
+		result, _ := data["result"].(map[string]any)
+		out, _ := result["content"].(string)
+		if copilotExitCode(data, out) > 0 {
+			return nil, id
+		}
+	}
+	return nil, ""
+})
+
 // copilotExitCode reads what a shell call actually did. The telemetry carries
 // the number when Copilot recorded one; the trailer under the output is the
 // fallback, and both are absent for a call that is not a shell run.
