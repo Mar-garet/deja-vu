@@ -201,10 +201,16 @@ jobs:
       # Coverage instrumentation is only read on Linux, where the floor runs.
       # Windows paid for -covermode=atomic on top of -race and threw the
       # profile away: the test step alone was 1726s of the job's 30m cap.
-      - run: go test -race -timeout 20m -coverprofile=coverage.out -covermode=atomic ./...
+      #
+      # -count=1 for the reason given at the windows step below: with the test
+      # cache on, every test binary logs each file and variable it touches, and
+      # cmd/deja's log is over a gigabyte. On run 37061621425 the macOS step was
+      # 1422s around a cmd/deja that reported 1005s, and ubuntu 859s around
+      # 706s. A fresh runner never reuses a cached result anyway.
+      - run: go test -race -count=1 -timeout 20m -coverprofile=coverage.out -covermode=atomic ./...
         if: runner.os == 'Linux'
         shell: bash
-      - run: go test -race -timeout 20m ./...
+      - run: go test -race -count=1 -timeout 20m ./...
         if: runner.os == 'macOS'
         shell: bash
       # Windows runs the suite without -race. Of that leg's 26m17s, the tests
