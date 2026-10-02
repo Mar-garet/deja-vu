@@ -486,10 +486,10 @@ func readOpencodeRows(harness, db, q string, by map[string]*model.Session) (int,
 			out := str(r["out"])
 			if r["exit"] == nil && harness == "zcode" {
 				// ZCode records no exit field and writes a failed run's code
-				// Claude's way, "Exit code N" as the output's first line
-				// (#4536).
+				// Claude's way, "Exit code N" as the output's first line, and
+				// only for a non-zero N (#4536).
 				head, rest, _ := strings.Cut(out, "\n")
-				if code, ok := statusCode(head, "Exit code ", ""); ok {
+				if code, ok := statusCode(head, "Exit code ", ""); ok && code != 0 {
 					r["exit"] = float64(code)
 					out = rest
 				}
