@@ -502,7 +502,9 @@ func zedWork(raw json.RawMessage, t time.Time) []model.Message {
 		sort.Strings(ids)
 		for _, id := range ids {
 			r := msg.ToolResults[id]
-			if r.ToolName != "edit_file" {
+			// write_file (Zed 1.22) creates or overwrites a whole file and
+			// returns the same output as edit_file (#4339).
+			if r.ToolName != "edit_file" && r.ToolName != "write_file" {
 				continue
 			}
 			var res struct {
@@ -569,6 +571,7 @@ func zedCommand(name string, input json.RawMessage) string {
 // looked around in, not a file the work touched.
 var zedPathTools = map[string][]string{
 	"edit_file":              {"path"},
+	"write_file":             {"path"},
 	"read_file":              {"path"},
 	"create_directory":       {"path"},
 	"delete_path":            {"path"},
