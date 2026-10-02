@@ -33,7 +33,9 @@ func CopilotSidecarFiles() []string {
 		// Copilot CLI 1.0.79 also keeps rewind snapshots per session
 		// (rewind-file-snapshots/index.json, tracking.json): the client's own
 		// state, not transcripts deja failed to read (#4233).
+		// autopilot-objective.json is the goal of an autopilot run (#4476).
 		return filepath.Base(p) == "vscode.metadata.json" ||
+			filepath.Base(p) == "autopilot-objective.json" ||
 			filepath.Base(filepath.Dir(p)) == "rewind-file-snapshots"
 	})
 }
@@ -285,17 +287,6 @@ func copilotExitCode(data map[string]any, out string) int {
 	return 0
 }
 
-// copilotProjectName mirrors the codex convention: the last two path segments
-// of the recorded working directory, or the final one at filesystem roots.
-func copilotProjectName(cwd string) string {
-	cwd = strings.TrimRight(cwd, "/\\")
-	base := filepath.Base(cwd)
-	if base == "" || base == "." || base == string(filepath.Separator) {
-		return ""
-	}
-	parent := filepath.Base(filepath.Dir(cwd))
-	if parent != "" && parent != "." && parent != string(filepath.Separator) && !strings.Contains(parent, ":") {
-		return parent + "/" + base
-	}
-	return base
-}
+// copilotProjectName is the recorded working directory's project, the last two
+// segments; a Windows path from a synced store reads the same on any host.
+func copilotProjectName(cwd string) string { return cwdProjectName(cwd) }

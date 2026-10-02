@@ -128,6 +128,20 @@ func ClaudeFiles() []string {
 	return out
 }
 
+// ClaudeSidecarFiles lists the agent-<id>.meta.json Claude Code writes next to
+// each sub-agent transcript: the agent type and the task, not a transcript.
+// doctor counted each as a skipped sub-agent, and one was enough to tell the
+// user to set a variable for transcripts deja already reads (#4478).
+func ClaudeSidecarFiles() []string {
+	var out []string
+	for _, root := range ClaudeRoots() {
+		out = append(out, walkFiles(root, func(p string) bool {
+			return IsSubagentPath(p) && strings.HasSuffix(p, ".meta.json")
+		})...)
+	}
+	return out
+}
+
 // UnderClaudeRoot reports whether a path is inside any of the roots above. The
 // registry matches a transcript to its harness by prefix, and with more than
 // one root that question is no longer "does it start with ClaudeRoot()".
@@ -388,13 +402,13 @@ func claudeProjectName(dir string) string {
 // path no longer exists (deleted projects, dirs imported from other machines).
 func decodeProjectBase(base string) string {
 	if resolved := resolveEncodedPath(base); resolved != "" {
-		segs := strings.Split(strings.Trim(resolved, string(filepath.Separator)), string(filepath.Separator))
-		if len(segs) >= 2 {
-			return projectSegments(segs[len(segs)-2], segs[len(segs)-1])
+		if name := cwdProjectName(resolved); name != "" {
+			return name
 		}
-		if len(segs) == 1 {
-			return segs[0]
-		}
+	}
+	// A drive is not a parent, as cwdProjectName has it: C--proj is "proj".
+	if _, rest, ok := splitEncodedWindowsDrive(base); ok {
+		base = rest
 	}
 	parts := strings.Split(base, "-")
 	var clean []string
