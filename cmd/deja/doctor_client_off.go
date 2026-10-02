@@ -177,12 +177,18 @@ func clientHooksOff(name string) string {
 			dir = sources.QwenConfigDir()
 		}
 		p := filepath.Join(dir, "settings.json")
-		if readJSONConfig(p)["disableAllHooks"] == true {
+		project := []string{".claude/settings.json", ".claude/settings.local.json"}
+		if name == "qwen" {
+			project = []string{".qwen/settings.json"}
+		}
+		if readJSONConfig(p)["disableAllHooks"] == true &&
+			!projectSettingSays(project, false, "disableAllHooks") {
 			return hooksOffNote(name, "`disableAllHooks: true`", p)
 		}
 	case "gemini":
 		p := filepath.Join(sources.GeminiHome(), "settings.json")
-		if jsonAt(readJSONConfig(p), "hooksConfig", "enabled") == false {
+		if jsonAt(readJSONConfig(p), "hooksConfig", "enabled") == false &&
+			!projectSettingSays([]string{".gemini/settings.json"}, true, "hooksConfig", "enabled") {
 			return hooksOffNote(name, "`hooksConfig.enabled: false`", p)
 		}
 		// What `gemini extensions disable deja` writes: rules over the
@@ -295,6 +301,29 @@ func clientHooksOff(name string) string {
 		}
 	}
 	return ""
+}
+
+// projectSettingSays reports whether a project settings file, in the
+// directory doctor runs in or its repository's root, sets keys to want. Those
+// files override the user's, so one that turns the switch back on keeps the
+// row on; doctor cannot know which of the two the client starts in.
+func projectSettingSays(files []string, want any, keys ...string) bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	dirs := []string{cwd}
+	if root := gitRootOf(filepath.Join(cwd, "x")); root != "" && root != cwd {
+		dirs = append(dirs, root)
+	}
+	for _, dir := range dirs {
+		for _, f := range files {
+			if jsonAt(readJSONConfig(filepath.Join(dir, filepath.FromSlash(f))), keys...) == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func mcpOffNote(client, what, p string) string {

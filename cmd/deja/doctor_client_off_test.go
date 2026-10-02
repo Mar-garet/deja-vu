@@ -627,3 +627,41 @@ func TestPerProjectListsAreReadForTheDirectoryTheClientKeys(t *testing.T) {
 		}
 	})
 }
+
+// A project's own settings file overrides the user's for the hooks switch in
+// claude-code, qwen and gemini, so a user-wide off with the project turning
+// hooks back on runs them there (#4469).
+func TestProjectSettingsTurnTheHooksSwitchBackOn(t *testing.T) {
+	cases := []struct {
+		client, user, projectFile, project string
+	}{
+		{"claude-code", `{"disableAllHooks":true}`, ".claude/settings.json", `{"disableAllHooks":false}`},
+		{"claude-code", `{"disableAllHooks":true}`, ".claude/settings.local.json", `{"disableAllHooks":false}`},
+		{"qwen", `{"disableAllHooks":true}`, ".qwen/settings.json", `{"disableAllHooks":false}`},
+		{"gemini", `{"hooksConfig":{"enabled":false}}`, ".gemini/settings.json", `{"hooksConfig":{"enabled":true}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.client+" "+c.projectFile, func(t *testing.T) {
+			hermeticEnv(t)
+			dir := map[string]string{"claude-code": sources.ClaudeConfigDir(), "qwen": sources.QwenConfigDir(), "gemini": sources.GeminiHome()}[c.client]
+			write := func(p, body string) {
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(filepath.Join(dir, "settings.json"), c.user)
+			project := t.TempDir()
+			t.Chdir(project)
+			if clientHooksOff(c.client) == "" {
+				t.Fatal("control: the user's switch alone does not read as off")
+			}
+			write(filepath.Join(project, filepath.FromSlash(c.projectFile)), c.project)
+			if note := clientHooksOff(c.client); note != "" {
+				t.Errorf("the project turned hooks back on and doctor still says %q", note)
+			}
+		})
+	}
+}
