@@ -173,3 +173,28 @@ func TestShowSaysAForkWasForked(t *testing.T) {
 		t.Errorf("a fork reads as spawned:\n%s", got)
 	}
 }
+
+// The other way round: the source resumed is not the fork. A fork that went on
+// past the turns it copied holds work its source never saw, and the source's
+// recall left it out because the two open alike (#4549).
+func TestASourcesRecallKeepsAForkThatWentOn(t *testing.T) {
+	dir, fork := forkStore(t, false)
+	q := json.RawMessage(`{"query":"keep going in the branch"}`)
+	if before, _ := callMCPTool(dir, "recall", q); !strings.Contains(before, fork[:8]) {
+		t.Fatalf("the fixture never served the fork, so this proves nothing:\n%s", before)
+	}
+	markSessionLive(dir, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	out, err := callMCPTool(dir, "recall", q)
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if !strings.Contains(out, fork[:8]) {
+		t.Errorf("the resumed source's recall left out a fork's own later work:\n%s", out)
+	}
+	// Control: the fork asking still leaves its source out.
+	endSessionLive(dir, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	markSessionLive(dir, fork)
+	if out, _ := callMCPTool(dir, "recall", json.RawMessage(`{"query":"retry loop fetch.go HTTP 500"}`)); strings.Contains(out, "aaaaaaaa") {
+		t.Errorf("the fork's recall answered with its source:\n%s", out)
+	}
+}
