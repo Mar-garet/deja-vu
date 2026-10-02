@@ -62,7 +62,9 @@
 <p><code>new_string</code> under <code>file_path</code>, and <code>apply_patch</code>, whose paths and <code>-</code>/<code>+</code> lines</p>
 <p>are read out of the patch body. <code>search_and_replace</code> is kept as an alias of</p>
 <p><code>edit</code> and written under the alias with <code>edit</code>&#39;s arguments, which are read as</p>
-<p><code>edit</code>&#39;s (#4531).</p>
+<p><code>edit</code>&#39;s (#4531). <code>read_file</code> still takes the legacy</p>
+<p><code>files: [{path, lineRanges}]</code> form, stored with <code>_legacyFormat: true</code>; each</p>
+<p><code>path</code> is a file record (#4531).</p>
 <p>Tasks from before native tool calling (Roo 3.20, and the legacy Cline</p>
 <p>extension) keep each call as XML inside the assistant&#39;s text block —</p>
 <p><code>&lt;execute_command&gt;&lt;command&gt;…&lt;/command&gt;&lt;/execute_command&gt;</code> — and its result as</p>

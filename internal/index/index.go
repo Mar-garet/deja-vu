@@ -541,6 +541,9 @@ import (
 //
 // 60 also: a Roo or Kilo search_and_replace call with old_string and
 // new_string leaves edit and wrote records (#4531).
+//
+// 60 also: a Roo or Kilo read_file call in the legacy files[] form leaves a
+// files record (#4531).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

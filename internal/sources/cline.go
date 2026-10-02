@@ -402,10 +402,12 @@ var clineDialect = toolDialect{
 // shared helper: apply_diff carries a SEARCH/REPLACE block, not an
 // old_string. Current Roo adds search_replace, edit_file and edit, which name
 // the file `file_path`, and apply_patch, whose paths are in the patch body
-// (#4419).
+// (#4419). read_file still takes the legacy files[{path, lineRanges}] form
+// (#4531).
 var rooDialect = toolDialect{
-	pathKey:    "path",
-	pathKeyAlt: "file_path",
+	pathKey:     "path",
+	pathKeyAlt:  "file_path",
+	pathListKey: "files",
 	pathTools: map[string]bool{"read_file": true, "write_to_file": true, "apply_diff": true,
 		"insert_content": true, "search_and_replace": true, "replace_in_file": true,
 		"search_replace": true, "edit_file": true, "edit": true},

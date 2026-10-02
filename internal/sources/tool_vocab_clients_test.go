@@ -164,3 +164,11 @@ func TestRooSearchAndReplaceAlias(t *testing.T) {
 		vocabWrote("/tmp/proj/retry.go", newLoop),
 	}, nil)
 }
+
+// Roo's read_file still accepts files[{path, line_ranges}] and stores it as
+// {files: [{path, lineRanges}], _legacyFormat: true} (#4531).
+func TestRooLegacyReadFileList(t *testing.T) {
+	ss := rooTask(t, ParseRooTask, rooUse("read_file", map[string]any{
+		"files": []any{map[string]any{"path": "retry.go", "lineRanges": []any{map[string]any{"start": 1, "end": 20}}}, map[string]any{"path": "jitter.go"}}, "_legacyFormat": true}))
+	vocabCheck(t, ss, []string{vocabFiles("/tmp/proj/retry.go\n/tmp/proj/jitter.go")}, nil)
+}

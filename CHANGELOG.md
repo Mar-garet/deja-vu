@@ -179,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A file Antigravity created with `write_to_file` gets its written lines, so `deja blame` can attribute it. The step that runs the call carries no diff, and the content in the call was not read (#4528).
 - A Continue IDE edit made with `edit_existing_file` gets its written lines, without the `// ... existing code ...` placeholders, so `deja blame` can attribute it; only the path was kept. A call you canceled is no longer recorded as an edit (#4529).
 - A Roo Code or Kilo Code edit made through `search_and_replace` with `edit`'s `old_string` and `new_string`, the alias current Roo offers MiniMax models, leaves edit and written-line records, not just the path (#4531).
+- A Roo Code or Kilo Code `read_file` call in the legacy `files: [{path}]` form records the files it read; it recorded none (#4531).
 
 ## [0.21.4] - 2026-09-29
 
