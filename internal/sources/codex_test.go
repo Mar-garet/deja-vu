@@ -49,7 +49,7 @@ func TestCodexRolloutWorkRecords(t *testing.T) {
 		t.Errorf("tool output = %q, want the body without the framing", byRole[RoleToolOutput])
 	}
 	files := strings.Join(byRole[RoleFiles], "\n")
-	for _, want := range []string{filepath.Join("/w/app", "main.go"), filepath.Join("/w/app", "notes.txt")} {
+	for _, want := range []string{"/w/app/main.go", "/w/app/notes.txt"} {
 		if !strings.Contains(files, want) {
 			t.Errorf("files = %q, want %q resolved against the session cwd", files, want)
 		}
