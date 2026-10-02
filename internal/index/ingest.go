@@ -3849,6 +3849,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		}
 		return nil
 	}
+	rereadSharedCopies(removed, changed, files, old.Sessions)
 	var replacements []model.Session
 	// This pass's counts, like every other build path (#1850).
 	emptied.Store(0)
@@ -4680,6 +4681,36 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 		buildSessionFactsFromIndex(dir)
 	}
 	return filesTouched, messages, unreadable, nil
+}
+
+// rereadSharedCopies reads again each held transcript that shares a removed
+// one's file name, where that name is the id of a row two transcripts share:
+// the filename-derived id two projects can share (#699). A turn both copies
+// held was written once, under the copy read first; dropping that copy's
+// records by path took the survivor's commands and outputs with them, and the
+// row stayed on the deleted file until a rebuild (#4310).
+func rereadSharedCopies(removed map[string]bool, changed, files map[string]FileState, sessions map[string]SessionMeta) {
+	shared := map[string]bool{}
+	for _, meta := range sessions {
+		if meta.Shared {
+			shared[meta.ID] = true
+		}
+	}
+	names := map[string]bool{}
+	for p := range removed {
+		base := filepath.Base(p)
+		if storeHarness(p) == "" && shared[strings.TrimSuffix(base, filepath.Ext(base))] {
+			names[base] = true
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	for p, f := range files {
+		if _, ok := changed[p]; !ok && !removed[p] && names[filepath.Base(p)] && storeHarness(p) == "" {
+			changed[p] = f
+		}
+	}
 }
 
 // rewrittenInPlace reports whether a kept file has a new one beside it under
