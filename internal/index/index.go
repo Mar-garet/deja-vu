@@ -392,7 +392,8 @@ import (
 // written lines (#4377).
 //
 // 60 also: a rooted DeepSeek TUI or Codex tool path from the other OS's
-// convention is no longer joined onto the session's cwd (#4438).
+// convention is no longer joined onto the session's cwd, and a Roo path with
+// one leading `\` stays as written (#4438).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
