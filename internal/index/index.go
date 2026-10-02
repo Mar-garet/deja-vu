@@ -548,6 +548,9 @@ import (
 // records (#4524).
 //
 // 60 also: an omp hashline edit leaves files, edit and wrote records (#4525).
+//
+// 60 also: a prime ipython cell's details.diffs leave files, edit and wrote
+// records (#4526).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

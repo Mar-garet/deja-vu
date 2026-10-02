@@ -374,6 +374,7 @@ func (r *piReader) toolResult(msg map[string]any, t time.Time) {
 	if name, _ := msg["toolName"].(string); name == "eval" {
 		r.evalCalls(details, t)
 	}
+	r.cellDiffs(details["diffs"], t)
 	if recs, ok := r.pending[id]; ok {
 		delete(r.pending, id)
 		if !failed {

@@ -141,3 +141,31 @@ func TestOmpHashlineEdit(t *testing.T) {
 		}
 	}
 }
+
+// prime's one tool is ipython, and its edit skill changes a file from inside a
+// cell; each change lands on the result as details.diffs[{path, oldStr,
+// newStr}], which prime itself reads back to list the files a session edited.
+// The reader kept the cell's output only (#4526).
+func TestPrimeEditInACellIsRecorded(t *testing.T) {
+	const newLoop = "\tfor attempt := 0; attempt < maxAttempts; attempt++ {"
+	const jitter = "func backoffJitter(attempt int) time.Duration { return 0 }"
+	diffs := `{"status":"ok","stdout":"Edited /tmp/proj/retry.go","diffs":[` +
+		`{"path":"/tmp/proj/retry.go","oldStr":"\tfor {","newStr":` + vocabJSON(newLoop) + `,"startLine":3},` +
+		`{"path":"jitter.go","oldStr":"","newStr":` + vocabJSON(jitter) + `,"startLine":1}]}`
+	p := writePiFixture(t, piSession(
+		piCall("c0", "ipython", `{"code":"await edit(path=\"retry.go\", old_str=\"\\tfor {\", new_str=\"…\")"}`),
+		piResult("c0", "ipython", "Edited /tmp/proj/retry.go", diffs, false),
+		piCall("c1", "ipython", `{"code":"print(1)"}`),
+		piResult("c1", "ipython", "1", `{"status":"ok","stdout":"1","diffs":[]}`, false),
+	))
+	got := changesOf(parseKindForTest(t, "prime", p))
+	want := []string{
+		"files /tmp/proj/retry.go\n/tmp/proj/jitter.go",
+		"edit /tmp/proj/retry.go\n\tfor {",
+		"wrote " + WroteRecord("/tmp/proj/retry.go", newLoop),
+		"wrote " + WroteRecord("/tmp/proj/jitter.go", jitter),
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("records = %q, want %q", got, want)
+	}
+}
