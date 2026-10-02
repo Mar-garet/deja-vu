@@ -253,3 +253,43 @@ func TestALongHeadedForksPromptRecallLeavesOutItsSource(t *testing.T) {
 		t.Errorf("the control was not told about the source, so this proves nothing:\n%s", out)
 	}
 }
+
+// Moving a Claude Code session to the background forks it with
+// --fork-session and ends the source, and the source goes on to gain a "No
+// response requested." turn and a task notification the fork never sees. The
+// fork's recall then answered with the source: its last record was not one the
+// fork held (#4251).
+func TestABackgroundedForksRecallLeavesOutASourceThatWentOn(t *testing.T) {
+	dir, fork := forkStore(t, false)
+	const source = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	path := filepath.Join(os.Getenv("DEJA_CLAUDE_ROOT"), "-w-p", source+".jsonl")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now().UTC().Add(-30 * time.Minute)
+	more := fmt.Sprintf(`{"type":"assistant","uuid":"a-2","sessionId":%q,"cwd":"/w/p","timestamp":%q,"message":{"role":"assistant","content":"No response requested."}}`, source, t0.Add(3*time.Minute).Format(time.RFC3339Nano)) + "\n" +
+		fmt.Sprintf(`{"type":"user","uuid":"u-3","sessionId":%q,"cwd":"/w/p","timestamp":%q,"message":{"role":"user","content":"<task-notification><task-id>b1</task-id><status>completed</status></task-notification>"}}`, source, t0.Add(9*time.Minute).Format(time.RFC3339Nano)) + "\n"
+	if err := os.WriteFile(path, append(b, more...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := index.Ensure(dir, "", true, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	q := json.RawMessage(`{"query":"retry loop fetch.go HTTP 500"}`)
+	if before, _ := callMCPTool(dir, "recall", q); !strings.Contains(before, "aaaaaaaa") {
+		t.Fatalf("the fixture never served the source, so this proves nothing:\n%s", before)
+	}
+	runHookPrompt(dir, strings.NewReader(`{"session_id":"`+fork+`","hook_event_name":"UserPromptSubmit","cwd":"/w/p","prompt":"keep going in the background"}`), io.Discard)
+	runHookSessionEnd(dir, strings.NewReader(`{"session_id":"`+source+`","hook_event_name":"SessionEnd","reason":"prompt_input_exit"}`))
+	out, err := callMCPTool(dir, "recall", q)
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if strings.Contains(out, "aaaaaaaa") {
+		t.Errorf("a backgrounded fork's recall answered with its own source:\n%s", out)
+	}
+	if !strings.Contains(out, "prior-c") {
+		t.Errorf("the older session that settled it is not on the fork's page:\n%s", out)
+	}
+}
