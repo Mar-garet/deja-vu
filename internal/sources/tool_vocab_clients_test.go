@@ -60,6 +60,9 @@ func TestAmpShellCommandAndApplyPatch(t *testing.T) {
 		`{"role":"user","content":[` + res("t2", "done") + `,` + res("t3", "done") + `]}`,
 		`{"role":"assistant","content":[` + use("t4", "apply_patch", map[string]any{"patchText": refused}) + `]}`,
 		`{"role":"user","content":[` + res("t4", "rejected-by-user") + `]}`,
+		`{"role":"assistant","content":[` + use("t5", "create_file", map[string]any{"path": "/tmp/proj/refused2.go", "content": "func refusedCreate() error { return nil }"}) + `,` +
+			use("t6", "edit_file", map[string]any{"path": "/tmp/proj/refused3.go", "old_str": "func keptToo() {}", "new_str": "func refusedEdit() error { return nil }"}) + `]}`,
+		`{"role":"user","content":[` + res("t5", "rejected-by-user") + `,` + res("t6", "cancelled") + `]}`,
 	}
 	body := `{"v":7,"id":"T-0f3c","created":1774950000000,"title":"Fix the retry loop","env":{"initial":{"trees":[{"uri":"file:///tmp/proj"}]}},"messages":[` + strings.Join(msgs, ",") + `]}`
 	p := vocabWrite(t, filepath.Join(t.TempDir(), "T-0f3c.json"), body)
@@ -71,6 +74,9 @@ func TestAmpShellCommandAndApplyPatch(t *testing.T) {
 	}, patchWants...), []string{
 		vocabEdit("/tmp/proj/refused.go", "func kept() {}"),
 		vocabWrote("/tmp/proj/refused.go", "func refusedChange() error { return nil }"),
+		vocabWrote("/tmp/proj/refused2.go", "func refusedCreate() error { return nil }"),
+		vocabEdit("/tmp/proj/refused3.go", "func keptToo() {}"),
+		vocabWrote("/tmp/proj/refused3.go", "func refusedEdit() error { return nil }"),
 	})
 }
 

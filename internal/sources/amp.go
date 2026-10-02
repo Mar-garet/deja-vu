@@ -198,7 +198,7 @@ func ParseAmpFile(path string) ([]model.Session, error) {
 				Time: ts,
 			})
 		}
-		for _, rec := range ampWorkRecords(item.Content, ts) {
+		for _, rec := range ampWorkRecords(item.Content, failed, ts) {
 			session.Touch(ts)
 			session.Messages = append(session.Messages, rec)
 		}
@@ -216,7 +216,7 @@ func ParseAmpFile(path string) ([]model.Session, error) {
 // ampWorkRecords turns one message's tool blocks into work records: the files
 // a call named, the span an edit replaced and what it wrote, the command it
 // ran, and what a run printed.
-func ampWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
+func ampWorkRecords(raw json.RawMessage, failed map[string]bool, ts time.Time) []model.Message {
 	var blocks []any
 	if json.Unmarshal(raw, &blocks) != nil {
 		return nil
@@ -227,13 +227,21 @@ func ampWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 			out = append(out, model.Message{Role: RoleFiles, Text: p, Time: ts})
 		}
 	}
+	// An edit or file the run did not finish changed nothing (#4527); its
+	// path and command stay, as for any call made.
+	changed := make([]any, 0, len(blocks))
+	for _, it := range blocks {
+		if m, ok := it.(map[string]any); !ok || !failed[str(m["id"])] {
+			changed = append(changed, it)
+		}
+	}
 	if IndexWrites() {
-		for _, w := range wroteRecordsIn(blocks, ampDialect) {
+		for _, w := range wroteRecordsIn(changed, ampDialect) {
 			out = append(out, model.Message{Role: RoleWrote, Text: w, Time: ts})
 		}
 	}
 	if IndexEdits() {
-		for _, span := range editSpansIn(blocks, ampDialect) {
+		for _, span := range editSpansIn(changed, ampDialect) {
 			out = append(out, model.Message{Role: RoleEdit, Text: span, Time: ts})
 		}
 	}
