@@ -615,6 +615,9 @@ import (
 //
 // 60 also: with DEJA_INCLUDE_SUBAGENTS=1, Kimi Code and Qwen Code sub-agent
 // logs are read as sub-agent sessions of their parent (#4483).
+//
+// 60 also: a goose text_editor str_replace sent as a unified diff leaves edit
+// and wrote records (#4287).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

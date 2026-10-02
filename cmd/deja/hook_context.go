@@ -1368,7 +1368,7 @@ func warmupLooksDead(dir string, now time.Time, stamp int64) bool {
 }
 
 func requestWarmup(dir string) {
-	if os.Getenv("DEJA_WARMUP_SENTINEL") != "" {
+	if os.Getenv("DEJA_WARMUP_SENTINEL") != "" || installBuildsIndex {
 		return
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
