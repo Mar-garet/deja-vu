@@ -69,18 +69,29 @@ func TestInstallKiroAutoWritesAnAgentWithRecallHooks(t *testing.T) {
 	}
 }
 
-// An agent the reader named deja is theirs: install refuses rather than
-// writing over it.
+// An agent the reader named deja is theirs: install leaves it alone and still
+// writes the MCP server and steering, which `deja install --auto` used to give
+// that machine before kiro-auto existed.
 func TestInstallKiroAutoLeavesTheReadersOwnDejaAgent(t *testing.T) {
 	hermeticEnv(t)
 	path := filepath.Join(kiroTestDir(t), "agents", "deja.json")
 	theirs := `{"name":"deja","description":"mine","tools":["read"]}` + "\n"
 	writeFileMkdir(t, path, theirs)
-	if _, err := captureRun(t, "install", "kiro-auto", "--no-index"); err == nil {
-		t.Error("install wrote over an agent it did not write, and said nothing")
+	out, err := captureRun(t, "install", "kiro-auto", "--no-index")
+	if err != nil {
+		t.Fatalf("install refused the whole target over their agent: %v", err)
 	}
 	if got := readFile(t, path); got != theirs {
 		t.Errorf("their agent changed:\n%s", got)
+	}
+	if !strings.Contains(readFile(t, kiroMCPSettingsPath()), `"deja"`) {
+		t.Error("no MCP entry beside their agent")
+	}
+	if _, err := os.Stat(kiroSteeringPath()); err != nil {
+		t.Errorf("no steering file beside their agent: %v", err)
+	}
+	if !strings.Contains(out, "did not write") {
+		t.Errorf("install did not say why the agent was skipped:\n%s", out)
 	}
 	if _, err := captureRun(t, "uninstall", "kiro-auto"); err != nil {
 		t.Fatal(err)

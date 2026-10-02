@@ -116,17 +116,18 @@ const kiroAutoNote = "kiro-cli runs these hooks in the deja agent: `kiro-cli cha
 	"or `kiro-cli agent set-default deja` for every chat"
 
 func installKiroAuto(exe string, uninstall bool) (installResult, error) {
-	path := kiroAgentPath()
-	// An agent called deja that deja did not write is the reader's.
-	if b, err := os.ReadFile(path); err == nil && !strings.Contains(string(b), kiroAgentDescription) {
-		if uninstall {
-			return installKiro(exe, uninstall)
-		}
-		return installResult{}, fmt.Errorf("%s is an agent deja did not write — rename it, or add the hooks to it by hand", path)
-	}
+	// The server and steering first: an agent of the reader's own named deja
+	// costs only the agent file, not what `deja install kiro` gives them.
 	base, err := installKiro(exe, uninstall)
 	if err != nil {
 		return base, err
+	}
+	path := kiroAgentPath()
+	if b, err := os.ReadFile(path); err == nil && !strings.Contains(string(b), kiroAgentDescription) {
+		if !uninstall {
+			base.Note = joinNotes(base.Note, reportPath(path)+" is an agent deja did not write, so it was left as it is — rename it and run this again for the recall hooks")
+		}
+		return base, nil
 	}
 	body, err := kiroAgentJSON(hookExeFor(exe, uninstall))
 	if err != nil {
