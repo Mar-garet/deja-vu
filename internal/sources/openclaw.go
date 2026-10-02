@@ -47,9 +47,11 @@ func openclawTranscript(root, p string) bool {
 	if !strings.HasSuffix(p, ".jsonl") && !archived {
 		return false
 	}
-	if openclawCheckpointRE.MatchString(p) || strings.HasSuffix(p, ".trajectory.jsonl") {
+	if openclawCheckpointRE.MatchString(p) || strings.HasSuffix(openclawArchiveLive(p), ".trajectory.jsonl") {
 		// <id>.trajectory.jsonl is OpenClaw's runtime artifact for a run,
 		// not a conversation: read as one it was a second session (#4477).
+		// A delete archives it with the transcript, so the name is checked
+		// before the .deleted.<ts> suffix.
 		return false
 	}
 	rel, err := filepath.Rel(root, p)
