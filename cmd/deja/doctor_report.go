@@ -342,6 +342,9 @@ type doctorMCPStatus struct {
 	// PluginMissing marks a dsh layer that names a deja plugin file that is
 	// gone, which keeps dsh from starting at all (#4292).
 	PluginMissing bool `json:"plugin_missing,omitempty"`
+	// Note is the caveat the text row prints under a "wired" it cannot fully
+	// vouch for: Cherry Studio's, when only the import file could be read (#4344).
+	Note string `json:"note,omitempty"`
 }
 
 type doctorCommandStatus struct {
@@ -966,6 +969,23 @@ func collectDoctorMCP() []doctorMCPStatus {
 		}
 		if state == "wired" && config.name == "deepseek" && len(dshPluginsMissing(config.path)) > 0 {
 			row.PluginMissing = true
+		}
+		// The app's own table, when it can be read, rather than the file it
+		// imports from (#4344).
+		if config.name == "cherrystudio" {
+			if known, wired, off, db, missing := cherryStudioAppWiring(); known {
+				row.BinaryMissing = false
+				switch {
+				case off:
+					row.State, row.Path = "disabled", db
+				case wired:
+					row.State, row.Path, row.BinaryMissing = "wired", db, missing != ""
+				case state != "config-missing":
+					row.State = "not-imported"
+				}
+			} else if state == "wired" {
+				row.Note = doctorWiringNote(config.name)
+			}
 		}
 		out = append(out, row)
 	}

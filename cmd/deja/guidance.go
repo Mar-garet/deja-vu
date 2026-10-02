@@ -347,7 +347,10 @@ func sharedSkillStillWanted(leaving string) bool {
 		if other == leaving || removingTargets[other] {
 			continue
 		}
-		if sharedSkillHarnesses[other] {
+		// cherrystudio writes the shared skill from its own install rather
+		// than through guidance, and reads it all the same (#4345). grok
+		// writes it beside GROK.md for Grok Build, which reads only that.
+		if sharedSkillHarnesses[other] || ownGuidanceFile(other) == sharedSkillPath() || other == "grok" {
 			return true
 		}
 	}
