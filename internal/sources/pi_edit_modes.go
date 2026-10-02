@@ -40,8 +40,13 @@ func piEditModes(args map[string]any) []map[string]any {
 			continue
 		}
 		if diff, ok := em["diff"].(string); ok {
-			pe := piPatchEdits(str(em["op"]), diff)
-			if to := str(em["rename"]); to != "" && str(em["op"]) == "update" {
+			// omp reads a missing op as update (pi-edit Operation::parse).
+			op := str(em["op"])
+			if op == "" {
+				op = "update"
+			}
+			pe := piPatchEdits(op, diff)
+			if to := str(em["rename"]); to != "" && op == "update" {
 				var written []any
 				for _, h := range pe {
 					hm := h.(map[string]any)

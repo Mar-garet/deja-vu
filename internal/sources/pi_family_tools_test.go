@@ -102,6 +102,12 @@ func TestOmpAndGjcReplaceAndPatchEdits(t *testing.T) {
 		// file's, the added ones are the new file's (#4576).
 		{"omp patch, rename", "omp", `{"path":"jitter.go","edits":[{"op":"update","rename":"backoff/jitter.go","diff":"@@\n-\treturn 0\n+\treturn time.Duration(rand.Int63n(int64(base)))\n"}]}`, false,
 			[]string{"files " + jitter + "\n/tmp/proj/backoff/jitter.go", "edit " + jitter + "\n\treturn 0", "wrote " + WroteRecord("/tmp/proj/backoff/jitter.go", newJitter)}},
+		// op is optional and omp reads a missing one as update
+		// (pi-edit Operation::parse), with or without a rename.
+		{"omp patch, no op", "omp", `{"path":"jitter.go","edits":[{"diff":"@@\n-\treturn 0\n+\treturn time.Duration(rand.Int63n(int64(base)))\n"}]}`, false,
+			[]string{"files " + jitter, "edit " + jitter + "\n\treturn 0", "wrote " + WroteRecord(jitter, newJitter)}},
+		{"omp patch, rename, no op", "omp", `{"path":"jitter.go","edits":[{"rename":"backoff/jitter.go","diff":"@@\n-\treturn 0\n+\treturn time.Duration(rand.Int63n(int64(base)))\n"}]}`, false,
+			[]string{"files " + jitter + "\n/tmp/proj/backoff/jitter.go", "edit " + jitter + "\n\treturn 0", "wrote " + WroteRecord("/tmp/proj/backoff/jitter.go", newJitter)}},
 		{"gjc replace refused", "gjc", `{"path":"backoff.go","edits":[{"old_text":"\tdelay := base","new_text":"\tdelay := base * time.Duration(attempt)"}]}`, true,
 			[]string{"files " + backoff}},
 	}

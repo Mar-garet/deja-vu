@@ -630,6 +630,9 @@ import (
 //
 // 60 also: an omp patch-mode update that renames its file records the
 // written lines under the new path and both paths as files (#4576).
+//
+// 60 also: an omp patch edit with no op is the update omp reads it as, and
+// its lines are recorded (#4576).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
