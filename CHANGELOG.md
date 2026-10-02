@@ -161,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Claude Code session run in a directory named with characters outside A–Z and 0–9 (Cyrillic, CJK, accents, spaces) is filed under that directory rather than its parent, so recall in that directory finds it, and `deja resume` cds into it instead of `parent///////`. The index rebuilds once (#4175).
 - A rebuild no longer re-reads all of Cursor's `chats/` for every CLI transcript whose chat is gone from it; 500 such transcripts took 3.6 s and take 6 ms. A chat started later is still found, within two seconds when it shares a folder with an older one (#4226).
 - A Claude Code or Cherry Studio session keeps its PowerShell commands and the notebooks NotebookEdit changed, as commands, files and written lines, and the pre-tool hook speaks before both. The index rebuilds once (#4489).
+- A Codex session run with unified exec off keeps its commands: `shell_command` calls are read as well as `exec_command` ones, with their exit codes (#4490).
 
 ## [0.21.4] - 2026-09-29
 

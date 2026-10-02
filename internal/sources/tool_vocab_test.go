@@ -52,6 +52,9 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 			vocabFiles("/tmp/proj/retry.ipynb"),
 			vocabWrote("/tmp/proj/retry.ipynb", "retries = compute_backoff_with_jitter(attempt, base=0.5)\n"),
 		}},
+		{"codex shell_command", vocabCodex, []string{
+			vocabCmd("$ go test ./...  → exit 1"),
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

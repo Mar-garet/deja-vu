@@ -488,6 +488,8 @@ import (
 //
 // 60 also: a Claude Code PowerShell call is a command and a NotebookEdit call
 // leaves files and wrote records (#4489).
+//
+// 60 also: a codex shell_command call is a command with its exit (#4490).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
