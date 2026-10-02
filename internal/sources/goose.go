@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -340,6 +342,11 @@ func gooseTextEditorArgs(args map[string]any) map[string]any {
 		"insert":      {"new_str"},
 		"write":       {"file_text"},
 	}[str(args["command"])]
+	// A diff on str_replace is applied instead of old_str and new_str, and
+	// gooseTextEditorDiff reads it (#4287).
+	if str(args["command"]) == "str_replace" && str(args["diff"]) != "" {
+		keep = nil
+	}
 	out := make(map[string]any, len(args))
 	for k, v := range args {
 		if k != "old_str" && k != "new_str" && k != "file_text" && k != "edits" {
@@ -352,6 +359,53 @@ func gooseTextEditorArgs(args map[string]any) map[string]any {
 		}
 	}
 	return out
+}
+
+// gooseTextEditorDiff reads the unified diff goose 1.10–1.25 takes on
+// text_editor's str_replace, which its schema calls the preferred way to edit
+// (#4287): the files it names, the spans each hunk removed and the lines it
+// added.
+//
+// goose applies the diff under a base directory (text_editor.rs apply_diff):
+// the call's path when that is a directory, its parent when it is a file, and
+// with a header's leading directories that repeat the base's last ones taken
+// off the base (adjust_base_dir_for_overlap). goose asks the disk which the
+// path is; the record has only names, so a path whose last element is one of
+// the diff's files, or has an extension, is taken for a file.
+func gooseTextEditorDiff(callPath, diff string) (files, spans, wrote []string) {
+	if strings.ContainsAny(callPath, "\n\r") {
+		return nil, nil, nil
+	}
+	sep := "/"
+	if !strings.Contains(callPath, "/") && strings.Contains(callPath, `\`) {
+		sep = `\`
+	}
+	base := strings.Split(slashed(callPath), "/")
+	last := base[len(base)-1]
+	isFile := path.Ext(last) != ""
+	for _, line := range strings.Split(diff, "\n") {
+		if h, ok := strings.CutPrefix(line, "+++ "); ok && path.Base(slashed(unifiedDiffPath(h))) == last {
+			isFile = true
+		}
+	}
+	if isFile && len(base) > 1 {
+		base = base[:len(base)-1]
+	}
+	resolve := func(p string) string {
+		if callPath == "" || isAbsolutePath(p) {
+			return p
+		}
+		file := strings.Split(slashed(p), "/")
+		dir := base
+		for k := min(len(dir), len(file)); k > 0; k-- {
+			if slices.Equal(file[:k], dir[len(dir)-k:]) {
+				dir = dir[:len(dir)-k]
+				break
+			}
+		}
+		return strings.Join(append(slices.Clone(dir), file...), sep)
+	}
+	return unifiedPatch(diff, "", resolve)
 }
 
 // gooseParts splits a goose content array into the things deja indexes
@@ -410,6 +464,16 @@ func gooseParts(v any) goosePartsOf {
 			if args != nil {
 				tool := strings.TrimPrefix(name, "developer__")
 				if tool == "text_editor" {
+					if diff := str(args["diff"]); diff != "" && str(args["command"]) == "str_replace" {
+						files, spans, wrote := gooseTextEditorDiff(strings.TrimSpace(str(args["path"])), diff)
+						for _, f := range files {
+							if f != strings.TrimSpace(str(args["path"])) {
+								p.paths = append(p.paths, f)
+							}
+						}
+						p.edits = append(p.edits, spans...)
+						p.wrote = append(p.wrote, wrote...)
+					}
 					args = gooseTextEditorArgs(args)
 				}
 				calls = append(calls, map[string]any{
