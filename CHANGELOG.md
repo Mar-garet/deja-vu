@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The first turn of a Hermes session no longer gets itself back from the deja tool: the plugin names the session to `hook-context`, which stamps it live. Run `deja install hermes-auto` again to regenerate the plugin (#4246).
 - deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).
 - A Codex or Cursor CLI session you quit is back in the next session's MCP recall right away instead of 20 minutes later: `deja install codex-auto` and `cursor-auto` wire the session-end hook, and the Codex plugin carries it too. Codex asks once to approve the new hook (#4545).
 - An opencode 1.x session is back in the next session's MCP recall as soon as its turn ends, instead of 20 minutes later: the plugin `deja install opencode-auto` writes, and the `opencode-deja` package, end the sessions they stamped at `session.idle` and when opencode disposes them (#4546).
