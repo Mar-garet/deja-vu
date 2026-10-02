@@ -249,6 +249,43 @@ func TestResumeKimiRunsInTheSessionDirectory(t *testing.T) {
 	}
 }
 
+// prime-agent resumes a session only from the project it ran in ("belongs to
+// a different project"), so the command cds into the header's cwd; a cwd that
+// is gone gets no cd (#4408).
+func TestResumePrimeRunsInTheSessionDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	project := filepath.Join(tmp, "proj-prime")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id := "01a0f98f-da37-7692-b35e-1d5dba9f2589"
+	path := filepath.Join(tmp, "prime", "sessions", id+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeHeader := func(cwd string) {
+		head, _ := json.Marshal(map[string]any{"type": "session", "version": 3, "id": id, "cwd": cwd, "rlmDepth": 0})
+		turn := `{"type":"message","id":"u1","message":{"role":"user","content":[{"type":"text","text":"fix the retry loop"}]}}`
+		if err := os.WriteFile(path, []byte(string(head)+"\n"+turn+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeHeader(project)
+	dir, cmd, err := resumeCommand(model.Session{Harness: "prime", ID: id, Path: path})
+	if err != nil || cmd != "prime-agent --resume "+id {
+		t.Fatalf("prime resume: %q %v", cmd, err)
+	}
+	if dir != project {
+		t.Fatalf("dir = %q, want the header's cwd %q", dir, project)
+	}
+
+	writeHeader(filepath.Join(tmp, "gone"))
+	if dir, _, _ := resumeCommand(model.Session{Harness: "prime", ID: id, Path: path}); dir != "" {
+		t.Fatalf("dir = %q for a cwd that no longer exists, want none", dir)
+	}
+}
+
 // Cursor's CLI transcripts are named after the chat id `--resume` takes, while
 // IDE chats come out of a different store and reopen only in the editor.
 func TestResumeCursorSplitsCLIFromIDE(t *testing.T) {

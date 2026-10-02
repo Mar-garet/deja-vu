@@ -52,7 +52,7 @@ func defaultDoctorVersionLookup() doctorVersionLookup {
 func countSubagentFiles(seen []string) int {
 	n := 0
 	for _, p := range seen {
-		if sources.IsSubagentPath(p) {
+		if sources.IsSubagentPath(p) || sources.IsPrimeChildPath(p) {
 			n++
 		}
 	}
@@ -1425,6 +1425,9 @@ func doctorMCP(w io.Writer) {
 			if note := zedUnreachableNote(c.path); note != "" {
 				fmt.Fprintf(w, "  %-12s %s\n", "", note)
 			}
+		}
+		if note := doctorMCPSwitchedOff(c.name); note != "" && status == "wired" {
+			fmt.Fprintf(w, "  %-12s %s\n", "", note)
 		}
 		if note := doctorWiringNote(c.name); note != "" && status == "wired" {
 			fmt.Fprintf(w, "  %-12s %s\n", "", note)
