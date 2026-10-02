@@ -221,12 +221,14 @@ func TestDoctorReportsCopilotAutoRecall(t *testing.T) {
 		t.Errorf("disableAllHooks is on and the row does not say so:\n%s", got)
 	}
 
-	// An entry naming a binary that is gone is a hook that exits 127.
-	dead := `{"hooks":{"sessionStart":[{"type":"command","bash":"/nonexistent/bin/deja hook-context --copilot","timeoutSec":10}]}}`
+	// An entry naming a binary that is gone is a hook that exits 127. Absolute
+	// the way this platform spells it: "/gone/deja" is relative on Windows.
+	gone := filepath.Join(t.TempDir(), "gone", "deja")
+	dead := `{"hooks":{"sessionStart":[{"type":"command","bash":"` + jsonEscaped(t, gone) + ` hook-context --copilot","timeoutSec":10}]}}`
 	if err := os.WriteFile(path, []byte(dead), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := row(); !strings.Contains(got, "/nonexistent/bin/deja") || !strings.Contains(got, "copilot-auto") {
+	if got := row(); !strings.Contains(got, gone) || !strings.Contains(got, "copilot-auto") {
 		t.Errorf("a dead binary in the hook is not reported:\n%s", got)
 	}
 }
