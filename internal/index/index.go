@@ -593,6 +593,9 @@ import (
 //
 // 60 also: a Grok Build `grok -p` session, which grok marks "headless", is no
 // longer stored with that as its spawn kind (#4585).
+//
+// 60 also: a Copilot Chat reply keeps the file and symbol names VS Code draws
+// inline, from its inlineReference parts (#4589).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

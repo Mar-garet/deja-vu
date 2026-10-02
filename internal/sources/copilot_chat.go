@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -712,6 +713,12 @@ func copilotChatWalkPart(part any, t time.Time, speech *[]string, extras *[]mode
 	case "textEditGroup":
 		copilotChatEdits(m, t, extras)
 	case "inlineReference":
+		// VS Code draws the reference as a name in the middle of the
+		// sentence; without it the reply read "The bug is in , line 40:"
+		// (#4589).
+		if name := copilotChatRefName(m); name != "" {
+			*speech = append(*speech, name)
+		}
 		if !IndexToolPaths() {
 			return
 		}
@@ -719,6 +726,23 @@ func copilotChatWalkPart(part any, t time.Time, speech *[]string, extras *[]mode
 			*extras = append(*extras, model.Message{Role: RoleFiles, Text: p, Time: t})
 		}
 	}
+}
+
+// copilotChatRefName is what VS Code shows for an inlineReference: the part's
+// own name when it has one, a symbol's name, or the file's base name.
+func copilotChatRefName(m map[string]any) string {
+	if n, _ := m["name"].(string); strings.TrimSpace(n) != "" {
+		return n
+	}
+	ref, _ := m["inlineReference"].(map[string]any)
+	if n, _ := ref["name"].(string); strings.TrimSpace(n) != "" {
+		return n
+	}
+	p := copilotChatRefPath(m["inlineReference"])
+	if p == "" {
+		return ""
+	}
+	return path.Base(strings.ReplaceAll(p, "\\", "/"))
 }
 
 // copilotChatEdits reads the written side of a Copilot Chat edit.

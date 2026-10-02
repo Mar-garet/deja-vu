@@ -313,7 +313,7 @@ func TestCopilotChatSkipsThinkingAndIndexesTools(t *testing.T) {
 			"response":[
 				{"kind":"thinking","value":"secret-reason"},
 				{"kind":"progressMessage","content":{"value":"working"}},
-				{"value":"visible answer"},
+				{"value":"visible answer, see "},
 				{"kind":"toolInvocationSerialized","toolId":"copilot_readFile",
 					"resultDetails":[{"path":"/w/retry.go"}],
 					"toolSpecificData":{"kind":"terminal","commandLine":{"original":"go test ./...","userEdited":"go test"}}},
@@ -340,7 +340,8 @@ func TestCopilotChatSkipsThinkingAndIndexesTools(t *testing.T) {
 			cmds = append(cmds, m.Text)
 		}
 	}
-	if len(assistant) != 1 || assistant[0] != "visible answer" {
+	// The inline reference is part of the sentence VS Code shows (#4589).
+	if len(assistant) != 1 || assistant[0] != "visible answer, see other.go" {
 		t.Fatalf("assistant = %v", assistant)
 	}
 	joined := strings.Join(assistant, "\n")
