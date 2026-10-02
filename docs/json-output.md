@@ -562,8 +562,8 @@ or an `mcp.allowed` without deja (gemini ignores an empty one), `gemini mcp
 disable`, copilot's `disabledMcpServers`, grok's `disabled_mcp_servers`, omp and gjc
 `disabledServers`, VS Code's `chat.mcp.access`, zcode's `features.mcp`,
 openclaw's `tools.deny`, opencode's `tools`, amp's `amp.tools.disable`, and the
-per-project lists claude-code and cursor-agent keep for the directory doctor
-runs in. For Reasonix, `switched_off` means deja's plugin package has no enabled
+per-project lists claude-code and cursor-agent keep for the repository (or
+directory) doctor runs in. For Reasonix, `switched_off` means deja's plugin package has no enabled
 record in `plugin-packages.json`, which is what `reasonix plugin disable deja`
 leaves. The `deepseek` row carries `plugin_missing` when
 `cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh
