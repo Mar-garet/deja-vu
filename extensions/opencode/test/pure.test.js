@@ -390,3 +390,26 @@ test("the plugin names a sub-agent's parent to the digest and the recall", async
     }
   })
 })
+
+// With the #4546 fix a session is ended at every session.idle and stamped live
+// again by the next prompt's hook-prompt. A turn that is only an image has no
+// text, and the transform returned before the stamp, so MCP recall in that
+// turn could hand the session back to itself (#4573).
+test("a prompt with no text still stamps the session live", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "deja-oc-"))
+  const bin = join(dir, "deja")
+  const calls = join(dir, "calls")
+  writeFileSync(bin, `#!/bin/sh\nif [ "$1" = version ]; then echo 0.0.0; exit 0; fi\nprintf '%s %s\\n' "$1" "$(cat)" >> ${calls}\n`, {
+    mode: 0o755,
+  })
+  await withConfigHome(dir, async () => {
+    const hooks = await DejaPlugin({ client: quietClient(), directory: dir }, { bin })
+    const image = { type: "file", mime: "image/png", url: "data:image/png;base64,AAAA" }
+    const output = { messages: [{ info: { role: "user", sessionID: "ses_I" }, parts: [image] }] }
+    await hooks["experimental.chat.messages.transform"]({ sessionID: "ses_I" }, output)
+    const line = readFileSync(calls, "utf8").split("\n").find((l) => l.startsWith("hook-prompt "))
+    assert.ok(line, "an image-only turn never reached hook-prompt, so the session was not stamped live")
+    assert.equal(JSON.parse(line.slice("hook-prompt ".length)).session_id, "ses_I")
+    assert.deepEqual(output.messages[0].parts, [image], "the image part was changed")
+  })
+})

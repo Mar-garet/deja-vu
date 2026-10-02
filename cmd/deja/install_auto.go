@@ -357,10 +357,13 @@ export default {
         if (!last) return
         const parts = (last.content || []).filter((p) => p?.type === "text" && p.text)
         const prompt = parts.map((p) => p.text).join("\n").trim()
-        if (!prompt) return
+        // A turn with no text, an image alone, still goes to hook-prompt:
+        // that call is what stamps the session live again after its last
+        // turn ended it (#4573).
+        if (event.sessionID) live.add(event.sessionID)
         const payload = { prompt, session_id: event.sessionID || "", cwd }
         const raw = await runHook("hook-prompt", JSON.stringify(payload))
-        if (!raw.trim()) return
+        if (!prompt || !raw.trim()) return
         const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
         if (!extra) return
         parts[parts.length - 1].text += "\n\n" + extra
@@ -676,7 +679,9 @@ export const DejaRecall = async ({ $, client, directory }) => {
         if (!last) return
         const parts = (last.parts || []).filter((p) => p?.type === "text" && p.text)
         const prompt = parts.map((p) => p.text).join("\n").trim()
-        if (!prompt) return
+        // A turn with no text, an image alone, still goes to hook-prompt:
+        // that call is what stamps the session live again after session.idle
+        // ended it (#4573).
         // The session id travels with the payload so recall can skip what it
         // already showed this session. Without it every message re-injects the
         // same block: measured on a real store, half of all injections were a
@@ -684,7 +689,7 @@ export const DejaRecall = async ({ $, client, directory }) => {
         const sessionID = input?.sessionID || last?.info?.sessionID || ""
         if (sessionID) live.add(sessionID)
         const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, parent_session_id: await parentOf(sessionID), cwd })} | %s%q hook-prompt%s.text()
-        if (!raw.trim()) return
+        if (!prompt || !raw.trim()) return
         const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
         if (!extra) return
         parts[parts.length - 1].text += "\n\n" + extra

@@ -105,3 +105,46 @@ console.log("open:" + open);
 		t.Errorf("the event subscription outlived the plugin:\n%s", out)
 	}
 }
+
+// The plugins end a session at the end of its turn and count on the next
+// prompt's hook-prompt to stamp it live again. A turn that is only an image
+// returned before that call, so its MCP recall could hand the session back to
+// itself (#4573).
+func TestOpencodePluginsStampAnImageOnlyTurn(t *testing.T) {
+	dir := t.TempDir()
+	bin, calls := opencodeStubDeja(t, dir)
+	v1 := filepath.Join(dir, "deja1.mjs")
+	if err := os.WriteFile(v1, []byte(opencodeLegacyPluginJS(bin)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	v2 := filepath.Join(dir, "deja2.mjs")
+	if err := os.WriteFile(v2, []byte(opencodePluginJS(bin)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runNode(t, dir, `
+import { execSync } from "node:child_process";
+import { DejaRecall } from "`+v1+`";
+import plugin from "`+v2+`";
+// Bun's $ stood in for by a tag that runs the line through sh, each value
+// one quoted word as Bun passes it.
+const q = (v) => "'" + String(v).replace(/'/g, "'\\''") + "'";
+const $ = (strings, ...values) => {
+  const line = strings.reduce((acc, s, i) => acc + s + (i < values.length ? q(values[i]) : ""), "");
+  const run = () => { try { return execSync(line, { shell: "/bin/sh" }).toString() } catch { return "" } };
+  return { text: async () => run(), quiet: async () => { run() } };
+};
+const image = { type: "file", mime: "image/png", url: "data:image/png;base64,AAAA" };
+const h1 = await DejaRecall({ $, client: { tui: { showToast: async () => {} } }, directory: "`+dir+`" });
+await h1["experimental.chat.messages.transform"]({ sessionID: "ses_v1" }, { messages: [{ info: { role: "user", sessionID: "ses_v1" }, parts: [image] }] });
+const hooks = { session: {}, tool: {} };
+const domain = (name) => ({ hook: async (event, fn) => { (hooks[name][event] ||= []).push(fn) } });
+await plugin.setup({ location: { directory: "`+dir+`" }, session: domain("session"), tool: domain("tool") });
+await hooks.session.context[1]({ sessionID: "ses_v2", system: [], messages: [{ role: "user", content: [image] }] });
+`)
+	got := strings.Join(stubCalls(calls, "hook-prompt"), "\n")
+	for _, id := range []string{"ses_v1", "ses_v2"} {
+		if !strings.Contains(got, `"session_id":"`+id+`"`) {
+			t.Errorf("an image-only turn in %s never reached hook-prompt, so it was not stamped live:\n%s", id, got)
+		}
+	}
+}

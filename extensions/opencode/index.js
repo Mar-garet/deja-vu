@@ -336,14 +336,18 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
   hooks["experimental.chat.messages.transform"] = async (input, output) => {
     try {
       const { parts, prompt, sessionID } = lastUserText(output?.messages)
-      if (!prompt) return
+      // A turn with no text, an image alone, still goes to hook-prompt: that
+      // call is what stamps the session live again after session.idle ended
+      // it, and without it the turn's MCP recall could return the session to
+      // itself (#4573). sessionID is empty when there is no user message.
+      if (!prompt && !sessionID) return
       // The session id lets recall skip what it already showed this session.
       // Without it every message re-injects the same block — measured on a real
       // store, half of all injections were a word-for-word repeat.
       const key = input?.sessionID || sessionID || ""
       if (key) live.add(key)
       const raw = await ask(["hook-prompt"], JSON.stringify({ prompt, session_id: key, parent_session_id: await parentOf(key), cwd }))
-      if (!raw) return
+      if (!prompt || !raw) return
       const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
       if (!extra) return
       parts[parts.length - 1].text += "\n\n" + extra
