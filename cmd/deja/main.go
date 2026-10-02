@@ -3317,7 +3317,7 @@ func printSources(dir string) {
 		{"cline", sources.ClineSessionsDir(), append([]string{sources.ClineSessionsDir()}, sources.ClineLegacyRoots()...), sources.ClineSessionFiles, sources.LoadCline},
 		{"roo", strings.Join(sources.RooRoots(), string(os.PathListSeparator)), sources.RooRoots(), sources.RooTaskFiles, sources.LoadRoo},
 		{"kilocode", strings.Join(sources.KiloRoots(), string(os.PathListSeparator)), sources.KiloRoots(), sources.KiloSessionFiles, sources.LoadKilo},
-		{"cherrystudio", strings.Join(sources.CherryStudioRoots(), string(os.PathListSeparator)), sources.CherryStudioRoots(), sources.CherryStudioSessionFiles, sources.LoadCherryStudio},
+		{"cherrystudio", strings.Join(sources.CherryStudioAllRoots(), string(os.PathListSeparator)), sources.CherryStudioAllRoots(), sources.CherryStudioSessionFiles, sources.LoadCherryStudio},
 		{"kiro", sources.KiroRoot(), []string{sources.KiroRoot()}, sources.KiroSessionFiles, sources.LoadKiro},
 		{"senpi", sources.SenpiRoot(), []string{sources.SenpiRoot()}, sources.SenpiSessionFiles, sources.LoadSenpi},
 		{"kimchi", sources.KimchiRoot(), []string{sources.KimchiRoot()}, sources.KimchiSessionFiles, sources.LoadKimchi},

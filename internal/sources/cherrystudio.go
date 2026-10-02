@@ -1,9 +1,12 @@
 package sources
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -56,8 +59,42 @@ func CherryStudioRoots() []string {
 			filepath.Join(base, ".claude", projects),
 		)
 	}
+	return liveDirs(out)
+}
+
+// Cherry Studio runs agents on three runtimes (AGENT_TYPES in its main bundle:
+// claude-code, pi, dsh), and the other two keep their own stores beside the
+// Claude one: pi writes flat <ts>_<id>.jsonl files into Data/Agents/.pi/sessions,
+// and dsh runs with DSH_HOME=Data/Agents/.dsh. The formats are the stock ones,
+// so those readers parse them; only the harness name says Cherry Studio (#4342).
+// DEJA_CHERRYSTUDIO_ROOTS replaces these too: the override names every root.
+
+// CherryStudioAllRoots is every store root of the install, for the rows that
+// say where deja looked.
+func CherryStudioAllRoots() []string {
+	out := CherryStudioRoots()
+	out = append(out, cherryStudioPiRoots()...)
+	return append(out, cherryStudioDshRoots()...)
+}
+
+func cherryStudioPiRoots() []string { return cherryStudioAgentRoots(".pi") }
+
+func cherryStudioDshRoots() []string { return cherryStudioAgentRoots(".dsh") }
+
+func cherryStudioAgentRoots(agent string) []string {
+	if os.Getenv("DEJA_CHERRYSTUDIO_ROOTS") != "" {
+		return nil
+	}
+	var out []string
+	for _, base := range cherryStudioAppDirs() {
+		out = append(out, filepath.Join(base, "Data", "Agents", agent, "sessions"))
+	}
+	return liveDirs(out)
+}
+
+func liveDirs(paths []string) []string {
 	var live []string
-	for _, p := range out {
+	for _, p := range paths {
 		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
 			live = append(live, p)
 		}
@@ -65,27 +102,72 @@ func CherryStudioRoots() []string {
 	return live
 }
 
-// cherryStudioAppDirs is where the app keeps its data on this platform.
+// cherryStudioAppDirs is every directory the user moved the app's data to in
+// its settings, then where the app keeps it by default. The move is kept in
+// ~/.cherrystudio/boot-config.json under app.user_data_path, a map from the
+// executable to the directory, which the app reads at startup to set userData;
+// without it a moved store reads as an empty one (#4347). The moved ones come
+// first: a move can leave the old directory behind, and a reader that wants
+// one file of the app's, such as its database, has to find the live one.
 func cherryStudioAppDirs() []string {
+	dirs := cherryStudioMovedDirs()
+	if def := cherryStudioDefaultDir(); !slices.Contains(dirs, def) {
+		dirs = append(dirs, def)
+	}
+	return dirs
+}
+
+func cherryStudioDefaultDir() string {
 	switch runtime.GOOS {
 	case "darwin":
-		return []string{filepath.Join(Home(), "Library", "Application Support", "CherryStudio")}
+		return filepath.Join(Home(), "Library", "Application Support", "CherryStudio")
 	case "windows":
 		app := os.Getenv("APPDATA")
 		if app == "" {
 			app = filepath.Join(Home(), "AppData", "Roaming")
 		}
-		return []string{filepath.Join(app, "CherryStudio")}
+		return filepath.Join(app, "CherryStudio")
 	default:
 		cfg := os.Getenv("XDG_CONFIG_HOME")
 		if cfg == "" {
 			cfg = filepath.Join(Home(), ".config")
 		}
-		return []string{filepath.Join(cfg, "CherryStudio")}
+		return filepath.Join(cfg, "CherryStudio")
 	}
 }
 
-// CherryStudioSessionFiles lists the transcripts on disk.
+func cherryStudioMovedDirs() []string {
+	b, err := os.ReadFile(filepath.Join(Home(), ".cherrystudio", "boot-config.json"))
+	if err != nil {
+		return nil
+	}
+	var cfg struct {
+		UserDataPath map[string]any `json:"app.user_data_path"`
+	}
+	if json.Unmarshal(b, &cfg) != nil {
+		return nil
+	}
+	var out []string
+	for _, v := range cfg.UserDataPath {
+		d, ok := v.(string)
+		if !ok || !filepath.IsAbs(d) {
+			continue
+		}
+		d = filepath.Clean(d)
+		// Moved to the home directory, the legacy <dir>/.claude/projects root
+		// is Claude Code's own store, and every Claude session would be listed
+		// as Cherry Studio's.
+		if slices.Contains(ClaudeRoots(), filepath.Join(d, ".claude", claudeProjectsDirName())) {
+			continue
+		}
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// CherryStudioSessionFiles lists the transcripts on disk, from all three
+// agent runtimes.
 func CherryStudioSessionFiles() []string {
 	var out []string
 	for _, root := range CherryStudioRoots() {
@@ -93,13 +175,70 @@ func CherryStudioSessionFiles() []string {
 			return strings.HasSuffix(p, ".jsonl")
 		})...)
 	}
+	for _, root := range cherryStudioPiRoots() {
+		out = append(out, walkFiles(root, func(p string) bool {
+			return strings.HasSuffix(p, ".jsonl")
+		})...)
+	}
+	for _, root := range cherryStudioDshRoots() {
+		out = append(out, walkFiles(root, isDeepSeekLog)...)
+	}
 	return out
 }
 
 // ParseCherryStudioFile reads one transcript: Claude Code's format, with the
 // snapshot run collapsed.
 func ParseCherryStudioFile(path string) ([]model.Session, error) {
+	switch {
+	case cherryStudioPiFile(path):
+		return ParseCherryStudioPiFileFromOffset(path, 0)
+	case cherryStudioDshFile(path):
+		return ParseCherryStudioDshFile(path)
+	}
 	return ParseCherryStudioFileFromOffset(path, 0)
+}
+
+// ParseCherryStudioPiFileFromOffset reads a session of Cherry's pi runtime.
+// The store is flat, so the project comes from the header's cwd.
+func ParseCherryStudioPiFileFromOffset(path string, offset int64) ([]model.Session, error) {
+	return parsePiShaped(path, offset, "cherrystudio", "-", true)
+}
+
+// ParseCherryStudioDshFile reads a session of Cherry's dsh runtime.
+func ParseCherryStudioDshFile(path string) ([]model.Session, error) {
+	ss, err := ParseDeepSeekFile(path)
+	for i := range ss {
+		ss[i].Harness = "cherrystudio"
+	}
+	return ss, err
+}
+
+// The kinds match every path the index classifies, and resolving the roots
+// reads boot-config.json and stats each candidate: a no-op pass over 3000 pi
+// files went from 0.13 s to 0.8 s. The store's own segment rules a path out
+// first.
+func cherryStudioPiFile(p string) bool {
+	return strings.HasSuffix(p, ".jsonl") && strings.Contains(p, cherryStudioAgentSegment(".pi")) &&
+		underAnyRoot(p, cherryStudioPiRoots())
+}
+
+func cherryStudioAgentSegment(agent string) string {
+	sep := string(filepath.Separator)
+	return sep + filepath.Join("Data", "Agents", agent, "sessions") + sep
+}
+
+func cherryStudioDshFile(p string) bool {
+	return isDeepSeekLog(p) && strings.Contains(p, cherryStudioAgentSegment(".dsh")) &&
+		underAnyRoot(p, cherryStudioDshRoots())
+}
+
+func underAnyRoot(p string, roots []string) bool {
+	for _, root := range roots {
+		if strings.HasPrefix(p, root+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseCherryStudioFileFromOffset is the incremental read. A collapse spanning
@@ -115,6 +254,10 @@ func ParseCherryStudioFileFromOffset(path string, offset int64) ([]model.Session
 // CherryStudioUnderRoot reports whether a path belongs to this store, so the
 // registry can claim it without stealing a stock Claude transcript.
 func CherryStudioUnderRoot(p string) bool {
+	sep := string(filepath.Separator)
+	if os.Getenv("DEJA_CHERRYSTUDIO_ROOTS") == "" && !strings.Contains(p, sep+".claude"+sep) {
+		return false
+	}
 	for _, root := range CherryStudioRoots() {
 		if strings.HasPrefix(p, root) {
 			return true

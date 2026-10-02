@@ -354,16 +354,31 @@ func allHarnesses() []Harness {
 		{
 			// Cherry Studio runs Claude Code sessions from a desktop app and
 			// writes them in Claude's own format, with a snapshot per stream
-			// chunk that the reader collapses (#3644).
+			// chunk that the reader collapses (#3644). Its pi and dsh agents
+			// keep stock pi and dsh logs beside them (#4342); this entry sits
+			// before deepseek's, whose kind matches a log by name alone.
 			Name: "cherrystudio", Load: LoadCherryStudio, Files: CherryStudioSessionFiles,
-			Kinds: []FileKind{{
-				Name: "cherrystudio",
-				Match: func(p string) bool {
-					return strings.HasSuffix(p, ".jsonl") && CherryStudioUnderRoot(p)
+			Kinds: []FileKind{
+				{
+					Name: "cherrystudio",
+					Match: func(p string) bool {
+						return strings.HasSuffix(p, ".jsonl") && CherryStudioUnderRoot(p)
+					},
+					Parse:     fullParse(ParseCherryStudioFile),
+					ParseFrom: offsetParse(ParseCherryStudioFileFromOffset),
 				},
-				Parse:     fullParse(ParseCherryStudioFile),
-				ParseFrom: offsetParse(ParseCherryStudioFileFromOffset),
-			}},
+				{
+					Name:      "cherrystudio-pi",
+					Match:     cherryStudioPiFile,
+					Parse:     fullParse(ParseCherryStudioFile),
+					ParseFrom: offsetParse(ParseCherryStudioPiFileFromOffset),
+				},
+				{
+					Name:  "cherrystudio-dsh",
+					Match: cherryStudioDshFile,
+					Parse: fullParse(ParseCherryStudioDshFile),
+				},
+			},
 		},
 		{
 			// Senpi and Kimchi are pi descendants and kept its envelope, so
