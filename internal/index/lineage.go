@@ -8,6 +8,10 @@ package index
 // say which session is live fire under the parent's id, so the child's id is
 // never stamped (#4547).
 //
+// The other way too: a spawned agent asking — an opencode task session runs
+// its own hooks — is its parent's work, and the parent is live and the one
+// that asked it (#4548).
+//
 // Read off the manifest, which recall has already loaded: no record is read,
 // so the cost is one pass over the sessions in memory.
 func Lineage(dir string, ids map[string]bool) map[string]bool {
@@ -25,8 +29,14 @@ func Lineage(dir string, ids map[string]bool) map[string]bool {
 		return out
 	}
 	for _, meta := range m.Sessions {
-		if spawnedKind(meta.Kind) && meta.Parent != "" && ids[meta.Parent] {
+		if !spawnedKind(meta.Kind) || meta.Parent == "" {
+			continue
+		}
+		if ids[meta.Parent] {
 			out[meta.ID] = true
+		}
+		if ids[meta.ID] {
+			out[meta.Parent] = true
 		}
 	}
 	return out

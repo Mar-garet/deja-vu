@@ -550,6 +550,24 @@ export const DejaRecall = async ({ $, client, directory }) => {
   // the next session's MCP recall left a finished one out (#4546).
   const live = new Set()
   const endSession = (id) => $%secho ${JSON.stringify({ session_id: id })} | %q hook-session-end%s.quiet()
+  // The session that spawned each one, asked of opencode once. A task
+  // sub-agent's digest and recall led with its parent, which is live and
+  // asking through it (#4548).
+  const parents = new Map()
+  const parentOf = async (id) => {
+    if (!id) return ""
+    if (!parents.has(id)) {
+      let parent = ""
+      try {
+        const res = await client?.session?.get?.({ path: { id } })
+        parent = res?.data?.parentID || ""
+      } catch {
+        // no parent to leave out
+      }
+      parents.set(id, parent)
+    }
+    return parents.get(id)
+  }
   return {
     "experimental.chat.system.transform": async (input, output) => {
       try {
@@ -559,7 +577,7 @@ export const DejaRecall = async ({ $, client, directory }) => {
           // The session id rides along so the digest leaves this session
           // out: the transform runs after the first message is stored, and
           // the index can already hold it (#4199).
-          const raw = await $%scd ${cwd} && echo ${JSON.stringify({ session_id: input.sessionID || "", cwd })} | %q %s%s.text()
+          const raw = await $%scd ${cwd} && echo ${JSON.stringify({ session_id: input.sessionID || "", parent_session_id: await parentOf(input.sessionID), cwd })} | %q %s%s.text()
           let ctx = "", receipt = ""
           try {
             const parsed = JSON.parse(raw)
@@ -633,7 +651,7 @@ export const DejaRecall = async ({ $, client, directory }) => {
         // word-for-word repeat, and all but five of those came within a minute.
         const sessionID = input?.sessionID || last?.info?.sessionID || ""
         if (sessionID) live.add(sessionID)
-        const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, cwd })} | %s%q hook-prompt%s.text()
+        const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, parent_session_id: await parentOf(sessionID), cwd })} | %s%q hook-prompt%s.text()
         if (!raw.trim()) return
         const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
         if (!extra) return

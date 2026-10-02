@@ -185,6 +185,36 @@ func liveLineage(dir string) map[string]bool {
 	return index.Lineage(dir, liveSessionIDs(dir))
 }
 
+// askerLineage is the session a hook speaks for and every session that counts
+// as it. A spawn recalls under a reader of its own, task:<parent>:<hash>, and
+// its parent is the session asking through it; a host that knows the parent
+// of the session asking names it in the payload (#4548).
+func askerLineage(dir string, ids ...string) map[string]bool {
+	set := map[string]bool{}
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id == "" {
+			continue
+		}
+		set[id] = true
+		if p := spawnParent(id); p != "" {
+			set[p] = true
+		}
+	}
+	return index.Lineage(dir, set)
+}
+
+// spawnParent is the session a spawn reader recalls for, or "".
+func spawnParent(sid string) string {
+	if !isSpawnedReader(sid) {
+		return ""
+	}
+	rest := strings.TrimPrefix(sid, spawnReaderPrefix)
+	if i := strings.LastIndex(rest, ":"); i > 0 {
+		return rest[:i]
+	}
+	return ""
+}
+
 // withoutLiveSessions drops the sessions an agent is inside from a result.
 //
 // Only the MCP surfaces use it. On the CLI the reader is a person who may well
