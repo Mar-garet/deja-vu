@@ -26,6 +26,9 @@ cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 ```
 
+Releases up to v0.21.4 carry `checksums.txt.sig` and `checksums.txt.pem`
+instead; docs/SECURITY-MODEL.md shows how to verify those.
+
 Nightly builds are prereleases and are not signed. `deja update` follows
 `releases/latest`, which excludes them.
 
