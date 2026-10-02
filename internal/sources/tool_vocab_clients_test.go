@@ -198,3 +198,39 @@ func TestCrushReplaceSymbolWrote(t *testing.T) {
 		vocabWrote("/tmp/proj/retry.go", deleted),
 	})
 }
+
+// Kilo CLI 7.8.3 in kilo.db: background_process {action, command, workdir},
+// notebook_edit {path, action, kind, source} and notebook_read {path}. Only
+// start and monitor run a command, and only insert and replace write a cell;
+// a notebook path may be relative to the session directory (#4534).
+func TestKiloDBBackgroundProcessAndNotebooks(t *testing.T) {
+	part := func(id, tool, status string, input any) string {
+		data := fmt.Sprintf(`{"type":"tool","tool":%q,"callID":%q,"state":{"status":%q,"input":%s,"output":"ok","time":{"start":1790000002000}}}`, tool, id, status, vocabJSON(input))
+		return fmt.Sprintf("insert into part values('%s','m1',%s);\n", id, sqlQuote(data))
+	}
+	cell := "retries = compute_backoff_with_jitter(attempt, base=0.5)"
+	refused := "retries = refused_change(attempt)"
+	db := vocabSQL(t, `create table session(id text primary key, parent_id text, directory text, title text, time_created integer, time_updated integer);
+create table message(id text, session_id text, time_created integer, data text);
+create table part(id text, message_id text, data text);
+insert into session values('ses_1',null,'/tmp/proj','fix the retry loop',1790000000000,1790000100000);
+insert into message values('m1','ses_1',1790000001000,'{"role":"assistant","time":{"created":1790000001000}}');
+`+part("p1", "background_process", "completed", map[string]any{"action": "start", "command": "go run ./cmd/retryd", "workdir": "/tmp/proj"})+
+		part("p2", "background_process", "completed", map[string]any{"action": "stop", "id": "bgp_01", "command": "go run ./cmd/stopped"})+
+		part("p3", "notebook_edit", "completed", map[string]any{"path": "/tmp/proj/retry.ipynb", "action": "replace", "kind": "code", "index": 0, "source": cell})+
+		part("p4", "notebook_read", "completed", map[string]any{"path": "notes/read.ipynb"})+
+		part("p5", "notebook_edit", "error", map[string]any{"path": "/tmp/proj/retry.ipynb", "action": "insert", "kind": "code", "index": 1, "source": refused}))
+	ss, err := ParseKiloDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vocabCheck(t, ss, []string{
+		vocabCmd("$ go run ./cmd/retryd"),
+		vocabFiles("/tmp/proj/retry.ipynb"),
+		vocabWrote("/tmp/proj/retry.ipynb", cell),
+		vocabFiles("/tmp/proj/notes/read.ipynb"),
+	}, []string{
+		vocabCmd("$ go run ./cmd/stopped"),
+		vocabWrote("/tmp/proj/retry.ipynb", refused),
+	})
+}

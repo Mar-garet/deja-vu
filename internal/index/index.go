@@ -547,6 +547,9 @@ import (
 //
 // 60 also: a Crush lsp_replace_symbol call leaves a wrote record of its
 // replacement (#4533).
+//
+// 60 also: a Kilo CLI background_process start or monitor is a command, and
+// notebook_read and notebook_edit leave files and wrote records (#4534).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

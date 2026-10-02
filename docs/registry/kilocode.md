@@ -52,7 +52,13 @@ the project; without it the task's directory mtime is the base time. A
 (#4446).
 
 SQLite: `session` joined to `message` and `part`, exactly as OpenCode writes it —
-see [OpenCode](opencode.md) for the field-by-field description.
+see [OpenCode](opencode.md) for the field-by-field description. Kilo CLI adds
+tools of its own, read beside OpenCode's: `background_process` gives a command
+from `command` when its `action` is `start` or `monitor` (the other actions
+name a process by `id`), `notebook_read` a file from `path`, and
+`notebook_edit` a file from `path` and written lines from `source` when its
+`action` is `insert` or `replace`. A notebook path relative to the session
+directory is put under it (#4534).
 
 ## Known quirks and drift
 
