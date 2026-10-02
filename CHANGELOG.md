@@ -176,6 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Cline VS Code task keeps both sides of a `replace_in_file` edit written with Cline's `------- SEARCH` / `+++++++ REPLACE` markers, and the files and both sides of an `apply_patch` edit, whose patch Cline passes as `input` (#4504).
 - A `kiro-cli --v3` or Kiro IDE session keeps its tool calls: the commands it ran, the files it read, wrote, appended to or deleted, and the replaced text and written lines of each edit. Only the results' text was kept (#4506).
 - An Amp thread keeps its `shell_command` runs as commands and its `apply_patch` edits as files, replaced text and written lines; a patch you rejected is left out. Only `Bash` and `edit_file` were read (#4527).
+- A file Antigravity created with `write_to_file` gets its written lines, so `deja blame` can attribute it. The step that runs the call carries no diff, and the content in the call was not read (#4528).
 
 ## [0.21.4] - 2026-09-29
 

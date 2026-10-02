@@ -116,6 +116,9 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 	// Records already taken from a planner's tool_calls, so the step that
 	// runs the call and names it again in its header is not a second run.
 	fromCalls := map[model.Message]int{}
+	// What a write_to_file call is about to write, by file, until the step
+	// that ran it says it did (#4528).
+	pendingWrites := map[string][]string{}
 	cwd := ""
 	err := scanJSONLFromOffset(path, 0, func(m map[string]any) {
 		role := ""
@@ -139,6 +142,7 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 			if cwd == "" {
 				cwd = c
 			}
+			antigravityNoteWrites(m["tool_calls"], pendingWrites)
 		}
 		text, _ := m["content"].(string)
 		if role == "user" {
@@ -158,13 +162,17 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 		// only the source made shell dumps into assistant speech: 333 of 369
 		// MODEL rows on this machine, 90%, ranked as things the agent said.
 		if role == "assistant" {
-			for _, rec := range antigravityStep(str(m["type"]), text, t) {
+			step := antigravityStep(str(m["type"]), text, t)
+			for _, rec := range step {
 				key := model.Message{Role: rec.Role, Text: rec.Text}
 				if (rec.Role == RoleCommand || rec.Role == RoleFiles) && fromCalls[key] > 0 {
 					fromCalls[key]--
 					continue
 				}
 				s.Messages = append(s.Messages, rec)
+			}
+			if str(m["type"]) == "CODE_ACTION" && str(m["status"]) == "DONE" {
+				s.Messages = append(s.Messages, antigravityTakeWrite(text, step, pendingWrites, t)...)
 			}
 			s.Messages = append(s.Messages, antigravityTakeCalls(calls, fromCalls)...)
 			return
@@ -286,6 +294,50 @@ func antigravityToolCalls(v any, t time.Time) ([]model.Message, string) {
 		}
 	}
 	return out, cwd
+}
+
+// antigravityNoteWrites keeps the content of each write_to_file call by the
+// file it names, in call order. The CODE_ACTION step that runs the call says "Created file"
+// and carries no diff block — 1 of 50 did on the store this was read off — so
+// CodeContent is the only record of what the file was given (#4528).
+func antigravityNoteWrites(v any, pending map[string][]string) {
+	calls, _ := v.([]any)
+	for _, c := range calls {
+		call, _ := c.(map[string]any)
+		args, _ := call["args"].(map[string]any)
+		if args == nil || str(call["name"]) != "write_to_file" {
+			continue
+		}
+		p := decodeURIPath(strings.TrimPrefix(antigravityArg(args, "TargetFile"), "file://"))
+		if p != "" {
+			pending[p] = append(pending[p], antigravityArg(args, "CodeContent"))
+		}
+	}
+}
+
+// antigravityTakeWrite is the wrote record of a write_to_file call, once a
+// finished CODE_ACTION step names its file. A step that failed names none, so
+// a write that never happened is not recorded; one whose step had a diff
+// block already gave its written side.
+func antigravityTakeWrite(text string, step []model.Message, pending map[string][]string, t time.Time) []model.Message {
+	p := antigravityPath(text)
+	queue := pending[p]
+	if len(queue) == 0 {
+		return nil
+	}
+	content := queue[0]
+	if pending[p] = queue[1:]; len(pending[p]) == 0 {
+		delete(pending, p)
+	}
+	for _, rec := range step {
+		if rec.Role == RoleWrote {
+			return nil
+		}
+	}
+	if rec := WroteRecord(p, content); rec != "" && IndexWrites() {
+		return []model.Message{{Role: RoleWrote, Text: rec, Time: t}}
+	}
+	return nil
 }
 
 // antigravityArg reads one call argument. On disk each value is JSON in its

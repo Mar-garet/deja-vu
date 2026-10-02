@@ -72,3 +72,31 @@ func TestAmpShellCommandAndApplyPatch(t *testing.T) {
 		vocabWrote("/tmp/proj/refused.go", "func refusedChange() error { return nil }"),
 	})
 }
+
+// Antigravity 2.4.2: write_to_file {TargetFile, CodeContent} runs as a
+// CODE_ACTION step that says "Created file" and carries no diff. A step that
+// failed names no file and writes nothing (#4528).
+func TestAntigravityWriteToFileWrote(t *testing.T) {
+	q := func(s string) string { return vocabJSON(s) } // args are JSON-in-JSON on disk
+	planner := func(file, content string) string {
+		return vocabJSON(map[string]any{"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "created_at": "2026-09-30T10:00:05Z", "content": "",
+			"tool_calls": []any{map[string]any{"name": "write_to_file", "args": map[string]any{"TargetFile": q(file), "CodeContent": q(content), "Overwrite": false}}}})
+	}
+	step := func(status, content string) string {
+		return vocabJSON(map[string]any{"step_index": 2, "source": "MODEL", "type": "CODE_ACTION", "status": status, "created_at": "2026-09-30T10:00:09Z", "content": content})
+	}
+	failed := "func neverWritten() error { return nil }"
+	p := vocabWrite(t, filepath.Join(t.TempDir(), "brain", "b0c1d2e3", ".system_generated", "logs", "transcript.jsonl"),
+		`{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-09-30T10:00:00Z","content":"<USER_REQUEST>\nfix the retry loop\n</USER_REQUEST>"}`,
+		planner("/tmp/proj/jitter.go", jitter),
+		step("DONE", "Created At: now\nCompleted At: now\n\nCreated file file:///tmp/proj/jitter.go"),
+		planner("/tmp/proj/never.go", failed),
+		step("ERROR", "Created At: now\nCompleted At: now\n\nEncountered error in step execution: error executing cascade"),
+	)
+	vocabCheck(t, vocabParse(t, ParseAntigravityFile, p), []string{
+		vocabFiles("/tmp/proj/jitter.go"),
+		vocabWrote("/tmp/proj/jitter.go", jitter),
+	}, []string{
+		vocabWrote("/tmp/proj/never.go", failed),
+	})
+}

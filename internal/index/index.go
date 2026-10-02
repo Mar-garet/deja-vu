@@ -532,6 +532,9 @@ import (
 //
 // 60 also: an Amp shell_command call is a command and an apply_patch call
 // leaves files, edit and wrote records (#4527).
+//
+// 60 also: an Antigravity write_to_file call leaves a wrote record of its
+// CodeContent once its step finishes (#4528).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
