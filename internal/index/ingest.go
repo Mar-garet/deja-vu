@@ -4489,7 +4489,8 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 		for _, s := range ss {
 			key := s.Harness + ":" + s.ID
 			meta := m.Sessions[key]
-			if meta.ID == "" {
+			named := meta.ID != ""
+			if !named {
 				meta = metaWithOrd(metaForSession(s), nextSessionOrd(m.Sessions))
 			}
 			if meta.Started.IsZero() || (!s.Started.IsZero() && s.Started.Before(meta.Started)) {
@@ -4559,8 +4560,16 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 				// The same widening the first naming does, or a session that
 				// gets its thin title later — dsh and opencode both retitle
 				// after the fact — would keep it until an unrelated rebuild.
-				if t, _ := redact.Text(s.Title); widenThinSourceTitle(s, boundSourceTitle(s.Harness, t)) != meta.Title {
-					meta.Title = widenThinSourceTitle(s, boundSourceTitle(s.Harness, t))
+				//
+				// A thin title is widened from the session's first substantial
+				// turn, and a tail does not hold it: one appended turn renamed
+				// the session after itself. A row already named from the whole
+				// session keeps that name (#4452).
+				t, _ := redact.Text(s.Title)
+				t = boundSourceTitle(s.Harness, t)
+				fromTail := known && named && s.Harness != "deja" && thinTitle(t) && !thinTitle(meta.Title)
+				if w := widenThinSourceTitle(s, t); !fromTail && w != meta.Title {
+					meta.Title = w
 					meta.AgentTitle = s.AgentTitle
 				}
 			}

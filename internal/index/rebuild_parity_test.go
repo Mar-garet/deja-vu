@@ -331,3 +331,17 @@ func TestFullBuildReadsCodexHistorySessionWhole(t *testing.T) {
 	parityPass(t, inc, false)
 	sameAsRebuild(t, inc)
 }
+
+// A harness title too thin to use is widened from the session's first turn,
+// which an appended tail does not hold (#4452).
+func TestAppendedTurnKeepsTheWidenedTitle(t *testing.T) {
+	tmp := parityEnv(t, map[string]string{"DEJA_GOOSE_ROOT": "goose", "DEJA_GOOSE_DB": "goose/sessions/sessions.db"})
+	f := filepath.Join(tmp, "goose", "sessions", "20260901_1.jsonl")
+	parityWrite(t, f, `{"description":"retry loop","id":"20260901_1","created_at":"2026-09-01T09:00:00Z","updated_at":"2026-09-01T09:00:01Z","working_dir":"/tmp/proj","extension_data":{},"message_count":1}`+"\n"+
+		`{"id":"m1","role":"user","created":1788253200,"content":[{"type":"text","text":"fix the retry loop"}]}`+"\n", false)
+	inc := filepath.Join(tmp, "inc")
+	parityPass(t, inc, false)
+	parityWrite(t, f, `{"id":"m2","role":"user","created":1788253260,"content":[{"type":"text","text":"now run the tests"}]}`+"\n", true)
+	parityPass(t, inc, false)
+	sameAsRebuild(t, inc)
+}
