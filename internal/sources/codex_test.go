@@ -592,3 +592,39 @@ func TestCodexAppendResolvesPatchPathsAgainstTheHeadCWD(t *testing.T) {
 		t.Errorf("appended patch recorded %#v, want a file resolved to %q", ss[0].Messages, want)
 	}
 }
+
+// A sub-agent's rollout names the thread that spawned it, and recall reads the
+// edge to keep a live session's sub-agents off its own page (#4547). The
+// append path re-reads the head for it, as it does for the id.
+func TestCodexSubAgentNamesItsParent(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "rollout-2026-10-02T07-01-00-child.jsonl")
+	head := `{"timestamp":"2026-10-02T07:01:00Z","type":"session_meta","payload":{"id":"child","cwd":"/w","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent","depth":1}}}}}` + "\n"
+	turn := `{"timestamp":"2026-10-02T07:01:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"find the retry fix"}]}}` + "\n"
+	if err := os.WriteFile(p, []byte(head+turn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseCodexRollout(p)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v %#v", err, ss)
+	}
+	if ss[0].Kind != "subagent" || ss[0].Parent != "parent" {
+		t.Errorf("kind %q parent %q, want subagent of parent", ss[0].Kind, ss[0].Parent)
+	}
+	inc, err := ParseCodexRolloutFromOffset(p, int64(len(head)))
+	if err != nil || len(inc) != 1 {
+		t.Fatalf("offset parse: %v %#v", err, inc)
+	}
+	if inc[0].Kind != "subagent" || inc[0].Parent != "parent" {
+		t.Errorf("append: kind %q parent %q, want subagent of parent", inc[0].Kind, inc[0].Parent)
+	}
+
+	// A thread a person started says "cli" there and has no parent.
+	plain := filepath.Join(dir, "rollout-2026-10-02T07-00-00-top.jsonl")
+	if err := os.WriteFile(plain, []byte(`{"timestamp":"2026-10-02T07:00:00Z","type":"session_meta","payload":{"id":"top","cwd":"/w","source":"cli"}}`+"\n"+turn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ss, err := ParseCodexRollout(plain); err != nil || len(ss) != 1 || ss[0].Kind != "" || ss[0].Parent != "" {
+		t.Errorf("a top-level thread read as spawned: %v %#v", err, ss)
+	}
+}

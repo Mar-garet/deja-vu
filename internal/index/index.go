@@ -590,6 +590,8 @@ import (
 // 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
 // call leaves files records, notebook_edit a wrote record and delete_range an
 // edit record from its result's diff (#4541).
+// 60 also: a Codex sub-agent's rollout records the thread that spawned it as
+// its parent (#4547).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

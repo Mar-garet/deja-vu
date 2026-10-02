@@ -338,8 +338,9 @@ func parseCodexRolloutPath(path string, offset int64, id, project string) ([]mod
 	// is still talking in. One line re-read is cheaper than carrying state.
 	head := ""
 	if offset > 0 {
-		if id, cwd := codexRolloutHead(path); id != "" {
+		if id, cwd, payload := codexRolloutHead(path); id != "" {
 			s.ID = id
+			s.Kind, s.Parent = codexLineage(payload)
 			if cwd != "" {
 				s.Project = projectName(cwd)
 				// And carried into the parse: a patch names its files relative
@@ -421,6 +422,7 @@ func parseCodexRolloutWithScanner(s model.Session, idSettled bool, knownCWD stri
 				cwd = c
 				s.Project = projectName(c)
 			}
+			s.Kind, s.Parent = codexLineage(payload)
 			return
 		}
 		switch pt, _ := payload["type"].(string); pt {
@@ -647,10 +649,10 @@ func codexPatch(s *model.Session, payload map[string]any, cwd string, t time.Tim
 }
 
 // codexRolloutHead reads the identity a rollout declares in its first record.
-func codexRolloutHead(path string) (id, cwd string) {
+func codexRolloutHead(path string) (id, cwd string, payload map[string]any) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", ""
+		return "", "", nil
 	}
 	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
@@ -659,20 +661,31 @@ func codexRolloutHead(path string) (id, cwd string) {
 	// lines of slack costs nothing and covers a format that adds a preamble.
 	for i := 0; i < 8 && sc.Scan(); i++ {
 		var rec struct {
-			Type    string `json:"type"`
-			Payload struct {
-				ID        string `json:"id"`
-				SessionID string `json:"session_id"`
-				CWD       string `json:"cwd"`
-			} `json:"payload"`
+			Type    string         `json:"type"`
+			Payload map[string]any `json:"payload"`
 		}
 		if json.Unmarshal(sc.Bytes(), &rec) != nil || rec.Type != "session_meta" {
 			continue
 		}
-		if rec.Payload.ID != "" {
-			return rec.Payload.ID, rec.Payload.CWD
+		cwd, _ = rec.Payload["cwd"].(string)
+		if id, _ = rec.Payload["id"].(string); id == "" {
+			id, _ = rec.Payload["session_id"].(string)
 		}
-		return rec.Payload.SessionID, rec.Payload.CWD
+		return id, cwd, rec.Payload
+	}
+	return "", "", nil
+}
+
+// codexLineage is what a rollout's own session_meta says about where the thread
+// came from. A sub-agent's names the thread that spawned it, as
+// source.subagent.thread_spawn.parent_thread_id on codex 0.149.0; recall reads
+// the edge to leave a live session's sub-agents out of it (#4547).
+func codexLineage(payload map[string]any) (kind, parent string) {
+	src, _ := payload["source"].(map[string]any)
+	sub, _ := src["subagent"].(map[string]any)
+	spawn, _ := sub["thread_spawn"].(map[string]any)
+	if p, _ := spawn["parent_thread_id"].(string); p != "" {
+		return "subagent", p
 	}
 	return "", ""
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vshulcz/deja-vu/internal/atomicfile"
+	"github.com/vshulcz/deja-vu/internal/index"
 	"github.com/vshulcz/deja-vu/internal/model"
 )
 
@@ -177,6 +178,13 @@ func liveSessionIDs(dir string) map[string]bool {
 	return out
 }
 
+// liveLineage is the live sessions and every session that counts as one of
+// them: a sub-agent a live session spawned is being written too, under an id
+// no hook stamps, since its hooks fire under the parent's (#4547).
+func liveLineage(dir string) map[string]bool {
+	return index.Lineage(dir, liveSessionIDs(dir))
+}
+
 // withoutLiveSessions drops the sessions an agent is inside from a result.
 //
 // Only the MCP surfaces use it. On the CLI the reader is a person who may well
@@ -189,7 +197,7 @@ func liveSessionIDs(dir string) map[string]bool {
 // question ranks first by wording however it is weighted, so demotion left it
 // on a page of five (#3945).
 func withoutLiveSessions(dir string, ss []model.Session) []model.Session {
-	live := liveSessionIDs(dir)
+	live := liveLineage(dir)
 	if len(live) == 0 {
 		return ss
 	}
