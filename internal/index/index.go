@@ -490,6 +490,10 @@ import (
 // leaves files and wrote records (#4489).
 //
 // 60 also: a codex shell_command call is a command with its exit (#4490).
+//
+// 60 also: a Copilot CLI view call leaves a files record and an apply_patch
+// call, whose arguments are the patch string, leaves files, edit and wrote
+// records (#4491).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

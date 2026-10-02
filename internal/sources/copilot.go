@@ -71,8 +71,10 @@ func ParseCopilotFileFromOffset(path string, offset int64) ([]model.Session, err
 // is `path`, and the replaced span is `old_str` rather than `old_string` —
 // reading the wrong one loses the only record of what stopped existing.
 var copilotDialect = toolDialect{
-	pathKey:   "path",
-	pathTools: map[string]bool{"edit": true, "read": true, "write": true, "create": true},
+	pathKey: "path",
+	// view is how Copilot CLI 1.0.79 reads a file, under either model
+	// family (#4491).
+	pathTools: map[string]bool{"edit": true, "read": true, "write": true, "create": true, "view": true},
 	shellTool: "bash",
 	// The whole-file writes belong here too, or nothing a created file holds
 	// is evidence it was ever in a session — and a commit that only adds
@@ -135,6 +137,16 @@ func parseCopilotFileFromOffset(path string, offset int64) ([]model.Session, err
 				return
 			}
 			name, _ := data["toolName"].(string)
+			// With a GPT model the only edit tool is apply_patch, a freeform
+			// tool whose arguments are the patch string itself rather than an
+			// object, so every file such a session changed was dropped (#4491).
+			if body, ok := data["arguments"].(string); ok && name == "apply_patch" {
+				if records := applyPatchRecords(body, nil, t); len(records) > 0 {
+					s.Touch(t)
+					s.Messages = append(s.Messages, records...)
+				}
+				return
+			}
 			args, _ := data["arguments"].(map[string]any)
 			if name == "" || args == nil {
 				return

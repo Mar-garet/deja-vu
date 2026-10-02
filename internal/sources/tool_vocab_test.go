@@ -55,6 +55,9 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 		{"codex shell_command", vocabCodex, []string{
 			vocabCmd("$ go test ./...  → exit 1"),
 		}},
+		{"copilot view and apply_patch", vocabCopilot(patch), append([]string{
+			vocabFiles("/tmp/proj/view.go"),
+		}, patchWants...)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
