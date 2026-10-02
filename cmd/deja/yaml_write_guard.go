@@ -45,6 +45,14 @@ func yamlShapeProblem(text string) string {
 			continue
 		case line == "---" || strings.HasPrefix(line, "--- ") || line == "...":
 			flow, seen = "", map[string]string{}
+			// A document may open on the marker's own line: `--- {}` is the
+			// one-line flow document as much as `{}` is.
+			rest := strings.TrimSpace(stripYAMLComment(strings.TrimPrefix(line, "---")))
+			if strings.HasPrefix(rest, "{") || strings.HasPrefix(rest, "[") {
+				if strings.HasSuffix(rest, "}") || strings.HasSuffix(rest, "]") {
+					flow = rest
+				}
+			}
 			continue
 		case strings.HasPrefix(line, "%"):
 			continue

@@ -24,6 +24,9 @@ func TestInstallRefusesYAMLItCouldOnlyBreak(t *testing.T) {
 		{"continue", "{}\n", continueConfigPath},
 		{"aider", "{}\n", func() string { return filepath.Join(homeDir(), ".aider.conf.yml") }},
 		{"deepseek", "{}\n", func() string { return filepath.Join(sources.DSHHome(), "cordis.patch.yml") }},
+		// The same document opened on the marker's line.
+		{"hermes", "--- {}\n", func() string { return filepath.Join(sources.HermesHome(), "config.yaml") }},
+		{"goose", "--- {}  # empty\n", func() string { return filepath.Join(gooseConfigDir(), "config.yaml") }},
 	} {
 		t.Run(c.target+" "+strings.TrimSpace(c.seed), func(t *testing.T) {
 			hermeticEnv(t)
