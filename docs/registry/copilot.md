@@ -29,7 +29,8 @@ already name every file.
 
 - **MCP**: `deja install copilot` writes `mcpServers.deja` into
   `${COPILOT_HOME:-~/.copilot}/mcp-config.json`.
-- **Skill**: `~/.copilot/skills/deja-history/SKILL.md`, loaded on demand;
+- **Skill**: `~/.copilot/skills/deja-history/SKILL.md` (under `$COPILOT_HOME`
+  when set), loaded on demand;
   Copilot invokes a skill by name, so it is also the `/deja-history` command.
 - **Auto-recall**: none. Copilot CLI exposes no hook that can inject context,
   so MCP plus the skill is the whole install.

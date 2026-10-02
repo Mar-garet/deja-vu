@@ -70,8 +70,9 @@
 </ul>
 <p><code>${COPILOT_HOME:-~/.copilot}/mcp-config.json</code>.</p>
 <ul>
-<li><strong>Skill</strong>: <code>~/.copilot/skills/deja-history/SKILL.md</code>, loaded on demand;</li>
+<li><strong>Skill</strong>: <code>~/.copilot/skills/deja-history/SKILL.md</code> (under <code>$COPILOT_HOME</code></li>
 </ul>
+<p>when set), loaded on demand;</p>
 <p>Copilot invokes a skill by name, so it is also the <code>/deja-history</code> command.</p>
 <ul>
 <li><strong>Auto-recall</strong>: none. Copilot CLI exposes no hook that can inject context,</li>
