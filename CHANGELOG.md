@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja uninstall goose-auto` also removes the `plugins:` entry goose adds to `config.yaml` for deja's plugin on its first start, instead of leaving it pointing at a deleted directory (#4270).
 - An install and uninstall of `goose-auto` gives `~/.config/goose/AGENTS.md` back byte for byte instead of two newlines longer; install no longer says it created that file when it was there, and uninstall names its snapshot (#4269).
 - On Windows `deja install goose` writes to `%APPDATA%\Block\goose\config` even with `XDG_CONFIG_HOME` exported, which goose never reads there (#4286).
 - A relative `GOOSE_PATH_ROOT`, `XDG_CONFIG_HOME` or `XDG_DATA_HOME` is skipped for goose the way goose skips it, so `deja install goose` and the session reader no longer use a directory under wherever deja was run (#4285).

@@ -250,6 +250,73 @@ func removeGooseExtension(s string) string {
 	return strings.Replace(s, "\nextensions:\n\n", "\n\n", 1)
 }
 
+// dropGoosePluginEntryIn takes deja's plugin out of the `plugins:` map in
+// goose's config.yaml. goose adds an entry for each plugin it finds on its first
+// start, keyed by the plugin's directory (plugins/discovery.rs
+// filter_by_config), so uninstall removing only the directory left a key
+// pointing at nothing (#4270).
+func dropGoosePluginEntryIn(plugin string) (bool, error) {
+	path := filepath.Join(gooseConfigDir(), "config.yaml")
+	old, err := readConfig(path)
+	if err != nil || len(old) == 0 {
+		return false, err
+	}
+	body, crlf := normaliseNewlines(string(old))
+	next := dropGoosePluginEntry(body, plugin)
+	if next == body {
+		return false, nil
+	}
+	next = keepTrailingNewline(body, next)
+	if crlf {
+		next = strings.ReplaceAll(next, "\n", "\r\n")
+	}
+	_, err = writeIfChanged(path, old, []byte(next))
+	return err == nil, err
+}
+
+// dropGoosePluginEntry removes the entry keyed by plugin from the top-level
+// `plugins:` map, and the map with it when nothing else is under it. The key
+// is read plain or quoted, the ways a YAML writer can spell a path.
+func dropGoosePluginEntry(s, plugin string) string {
+	lines := strings.Split(s, "\n")
+	top := -1
+	for i, l := range lines {
+		if yamlIndentWidth(l) == 0 && yamlKeyLine(l, "plugins:") {
+			top = i
+			break
+		}
+	}
+	if top < 0 {
+		return s
+	}
+	for i := top + 1; i < len(lines); i++ {
+		l := lines[i]
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		w := yamlIndentWidth(l)
+		if w == 0 {
+			break
+		}
+		key, _, ok := strings.Cut(stripYAMLComment(t)+" ", ": ")
+		if !ok || filepath.Clean(yamlScalar(key)) != filepath.Clean(plugin) {
+			continue
+		}
+		j := i + 1
+		for j < len(lines) && (strings.TrimSpace(lines[j]) == "" || yamlIndentWidth(lines[j]) > w) {
+			j++
+		}
+		// Blank lines after the entry belong to whatever follows it.
+		for j > i+1 && strings.TrimSpace(lines[j-1]) == "" {
+			j--
+		}
+		lines = append(lines[:i], lines[j:]...)
+		return dropEmptyYAMLKey(strings.Join(lines, "\n"), "plugins:")
+	}
+	return s
+}
+
 // gooseExtensionsBlock returns the text after the extensions key, or "" when
 // there is no block form of it to read an indent from.
 func gooseExtensionsBlock(s string) string {
@@ -417,6 +484,11 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 		plugin := filepath.Dir(filepath.Dir(gooseHookPath()))
 		removed := isRealDir(plugin)
 		_ = os.RemoveAll(plugin)
+		if dropped, err := dropGoosePluginEntryIn(plugin); err != nil {
+			return installResult{}, err
+		} else if dropped && res.Action == "unchanged" {
+			res.Action = "updated"
+		}
 		// And the directories deja made above it (#3698).
 		pruneCreatedDir(filepath.Dir(plugin))
 		// The recall now lives in the reader's own AGENTS.md, so uninstall
