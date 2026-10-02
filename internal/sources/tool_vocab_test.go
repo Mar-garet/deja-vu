@@ -64,6 +64,14 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 		{"gemini read_many_files", vocabGemini, []string{
 			vocabFiles("/tmp/proj/many_a.go\n/tmp/proj/many_b.go"),
 		}},
+		{"opencode 1.x edit and write", vocabOpencodeV1, []string{
+			vocabEdit("/tmp/proj/retry.go", oldLoop),
+			vocabWrote("/tmp/proj/retry.go", newLoop),
+			vocabWrote("/tmp/proj/backoff.go", jitter),
+		}},
+		{"opencode 2.x write", vocabOpencodeV2, []string{
+			vocabWrote("/tmp/proj/backoff.go", jitter),
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -224,8 +232,10 @@ func vocabGemini(t *testing.T) []model.Session {
 // content} (#4495).
 func vocabOpencodeV1(t *testing.T) []model.Session {
 	part := func(id, tool string, input any) string {
-		return fmt.Sprintf("insert into part values('%s','m1',%s);\n", id, sqlQuote(vocabJSON(map[string]any{"type": "tool", "tool": tool, "callID": id,
-			"state": map[string]any{"status": "completed", "input": input, "output": "ok", "time": map[string]any{"start": 1790000002000}}})))
+		// Spelled out rather than marshalled: opencode writes type and tool
+		// first, and the reader's cheap gate looks for them there.
+		data := fmt.Sprintf(`{"type":"tool","tool":%q,"callID":%q,"state":{"status":"completed","input":%s,"output":"ok","time":{"start":1790000002000}}}`, tool, id, vocabJSON(input))
+		return fmt.Sprintf("insert into part values('%s','m1',%s);\n", id, sqlQuote(data))
 	}
 	db := vocabSQL(t, `create table session(id text primary key, parent_id text, directory text, title text, time_created integer, time_updated integer);
 create table message(id text, session_id text, time_created integer, data text);

@@ -500,6 +500,9 @@ import (
 //
 // 60 also: a Gemini CLI read_many_files call leaves a files record for the
 // literal paths in include (#4494).
+//
+// 60 also: an opencode or Kilo CLI 1.x edit or write call, and a 2.x write
+// call, leaves edit and wrote records (#4495).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
