@@ -34,6 +34,10 @@ import (
 // agent's prompt (hook_spawn.go). So in grok the hooks below are wired for
 // their side effects — warming the index, forgetting what a compaction threw
 // away — and for the spawn, which is the one place deja still speaks.
+//
+// PostToolUse has changed since 1.0.5: grok 1.0.41's hook docs say its
+// context goes to the model with the tool's result, so a failed command gets
+// the fix pair there too (#4499).
 func grokHooksPath() string {
 	return filepath.Join(sources.GrokHome(), "hooks", "deja.json")
 }
