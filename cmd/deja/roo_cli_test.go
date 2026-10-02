@@ -23,8 +23,13 @@ func rooCLITask(t *testing.T, root, id, workspace string) string {
 	if err := os.WriteFile(path, []byte(`[{"role":"user","content":"hi"}]`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	item := `{"id":"` + id + `","ts":1788785794339,"task":"fix the queue","workspace":"` + workspace + `"}`
-	if err := os.WriteFile(filepath.Join(dir, "history_item.json"), []byte(item), 0o644); err != nil {
+	// Encoded, not spliced: a Windows workspace's backslashes are escapes in
+	// JSON, and a spliced C:\Users\RUNNER~1 failed to parse (#4455).
+	item, err := json.Marshal(map[string]any{"id": id, "ts": 1788785794339, "task": "fix the queue", "workspace": workspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "history_item.json"), item, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -49,18 +54,31 @@ func TestResumeRooSplitsTheCLIFromTheEditor(t *testing.T) {
 	// The CLI looks a task up by the workspace it is given, and with no -w
 	// that is the real path of its cwd: a task created with -w through a
 	// symlink (/tmp on macOS) is "not found" from a plain cd (#4422).
-	if cmd != "roo -w "+work+" --session-id "+id {
+	if cmd != "roo -w "+resumeWordFor(t, work)+" --session-id "+id {
 		t.Fatalf("cmd = %q", cmd)
 	}
 	if runtime.GOOS != "windows" && dir != work {
 		t.Fatalf("dir = %q, want the workspace %q", dir, work)
 	}
-	// A workspace that cannot go on the command line as one word keeps the
-	// cd alone rather than a -w that --exec would split.
-	spaced := filepath.Join(tmp, "my app")
+	// A workspace with a space or a ~ in it, as a Windows profile under its
+	// 8.3 name has, is quoted rather than left off: without -w the CLI looks
+	// under the cwd's real path and misses the task (#4455). --exec reads the
+	// quoted word back as one argument.
+	spaced := `C:\Users\JOHNSM~1\My Projects\app`
 	sid := "01a07bf9-8882-7703-a3fa-245deb8ea753"
-	if _, cmd, err := resumeCommand(model.Session{Harness: "roo", ID: "roo-task-" + sid, Path: rooCLITask(t, cli, sid, spaced)}); err != nil || cmd != "roo --session-id "+sid {
-		t.Fatalf("spaced workspace: cmd = %q, err = %v", cmd, err)
+	want := "roo -w 'C:\\Users\\JOHNSM~1\\My Projects\\app' --session-id " + sid
+	if _, cmd, err := resumeCommand(model.Session{Harness: "roo", ID: "roo-task-" + sid, Path: rooCLITask(t, cli, sid, spaced)}); err != nil || cmd != want {
+		t.Fatalf("spaced workspace: cmd = %q, err = %v, want %q", cmd, err, want)
+	}
+	if got, err := resumeArgv(want); err != nil || strings.Join(got, "|") != "roo|-w|"+spaced+"|--session-id|"+sid {
+		t.Fatalf("--exec splits %q into %q, err = %v", want, got, err)
+	}
+	// A quote has no form bash, zsh and PowerShell all read alike, so that
+	// workspace keeps the cd alone.
+	quoted := filepath.Join(tmp, "bob's app")
+	qid := "01a07bf9-8882-7703-a3fa-245deb8ea754"
+	if _, cmd, err := resumeCommand(model.Session{Harness: "roo", ID: "roo-task-" + qid, Path: rooCLITask(t, cli, qid, quoted)}); err != nil || cmd != "roo --session-id "+qid {
+		t.Fatalf("quoted workspace: cmd = %q, err = %v", cmd, err)
 	}
 
 	// An editor task lives under the host's globalStorage, and the CLI never
@@ -157,4 +175,15 @@ func rooAllowList(t *testing.T, path string) []string {
 		t.Fatalf("settings are not JSON Roo can read: %v\n%s", err, b)
 	}
 	return cfg.Servers["deja"].AlwaysAllow
+}
+
+// resumeWordFor is the word a temp-dir workspace goes on the command as: bare
+// on a Unix temp dir, quoted for a Windows one with its backslashes.
+func resumeWordFor(t *testing.T, s string) string {
+	t.Helper()
+	w, ok := resumeWord(s)
+	if !ok {
+		t.Fatalf("workspace %q cannot go on a command", s)
+	}
+	return w
 }
