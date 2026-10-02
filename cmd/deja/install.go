@@ -3684,7 +3684,7 @@ func opencodeNestedServers(m map[string]any) (map[string]any, bool) {
 // The generic JSONC writer is used here because it already handles dotted
 // object paths, comments, trailing commas, aliases and nested indentation.
 func updateOpencodeJSONCNested(old []byte, exe string, uninstall bool) ([]byte, string, error) {
-	text := string(old)
+	text := lfText(old)
 	var root map[string]any
 	if err := json.Unmarshal([]byte(jsoncToJSON(text)), &root); err != nil {
 		return nil, "", err
@@ -4190,7 +4190,10 @@ func mergedJSONCEntryLine(dropped []string, key, exe string) (string, string) {
 
 func updateOpencodeJSONC(old []byte, exe string, uninstall bool) ([]byte, string, error) {
 	line := fmt.Sprintf(`    "deja": {"type":"local","command":[%q,"mcp"]}`, exe)
-	s := string(old)
+	// In LF, like the other writers that splice lines: split on '\n' alone,
+	// every line kept its '\r', the comma check missed it and the second
+	// install wrote `},\r,` (#4553). writeIfChanged puts the CRs back.
+	s := lfText(old)
 	if strings.TrimSpace(s) == "" {
 		if uninstall {
 			return []byte("{}\n"), "", nil

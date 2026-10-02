@@ -296,7 +296,7 @@ func flagRecordKey(keys []string, flagKey string) string {
 // discovered, listed as ready, and never invoked, so the two are written
 // together and taken back out together (#2811).
 func setOpenClawEntryJSONC(path string, old []byte, blockKey, id, flagKey string, on bool) (string, error) {
-	text := string(old)
+	text := lfText(old)
 	var root map[string]any
 	if err := json.Unmarshal([]byte(stripJSONComments(text)), &root); err != nil {
 		return "", configParseError(path, err)

@@ -120,10 +120,14 @@ func readTestFile(t *testing.T, path string) string {
 // it, the line ends in a bare CR, which an editor shows as a line break with
 // the comma alone at the start of the next line.
 func TestInstallJSONCCommaLandsBeforeTheCarriageReturn(t *testing.T) {
-	out, _, err := updateOpencodeJSONC([]byte("{\r\n  \"model\": \"shim/luna\"\r\n}\r\n"), "/bin/deja", false)
+	in := []byte("{\r\n  \"model\": \"shim/luna\"\r\n}\r\n")
+	out, _, err := updateOpencodeJSONC(in, "/bin/deja", false)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The writer edits in LF and writeIfChanged puts the file's CRs back
+	// (#4553).
+	out = matchLineEndings(in, out)
 	if !strings.Contains(string(out), "\"model\": \"shim/luna\",\r\n") {
 		t.Errorf("the comma is not at the end of the code:\n%q", out)
 	}
