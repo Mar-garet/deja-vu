@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -99,7 +100,7 @@ func mergeIngestDiag(m *Manifest) {
 		// The clip count for this pass was recorded during redaction, which
 		// runs before this fold, so it is not something to start over.
 		if e, ok := m.IngestFiles[p]; ok && e.Clipped > 0 {
-			m.IngestFiles[p] = FileIngest{Clipped: e.Clipped}
+			m.IngestFiles[p] = FileIngest{Clipped: e.Clipped, ClippedSessions: e.ClippedSessions}
 			continue
 		}
 		delete(m.IngestFiles, p)
@@ -3111,7 +3112,7 @@ func redactForIngest(m *Manifest, sourcePath, text string) string {
 			cut--
 		}
 		redacted = redacted[:cut]
-		countClipped(m, sourcePath, 1)
+		countClipped(m, sourcePath, "", 1)
 	}
 	n := counts.Total()
 	if n == 0 || m == nil {
@@ -3445,6 +3446,9 @@ func copyIngestFiles(old map[string]FileIngest, reread map[string]FileState) map
 	for p, e := range old {
 		if _, ok := reread[p]; ok {
 			e.Clipped = 0
+			e.ClippedSessions = nil
+		} else {
+			e.ClippedSessions = maps.Clone(e.ClippedSessions)
 		}
 		out[p] = e
 	}
@@ -5026,7 +5030,7 @@ func preRedactSessions(m *Manifest, ss []model.Session) {
 					redacted, counts, clipped := indexedText(s.Messages[mi].Text)
 					if clipped {
 						mu.Lock()
-						countClipped(m, s.Path, 1)
+						countClipped(m, s.Path, s.ID, 1)
 						mu.Unlock()
 					}
 					s.Messages[mi].Text = redacted
@@ -5129,7 +5133,7 @@ func filePrefixHash(path string, n int64) uint64 {
 // countClipped records messages stored short of the transcript, against the
 // file that holds them. The caller holds the lock where one is needed;
 // redactForIngest runs single-threaded.
-func countClipped(m *Manifest, sourcePath string, n int) {
+func countClipped(m *Manifest, sourcePath, sessionID string, n int) {
 	if m == nil || n == 0 {
 		return
 	}
@@ -5151,5 +5155,11 @@ func countClipped(m *Manifest, sourcePath string, n int) {
 	}
 	e := m.IngestFiles[p]
 	e.Clipped += n
+	if sessionID != "" {
+		if e.ClippedSessions == nil {
+			e.ClippedSessions = map[string]int{}
+		}
+		e.ClippedSessions[sessionID] += n
+	}
 	m.IngestFiles[p] = e
 }
