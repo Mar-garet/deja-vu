@@ -541,6 +541,9 @@ func clineJoinExits(msgs []model.Message, from int, raw json.RawMessage, d toolD
 		} else if code, ok := rooExitCode(contentText(m["content"])); ok {
 			exits.stamp(msgs, id, "", code)
 		}
+		// A result answers its call once; an id handed out again belongs to
+		// a later call.
+		delete(exits, id)
 	}
 }
 

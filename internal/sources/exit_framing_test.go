@@ -274,3 +274,19 @@ func TestCommandCodeFailedCommandKeepsItsExitCode(t *testing.T) {
 		{"quoting", "commandcode", commandCodeExitStore("ok\nExit code: 1"), "$ go test ./..."},
 	})
 }
+
+// A result answers the call before it, once. Command Code's ids read like
+// call_1, and an id handed out again must not carry a later failure back to
+// an earlier run that came back clean.
+func TestAReusedCallIDStampsOnlyItsOwnRun(t *testing.T) {
+	dir := t.TempDir()
+	second := strings.ReplaceAll(strings.ReplaceAll(commandCodeCall, `"go test ./..."`, `"go vet ./..."`), `"id":"a1"`, `"id":"a2"`)
+	p := writeExitFixture(t, filepath.Join(dir, "-tmp-proj", "s1.jsonl"),
+		`{"type":"session","version":3,"id":"s1","timestamp":"2026-10-01T20:09:14.839Z","cwd":"/tmp/proj"}`+"\n"+
+			commandCodeCall+commandCodeResult("ok  \tproj\t0.01s")+second+commandCodeResult("Exit code: 1\nvet: retry.go:3: unreachable code"))
+	got := commandsOf(parseKindForTest(t, "commandcode", p))
+	want := []string{"$ go test ./...", "$ go vet ./...  → exit 1"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("commands = %q, want %q", got, want)
+	}
+}

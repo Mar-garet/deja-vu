@@ -78,6 +78,9 @@ func joinResultExits(msgs []model.Message, from int, blocks any, d toolDialect, 
 		if n, ok := code(m); ok {
 			exits.stamp(msgs, id, "", n)
 		}
+		// A result answers its call once: a client that hands an id out
+		// again, as call_1, means a later call by it.
+		delete(exits, id)
 	}
 }
 
