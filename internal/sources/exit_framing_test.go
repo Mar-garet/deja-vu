@@ -249,3 +249,28 @@ func TestCodeWhaleFailedBashKeepsItsExitCode(t *testing.T) {
 		{"not an error", "codewhale", codeWhaleSaved(`"content":"printed\nCommand exited with code 1"`), "$ go test ./..."},
 	})
 }
+
+const commandCodeCall = `{"type":"message","id":"a1","timestamp":"2026-10-01T20:09:15.324Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"shell_command","input":{"command":"go test ./..."}}],"meta":{"source":"model"}}}` + "\n"
+
+func commandCodeResult(text string) string {
+	return `{"type":"message","id":"r1","timestamp":"2026-10-01T20:09:16.324Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"text","text":` + vocabJSON(text) + `}]}],"meta":{"source":"tool"}}}` + "\n"
+}
+
+func commandCodeExitStore(result string) func(*testing.T, string) string {
+	return func(t *testing.T, dir string) string {
+		return writeExitFixture(t, filepath.Join(dir, "-tmp-proj", "s1.jsonl"),
+			`{"type":"session","version":3,"id":"s1","timestamp":"2026-10-01T20:09:14.839Z","cwd":"/tmp/proj"}`+"\n"+commandCodeCall+commandCodeResult(result))
+	}
+}
+
+// Command Code opens a failed command's result with "Exit code: N", or "Exit
+// code: N (<what it means>)" for a code it knows (formatShellCommandResult),
+// and sets no is_error; the reader never joined a result to its call (#4539).
+func TestCommandCodeFailedCommandKeepsItsExitCode(t *testing.T) {
+	runExitRows(t, []exitRow{
+		{"failed", "commandcode", commandCodeExitStore("Exit code: 1\n--- FAIL: TestRetry (0.00s)\nFAIL"), "$ go test ./...  → exit 1"},
+		{"failed, explained", "commandcode", commandCodeExitStore("Exit code: 1 (No matches found)"), "$ go test ./...  → exit 1"},
+		{"clean", "commandcode", commandCodeExitStore("ok  \tproj\t0.01s"), "$ go test ./..."},
+		{"quoting", "commandcode", commandCodeExitStore("ok\nExit code: 1"), "$ go test ./..."},
+	})
+}
