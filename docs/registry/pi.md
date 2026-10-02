@@ -71,7 +71,7 @@ A `toolCall` block carries `name` and `arguments`. deja reads them for pi and ev
 | `apply_patch` (OpenClaw) | `input`, a `*** Begin Patch` body | each file the patch names, its removed lines, its added lines |
 | `bash` (OpenClaw: `exec`; the pi-coding-agent under Senpi and Kimchi also `powershell`) | `command` | the command, and `→ exit N` from the matching `toolResult` (`details.exitCode` when there is one, else the "Command exited with code N" line that ends a failed result, `exit 0` for a result that is not an error) |
 
-A relative `path` resolves against the header's `cwd`. gjc's `edit` takes one `input` string in its hashline form instead; see the gjc entry.
+A relative `path` resolves against the header's `cwd`. gjc's `edit` takes one `input` string in its hashline form instead; see the gjc entry. omp and gjc also edit in a replace mode, omp's `{path, old_string, new_string}` (or `edits` of those) and gjc's `{path, edits:[{old_text, new_text}]}`, and a patch mode, `{path, edits:[{op, diff}]}`: those give the same records, a patch's `-` lines per hunk the replaced span and its `+` lines, or a created file's whole `diff`, the written lines (#4524).
 
 ### Timestamps
 

@@ -88,7 +88,9 @@ Messages use a wrapper envelope:
 where `"type": "text"`. Blocks with `"type": "thinking"` or `"type": "image"`
 are skipped. `toolCall` blocks are read the way pi's are (see the pi entry):
 the file a `read`, `edit` or `write` names, the replaced and written text, and
-the `bash` command (#4113).
+the `bash` command (#4113). omp's `replace` edit mode, `{path, old_string,
+new_string}`, and its `patch` mode, `{path, edits:[{op, diff}]}`, give the same
+records (#4524).
 
 ### Timestamps
 
