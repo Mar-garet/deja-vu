@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The index swap tests count the waits the swap asks for instead of wall time, so a loaded runner no longer fails `TestASwapThatCannotRenameKeepsTheOldIndex` (#4160).
 - `go test ./cmd/deja` passes on a machine with opencode installed. Install asked the real `opencode --version`, which wrote its log into the test home, and doctor judged a test plugin by the installed major; the suite now reads as a machine with no opencode unless a test names a version (#4155).
 - In Claude Code a failing command now gets the earlier fix. Claude fires `PostToolUseFailure` for a command that exits non-zero, which `deja install claude-auto` never wired, and it rejected the hook's reply as naming the wrong event. Existing installs pick the hook up on the next upgrade; Claude Code before 2.0.56, which would ignore the whole settings file over the unknown event, is left without it (#4488).
 - A failed command keeps its `→ exit N` in Claude Code, Cherry Studio, pi, omp, gjc, prime, senpi, Kimchi, goose, Cline, Kiro CLI, Zed and Copilot Chat, so `deja how` and `deja fix` can tell it from a run whose outcome is unknown. Copilot Chat terminal runs also keep their output (#4487, #4501, #4496, #4502, #4505, #4507, #4493).
