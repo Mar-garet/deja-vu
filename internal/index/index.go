@@ -509,6 +509,9 @@ import (
 //
 // 60 also: a grok-dev session in grok.db keeps its tool calls and results as
 // commands, files, edits, wrote and tool output (#4498).
+//
+// 60 also: an OpenClaw apply_patch call leaves files, edit and wrote records
+// (#4500).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

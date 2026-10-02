@@ -88,6 +88,7 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 			vocabWrote("/tmp/proj/retry.go", newLoop),
 			vocabWrote("/tmp/proj/jitter.go", jitter),
 		}},
+		{"openclaw apply_patch", vocabOpenClaw(patch), patchWants},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

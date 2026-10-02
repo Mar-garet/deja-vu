@@ -168,6 +168,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An opencode session whose changes went through `edit` or `write` keeps them: the replaced text and the written lines, on 1.x stores (and Kilo CLI's) and for `write` on 2.x, so `deja restore` and `blame` answer for those files. Which tool opencode hands a model decided whether a session had any (#4495).
 - A Grok Build session keeps what `search_replace` and `write` changed: the file, the replaced text and the written lines. Only `read_file` and the shell were read, so every edit was a bare title (#4497).
 - A grok-dev session keeps what it did: the commands it ran with their output, the files it read and the edits and writes it made. Only the text parts of `grok.db` were read, so a session was its prompts and prose alone (#4498).
+- An OpenClaw edit made with `apply_patch` is recorded as the files it touched, the lines it removed and the lines it added, in both the JSONL and SQLite stores (#4500).
 
 ## [0.21.4] - 2026-09-29
 
