@@ -51,6 +51,13 @@ func TestAFailedCommandKeepsItsExitCode(t *testing.T) {
 		{name: "claude", kind: "claude", fixture: file("c1.jsonl", failedClaudeTranscript)},
 		{name: "claude reference parser", fixture: file("c1.jsonl", failedClaudeTranscript), parse: func(p string) ([]model.Session, error) { return parseClaudeGenericFromOffset(p, 0) }},
 		{name: "cherrystudio", kind: "cherrystudio", fixture: file("c1.jsonl", failedClaudeTranscript)},
+		{name: "pi", kind: "pi", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
+		{name: "omp", kind: "omp", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
+		{name: "gjc", kind: "gjc", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
+		{name: "prime", kind: "prime", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
+		{name: "senpi", kind: "senpi", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
+		{name: "kimchi", kind: "kimchi", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
+		{name: "cherrystudio-pi", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript), parse: func(p string) ([]model.Session, error) { return ParseCherryStudioPiFileFromOffset(p, 0) }},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
