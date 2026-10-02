@@ -6,10 +6,12 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -667,6 +669,11 @@ func doctorHarnesses(w io.Writer, dir string) {
 		partly[check.name] = store.Partial
 	}
 
+	// Crush and OpenClaw print a row per database under one name, and the
+	// counts below are the harness's, not the row's: repeated on every row, an
+	// empty crush.db claimed another project's sessions (#4379). The first row
+	// of a harness carries them.
+	counted := map[string]bool{}
 	printRow := func(name, path string, present bool, detail string) {
 		// A store DEJA_STORES silences has no row at all. The line above says
 		// which stores are being read; a row saying "missing" about one of the
@@ -726,7 +733,9 @@ func doctorHarnesses(w io.Writer, dir string) {
 		// `sync import` has no files at all, and doctor said nothing about the
 		// sessions it does hold — the only surface that names them was stats
 		// (#892).
-		if n, ok := indexed[name]; ok {
+		first := !counted[name]
+		counted[name] = true
+		if n, ok := indexed[name]; ok && first {
 			if detail != "" {
 				detail += ", "
 			}
@@ -761,7 +770,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 		// read. Outside the block above on purpose — a store with no indexed
 		// session at all has no entry there, and that is exactly the store
 		// this is about (#3747).
-		if u := neverRead[name]; u > 0 {
+		if u := neverRead[name]; u > 0 && first {
 			if detail != "" {
 				detail += ", "
 			}
@@ -988,7 +997,15 @@ func doctorHarnesses(w io.Writer, dir string) {
 	if kiroIDE > 0 {
 		kiroDetail += ", " + doctorCount(kiroIDE, "IDE file")
 	}
-	printRow("kiro", kiroRoot, kiroCLI+kiroIDE > 0, kiroDetail)
+	// `kiro-cli chat --no-interactive` writes only to its database (#4300).
+	kiroLoc := kiroRoot
+	kiroDB := sources.KiroDB()
+	kiroHasDB := doctorExists(kiroDB)
+	if kiroHasDB {
+		kiroLoc += string(os.PathListSeparator) + kiroDB
+		kiroDetail += ", CLI store present" + doctorDBPrereqNote(sqlite)
+	}
+	printRow("kiro", kiroLoc, kiroCLI+kiroIDE > 0 || kiroHasDB, kiroDetail)
 
 	// Cherry Studio writes Claude Code transcripts under its own app data, so
 	// the row names the roots it found rather than the app directory (#3644).
@@ -1027,7 +1044,11 @@ func doctorHarnesses(w io.Writer, dir string) {
 	primeRoot := sources.PrimeRoot()
 	printFiles("prime", primeRoot, doctorExists(primeRoot), sources.PrimeSessionFiles())
 	ampRoot := sources.AmpRoot()
-	printFiles("amp", ampRoot, doctorExists(ampRoot), sources.AmpThreadFiles())
+	if sources.AmpThreadsServerSide() {
+		printRow("amp", ampRoot, doctorExists(ampRoot), doctorCount(0, "file")+", "+ampServerSideNote)
+	} else {
+		printFiles("amp", ampRoot, doctorExists(ampRoot), sources.AmpThreadFiles())
+	}
 	// CodeWhale keeps its transcripts beside its own bookkeeping — the offline
 	// queue, the ownership ledger, the checkpoint slot — so those are placed
 	// rather than counted as transcripts deja could not read.
@@ -1367,9 +1388,20 @@ func doctorMCP(w io.Writer) {
 				fmt.Fprintf(w, "  %-12s %s\n", "", other)
 			}
 		}
+		// Declared and switched off is not wired in any sense a session
+		// feels: the client never starts the server (#4303).
+		if status == "wired" && dejaEntrySwitchedOff(c.path) {
+			fmt.Fprintf(w, "  %-12s %s\n", "",
+				"the entry is switched off — "+c.name+" will not start it until you turn it back on")
+		}
 		// Zed's entry can defer to an extension instead of naming a binary,
 		// and then "wired" is a fact about an id rather than about anything
 		// runnable (#3660).
+		if status == "wired" && c.name == "deepseek" {
+			if missing := dshPluginsMissing(c.path); len(missing) > 0 {
+				fmt.Fprintf(w, "  %-12s %s\n", "", dshPluginsMissingNote(c.path, missing))
+			}
+		}
 		if status == "wired" && c.name == "zed" {
 			if note := zedUnreachableNote(c.path); note != "" {
 				fmt.Fprintf(w, "  %-12s %s\n", "", note)
@@ -1395,6 +1427,34 @@ func doctorMCPDuplicateNote(keys []string) string {
 		return fmt.Sprintf("two entries in this config run deja (%s) — every session starts the server twice", names)
 	}
 	return fmt.Sprintf("%d entries in this config run deja (%s) — every session starts the server %d times", len(keys), names, len(keys))
+}
+
+// dejaEntrySwitchedOff reports whether every deja entry in a JSON config is
+// switched off — `disabled: true`, or opencode's `enabled: false`, the test
+// install uses. One entry still on is enough for recall to work.
+func dejaEntrySwitchedOff(path string) bool {
+	b, err := readConfig(path)
+	if err != nil {
+		return false
+	}
+	var root map[string]any
+	if json.Unmarshal([]byte(jsoncToJSON(string(b))), &root) != nil {
+		return false
+	}
+	off := false
+	for _, m := range mcpServerMaps(root) {
+		for key, v := range m {
+			if key != "deja" && !mcpEntryRunsDeja(v) {
+				continue
+			}
+			entry, ok := v.(map[string]any)
+			if !ok || !entrySwitchedOff(entry) {
+				return false
+			}
+			off = true
+		}
+	}
+	return off
 }
 
 // dejaCommandMissing returns the deja binary a config names when that file is
@@ -1798,6 +1858,159 @@ func doctorDSHWired(path string) bool {
 		return false
 	}
 	return strings.Contains(string(b), "id: mcp-deja")
+}
+
+// dshPluginsMissing lists the plugin files deja's block in the layer names by
+// path and that are not on disk. dsh imports every row when it builds a
+// profile, and one file that is gone fails the whole load: no agent at all, not
+// just no recall, while the server row above still reads wired (#4292).
+func dshPluginsMissing(path string) []string {
+	b, err := readConfig(path)
+	if err != nil {
+		return nil
+	}
+	var missing []string
+	inBlock := false
+	for _, line := range strings.Split(lfText(b), "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(t, dshBlockStart):
+			inBlock = true
+			continue
+		case t == dshBlockEnd:
+			inBlock = false
+			continue
+		}
+		name, ok := strings.CutPrefix(t, "name:")
+		if !inBlock || !ok {
+			continue
+		}
+		for _, m := range dshNameMissing(yamlScalar(strings.TrimSpace(name))) {
+			if !slices.Contains(missing, m) {
+				missing = append(missing, m)
+			}
+		}
+	}
+	return missing
+}
+
+// dshNameMissing is what one plugin name resolves to that dsh cannot load.
+// The rules are dsh 0.1.1-rc.2's, measured rather than assumed: a name
+// starting with "." is resolved against the directory of the profile being
+// built, not against the layer, so it is checked in every profile there is; a
+// file:// URL is imported as the file; `~/` is never expanded and loads
+// nothing even when the file is there. A package name such as
+// '@deepseek-ai/dsh-mcp-client' resolves inside dsh's own bundle and is not a
+// file deja can check.
+func dshNameMissing(name string) []string {
+	switch {
+	case strings.HasPrefix(name, "~/"):
+		return []string{name}
+	case strings.HasPrefix(name, "file://"):
+		u, err := url.Parse(name)
+		if err != nil {
+			return nil
+		}
+		p := filepath.FromSlash(u.Path)
+		if !doctorExists(p) {
+			return []string{p}
+		}
+	case strings.HasPrefix(name, "."):
+		var out []string
+		for _, dir := range dshProfileDirs() {
+			if p := filepath.Join(dir, filepath.FromSlash(name)); !doctorExists(p) {
+				out = append(out, p)
+			}
+		}
+		return out
+	case filepath.IsAbs(name) && !doctorExists(name):
+		return []string{name}
+	}
+	return nil
+}
+
+// dshProfileDirs are the profiles dsh has generated, one directory each beside
+// the node_modules their plugins load from.
+func dshProfileDirs() []string {
+	root := filepath.Join(sources.DSHHome(), "profiles")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() && e.Name() != "node_modules" && !strings.HasPrefix(e.Name(), ".") {
+			out = append(out, filepath.Join(root, e.Name()))
+		}
+	}
+	return out
+}
+
+// dshLayerNamesMissing reports whether the layer names a plugin file that is gone.
+func dshLayerNamesMissing(file string) bool {
+	for _, m := range dshPluginsMissing(dshPatchPath()) {
+		if m == file {
+			return true
+		}
+	}
+	return false
+}
+
+// dshPluginsMissingNote is the line under the deepseek row when the layer names
+// a plugin file that is gone. The -auto target is named when the layer carries
+// the auto row, since the plain one would take that row out.
+func dshPluginsMissingNote(path string, missing []string) string {
+	b, _ := readConfig(path)
+	target := "deepseek"
+	if strings.Contains(string(b), "id: deja-auto") {
+		target = "deepseek-auto"
+	}
+	names := make([]string, len(missing))
+	for i, m := range missing {
+		names[i] = reportPath(m)
+	}
+	list, it := names[0], "it"
+	if n := len(names); n > 1 {
+		list, it = strings.Join(names[:n-1], ", ")+" and "+names[n-1], "them"
+	}
+	return "names " + list + ", which dsh cannot find — dsh will not start; `deja install " + target + "` writes " + it + " again, or `deja uninstall deepseek` takes deja out of the layer"
+}
+
+// yamlScalar reads one plain, single- or double-quoted YAML scalar, the three
+// ways a hand edit or deja's own yamlQuote can spell a path. A comment after
+// it is not part of it: a plain scalar ends at " #", a quoted one at its
+// closing quote.
+func yamlScalar(v string) string {
+	if len(v) >= 2 && v[0] == '\'' {
+		for i := 1; i < len(v); i++ {
+			if v[i] != '\'' {
+				continue
+			}
+			if i+1 < len(v) && v[i+1] == '\'' {
+				i++
+				continue
+			}
+			return strings.ReplaceAll(v[1:i], "''", "'")
+		}
+	}
+	if len(v) >= 2 && v[0] == '"' {
+		for i := 1; i < len(v); i++ {
+			if v[i] == '\\' {
+				i++
+				continue
+			}
+			if v[i] == '"' {
+				r := strings.NewReplacer(`\\`, `\`, `\"`, `"`)
+				return r.Replace(v[1:i])
+			}
+		}
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] == '#' && (v[i-1] == ' ' || v[i-1] == '\t') {
+			return strings.TrimSpace(v[:i])
+		}
+	}
+	return v
 }
 
 // doctorZCodeWired reads `mcp.servers`, one level deeper than the `mcpServers`

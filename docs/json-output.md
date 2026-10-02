@@ -384,6 +384,12 @@ appears only after `deja embed` has built a semantic sidecar. The heatmap grid u
       "name": "claude-code",
       "state": "wired",
       "path": "/home/user/.claude.json"
+    },
+    {
+      "name": "kiro",
+      "state": "wired",
+      "path": "/home/user/.kiro/settings/mcp.json",
+      "switched_off": true
     }
   ],
   "auto_recall": [
@@ -402,6 +408,12 @@ appears only after `deja embed` has built a semantic sidecar. The heatmap grid u
       "state": "wired",
       "path": "/home/user/.cursor/hooks.json",
       "binary_missing": true
+    },
+    {
+      "name": "antigravity",
+      "state": "wired",
+      "path": "/home/user/.gemini/config/plugins/deja/hooks.json",
+      "switched_off": true
     }
   ],
   "commands": [
@@ -501,7 +513,8 @@ and, when it holds peer-synced work, `indexed_from_elsewhere`; a store whose
 permission walk was cut short or blocked carries `partial` or `unchecked`. A
 store holding transcripts the index has no state for at all carries `never_read`
 with how many — the count is absent when there are none, and goes away after an
-indexing pass.
+indexing pass. A store with no files can carry `note`, a sentence on why: the
+amp store says current Amp keeps its threads on ampcode.com.
 `sqlite3` and `git` are the two tools deja shells out to, each `ok` or
 `missing`, and sqlite3 can also be `broken` (with `path` and `error`) when the
 binary on PATH does not answer `select json_object('deja',1);`. sqlite3 reads every database-backed store (opencode and the schemas
@@ -518,6 +531,8 @@ Kimi's `config.toml` or Qwen's `settings.json` with no deja hook in it), or
 `plugin` (the harness carries its own).
 `binary_missing` marks a row whose entries name a deja binary that is no longer
 there — what an upgrade leaves behind, with every hook exiting 127.
+`switched_off` marks a `wired` row the harness has turned off, so it will not
+run the hook: Antigravity's plugin after `agy plugin disable deja`.
 
 The first two rows are `claude-code` and `codex-hook`, whose hooks are wired
 event by event, so they have two states of their own: `out of date` (some of the
@@ -532,7 +547,10 @@ reads `missing`, since both files also carry the user's own hooks; for
 `mcp` rows are `wired`, `not-wired` (the config file is there without a deja
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
-start the server.
+start the server, and `switched_off` when the entry is turned off
+(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not. The `deepseek` row carries `plugin_missing` when
+`cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh
+from starting at all.
 
 `commands` is the third thing an install writes: the `/deja` a user types, one
 row per harness. `state` is `written`, `missing`, `someone else's` for a file

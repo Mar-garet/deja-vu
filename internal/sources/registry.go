@@ -423,7 +423,8 @@ func allHarnesses() []Harness {
 		},
 		{
 			// Kiro writes one format from its CLI and another from the IDE,
-			// both under ~/.kiro/sessions (#3103).
+			// both under ~/.kiro/sessions (#3103), and a headless kiro-cli run
+			// goes into its database instead (#4300).
 			Name: "kiro", Load: LoadKiro, Files: KiroSessionFiles,
 			Kinds: []FileKind{{
 				Name:      "kiro-cli",
@@ -435,6 +436,12 @@ func allHarnesses() []Harness {
 				Match:     KiroUnderIDE,
 				Parse:     fullParse(ParseKiroIDEFile),
 				ParseFrom: offsetParse(ParseKiroIDEFileFromOffset),
+			}, {
+				// `kiro-cli chat --no-interactive` writes only here (#4300).
+				Name:      "kiro-db",
+				Match:     func(p string) bool { return p == KiroDB() },
+				Parse:     dbParse(ParseKiroDB, ParseKiroDBSince),
+				ParseFrom: dbParseFrom(ParseKiroDB, ParseKiroDBSince),
 			}},
 		},
 		{
