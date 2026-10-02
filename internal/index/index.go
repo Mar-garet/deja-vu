@@ -446,6 +446,12 @@ import (
 // 60 also: Roo, Kilo and legacy Cline tasks from the XML tool era read their
 // calls into command, files and edit records and their results as tool
 // output (#4424).
+//
+// 60 also: codex, opencode, Kilo CLI, ZCode CLI, goose, crush, cursor, gemini,
+// kimi, grok, antigravity, amp, aider, Copilot, Copilot Chat, zed, dsh, Cline,
+// Roo, Kilo extension, Continue, CodeWhale, Kiro, Reasonix and Hermes name a
+// project by the recorded cwd's last two segments, as claude does, and decode
+// a file:// workspace first (#4457, #4458, #4461, #4462).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
