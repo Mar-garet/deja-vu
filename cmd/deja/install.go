@@ -273,12 +273,18 @@ func runInstall(dir string, args []string, uninstall bool) error {
 		}
 		// A client that keeps deja off by its own switch gets the same line
 		// doctor prints, unless the writer already said the entry is off
-		// (#4468, #4469).
-		if off := installClientOffNote(t); off != "" && !uninstall && !strings.Contains(r.Note, "switched off") {
-			if r.Note != "" {
-				r.Note += "; "
+		// (#4468, #4469). Once a run: gemini and gemini-auto read one file.
+		if !uninstall && !strings.Contains(r.Note, "switched off") {
+			for _, off := range installClientOffNotes(t) {
+				if saidNotes[off] {
+					continue
+				}
+				saidNotes[off] = true
+				if r.Note != "" {
+					r.Note += "; "
+				}
+				r.Note += off
 			}
-			r.Note += off
 		}
 		written++
 		touchedPaths = append(touchedPaths, r.touched()...)
@@ -3111,11 +3117,11 @@ func mergeDejaEntry(prev any, entry map[string]any) (map[string]any, string) {
 	return out, note
 }
 
-// installClientOffNote is the line an install adds when the client it just
+// installClientOffNotes are the lines an install adds when the client it just
 // wrote has deja switched off by a switch install does not touch, so a plain
 // `updated` does not read as working (#4468, #4469). The entry's own switch
 // is left to the writer, which knows whether it kept it.
-func installClientOffNote(target string) string {
+func installClientOffNotes(target string) []string {
 	base := strings.TrimSuffix(target, "-auto")
 	mcp, hooks := base, base
 	switch base {
@@ -3133,7 +3139,7 @@ func installClientOffNote(target string) string {
 	if n := clientMCPDenied(mcp); n != "" {
 		notes = append(notes, n)
 	}
-	return strings.Join(notes, "; ")
+	return notes
 }
 
 // entrySwitchedOff reports whether the reader has turned this entry off.

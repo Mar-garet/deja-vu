@@ -375,3 +375,23 @@ func TestClientOffReadersStayOnWhenUnsure(t *testing.T) {
 		t.Error("another table's enabled read as deja's")
 	}
 }
+
+// `deja install --all` adds the -auto sibling of a wired target, and both
+// lines carried the same note about the same file (#4468).
+func TestInstallSaysAClientSwitchOnce(t *testing.T) {
+	hermeticEnv(t)
+	settings := filepath.Join(sources.GeminiHome(), "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settings, []byte(`{"mcp":{"excluded":["deja"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureRun(t, "install", "gemini", "gemini-auto", "--no-index")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "`mcp.excluded` lists deja"); n != 1 {
+		t.Errorf("the note is said %d times, want once:\n%s", n, out)
+	}
+}
