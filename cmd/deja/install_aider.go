@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
-	"github.com/vshulcz/deja-vu/internal/index"
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
@@ -56,11 +57,15 @@ func installAider(_ string, uninstall bool) (installResult, error) {
 	}
 	if uninstall {
 		_ = os.Remove(aiderContextPath())
+		_ = os.Remove(aiderContextPath() + ".lock")
 		return installResult{Path: path, Action: a}, nil
 	}
 	// Write the file now: aider fails the read outright if it is missing, and
-	// the first session should not be the one that discovers that.
-	if err := refreshAiderContext(index.DefaultDir()); err != nil {
+	// the first session should not be the one that discovers that. The
+	// placeholder, not a digest: one built here is the history of whatever
+	// directory install ran in, and every aider anywhere would read it as its
+	// own (#4328).
+	if err := writeAiderContext(aiderPlaceholder); err != nil {
 		return installResult{}, err
 	}
 	return installResult{Path: path, Action: a}, nil
@@ -214,26 +219,35 @@ func removeAiderReadEntry(s string) string {
 // refreshAiderContext regenerates the read-only file from the same digest the
 // hooks inject elsewhere, so aider users get what every other harness gets.
 func refreshAiderContext(dir string) error {
+	return writeAiderContext(aiderContextBody(dir))
+}
+
+// aiderPlaceholder is the file when it holds no digest. An empty file still has
+// to exist: aider refuses to start when a configured read file is missing.
+//
+// The line says what to do about it because of where it is read. Only `deja
+// aider` fills the file, and only while the aider it started runs. Someone who
+// runs plain `aider` therefore sees this text in every session — driven through
+// the real interface, "No matching history yet." read as "deja has nothing",
+// when what it means is "nothing has refreshed this".
+const aiderPlaceholder = "No matching history yet — start aider as `deja aider` and this file fills with what this project already knows.\n"
+
+func aiderContextBody(dir string) string {
 	// In-process rather than shelling out to hook-context: the wrapper stands
 	// between the user and their editor, and a subprocess here would also make
 	// the installer depend on its own binary being runnable.
 	digest, sessions, _, _, _, _, _ := cachedHookDigest(dir)
 	body := digest
 	if sessions > 0 {
-		body = frameRecall(startLead(aiderLead) + digest)
+		body = frameRecall(startLead(aiderLeadFor(hookCWD(""))) + digest)
 	}
 	if strings.TrimSpace(body) == "" {
-		// No history for this project yet. An empty file still has to exist:
-		// aider refuses to start when a configured read file is missing.
-		//
-		// The line says what to do about it because of where it is read. This
-		// file is written at install, when there is usually no index yet, and
-		// only `deja aider` rewrites it afterwards. Someone who runs plain
-		// `aider` therefore sees this text in every session forever — driven
-		// through the real interface, it read as "deja has nothing", when what
-		// it means is "nothing has refreshed this".
-		body = "No matching history yet — start aider as `deja aider` and this file fills with what this project already knows.\n"
+		return aiderPlaceholder
 	}
+	return body
+}
+
+func writeAiderContext(body string) error {
 	path := aiderContextPath()
 	noteCreatedDirs(filepath.Dir(path))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -247,9 +261,14 @@ func refreshAiderContext(dir string) error {
 	return err
 }
 
-const aiderLead = "The sessions below are from this project's recent history. " +
-	"If any is relevant to what the user asks next, say so and use it. " +
-	"If it genuinely helps, tell the user in one short line what was recalled; otherwise do not mention it.\n"
+// aiderLeadFor names the directory the digest was built for. Every aider on
+// the machine reads the same file, and a lead saying "this project's" handed
+// one project's sessions to another as its own (#4328).
+func aiderLeadFor(cwd string) string {
+	return "The sessions below are from the recent history of " + cwd + ", where `deja aider` started this aider. " +
+		"If the user is working there and any is relevant to what they ask next, say so and use it. " +
+		"If it genuinely helps, tell the user in one short line what was recalled; otherwise do not mention it.\n"
+}
 
 // cmdAider refreshes the context file and then becomes aider. Everything after
 // the subcommand belongs to aider, including flags deja also has.
@@ -272,7 +291,12 @@ func cmdAider(dir string, rest []string, sourceInstance string) error {
 			fmt.Fprintf(os.Stderr, "deja: could not note this project for indexing: %v\n", err)
 		}
 	}
-	if err := refreshAiderContext(dir); err != nil {
+	// Every `deja aider` running holds this, so the last one out knows it is
+	// the last; taken before the digest is written, so one starting while
+	// another restores the placeholder writes after it.
+	done, held := holdAiderRun(aiderContextPath() + ".lock")
+	body := aiderContextBody(dir)
+	if err := writeAiderContext(body); err != nil {
 		// A failed recall is not a reason to keep the user out of their editor.
 		fmt.Fprintf(os.Stderr, "deja: could not refresh recall: %v\n", err)
 	} else if n := aiderRecallCount(); n > 0 {
@@ -280,13 +304,52 @@ func cmdAider(dir string, rest []string, sourceInstance string) error {
 		// line is the only thing telling the user memory is in there.
 		fmt.Fprintf(os.Stderr, "deja: recalled %d past sessions into aider's read-only context\n", n)
 	}
+	// The config points every aider on the machine at this one file, so the
+	// digest leaves with the aider it was built for: plain aider started next,
+	// in any project, reads the placeholder rather than this project's sessions
+	// as its own (#4328). Only once no other `deja aider` is running: two in
+	// one project write the same digest, and the first out took it from the
+	// one still running. Without a lock, only while the file is still ours.
+	defer func() {
+		restore := func() {
+			if b, err := os.ReadFile(aiderContextPath()); err == nil && string(b) != aiderPlaceholder {
+				_ = writeAiderContext(aiderPlaceholder)
+			}
+		}
+		if held {
+			done(restore)
+		} else if b, err := os.ReadFile(aiderContextPath()); err == nil && string(b) == body {
+			restore()
+		}
+	}()
 	bin, err := exec.LookPath("aider")
 	if err != nil {
 		return fmt.Errorf("aider is not on PATH: %w", err)
 	}
+	// Ctrl-C reaches the whole foreground group and is aider's own key for
+	// stopping a reply; left to its default it ended this process instead, and
+	// the file kept the digest. A SIGTERM or a closed terminal ended it too,
+	// and left aider running with nobody waiting on it: those go on to aider,
+	// and this waits for it to exit.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	defer func() {
+		signal.Stop(sig)
+		close(sig)
+	}()
 	cmd := exec.Command(bin, rest...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() {
+		for s := range sig {
+			if s != os.Interrupt {
+				_ = cmd.Process.Signal(s)
+			}
+		}
+	}()
+	return cmd.Wait()
 }
 
 func aiderRecallCount() int {
