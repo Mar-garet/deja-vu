@@ -21,7 +21,7 @@ Releases are signed with cosign and carry build provenance, and the client does
 not verify either. If you need that guarantee, verify before installing:
 
 ```sh
-cosign verify-blob --certificate checksums.txt.pem --signature checksums.txt.sig \
+cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-identity-regexp 'https://github.com/vshulcz/deja-vu/.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 ```
