@@ -98,6 +98,17 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 			vocabEdit("/tmp/proj/backoff.go", "for retries := 0; ; retries++ {"),
 			vocabWrote("/tmp/proj/backoff.go", "for attempt := 0; attempt < maxAttempts; attempt++ {"),
 		}, patchWants...)},
+		{"kiro-ide tool calls", vocabKiroIDE, []string{
+			vocabCmd("$ go test ./retry"),
+			vocabFiles("/tmp/proj/retry.go"),
+			vocabEdit("/tmp/proj/retry.go", oldLoop),
+			vocabWrote("/tmp/proj/retry.go", newLoop),
+			vocabFiles("/tmp/proj/jitter.go"),
+			vocabWrote("/tmp/proj/jitter.go", jitter),
+			vocabWrote("/tmp/proj/notes.md", "retries are capped at maxAttempts with a jittered backoff"),
+			vocabFiles("/tmp/proj/read.go"),
+			vocabFiles("/tmp/proj/old.go"),
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -403,7 +414,7 @@ func vocabKiroIDE(t *testing.T) []model.Session {
 		rec(map[string]any{"type": "tool_result", "toolCallId": "c1", "content": "Output: ./retry.go:12:5: undefined: backoffJitter  Exit Code: 1", "success": false}),
 		call("c2", "str_replace", map[string]any{"path": "/tmp/proj/retry.go", "oldStr": "\tfor {", "newStr": "\tfor attempt := 0; attempt < maxAttempts; attempt++ {"}),
 		call("c3", "fs_write", map[string]any{"path": "/tmp/proj/jitter.go", "text": "func backoffJitter(attempt int) time.Duration { return 0 }"}),
-		call("c4", "fs_append", map[string]any{"path": "/tmp/proj/notes.md", "text": "- capped the retry loop"}),
+		call("c4", "fs_append", map[string]any{"path": "/tmp/proj/notes.md", "text": "retries are capped at maxAttempts with a jittered backoff"}),
 		call("c5", "read_file", map[string]any{"path": "/tmp/proj/read.go"}),
 		call("c6", "delete_file", map[string]any{"targetFile": "/tmp/proj/old.go"}),
 	)
