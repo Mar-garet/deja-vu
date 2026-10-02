@@ -43,3 +43,17 @@ func TestResumeRefusesAKimiOrQwenSubagent(t *testing.T) {
 		t.Errorf("the parent resumes as %q: %v", cmd, err)
 	}
 }
+
+// A Kimi /btw side question is read as a fork of the session it was asked in,
+// and Kimi does not open the fork on its own either (#4484).
+func TestResumeRefusesAKimiBtwFork(t *testing.T) {
+	s := model.Session{Harness: "kimi", ID: "agent-1-session_t01", Kind: "fork", Parent: "session_t01",
+		Path: filepath.Join(t.TempDir(), "kimi", "sessions", "wd", "session_t01", "agents", "agent-1", "wire.jsonl")}
+	dir, cmd, err := resumeCommand(s)
+	if err == nil {
+		t.Fatalf("printed %q for a /btw fork", resumeCmdLine(dir, cmd))
+	}
+	if !strings.Contains(err.Error(), "deja resume session_t01") {
+		t.Errorf("refusal %q does not name the session to resume", err)
+	}
+}

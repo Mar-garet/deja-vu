@@ -644,6 +644,9 @@ import (
 //
 // 60 also: an omp patch edit with no op is the update omp reads it as, and
 // its lines are recorded (#4576).
+//
+// 60 also: a Kimi Code /btw side question is read from its fork, the
+// question and the answer without main's copied context (#4484).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

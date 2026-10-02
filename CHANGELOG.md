@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A Kimi Code `/btw` side question is indexed: the question and its answer, read from the fork Kimi runs it in without the copy of the session's context the fork opens with, and `deja doctor` no longer counts it as a skipped sub-agent. It is its own session naming the one it was asked in, and `deja resume` on it points there. The index rebuilds once (#4484).
 - Releases are signed with cosign 3 and carry `checksums.txt.sigstore.json` in place of `checksums.txt.sig` and `checksums.txt.pem`; verify with `cosign verify-blob --bundle checksums.txt.sigstore.json` as SECURITY.md shows. The release workflow no longer pins cosign 2, which is past its last release (#4577).
 - deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).
 - A Codex or Cursor CLI session you quit is back in the next session's MCP recall right away instead of 20 minutes later: `deja install codex-auto` and `cursor-auto` wire the session-end hook, and the Codex plugin carries it too. Codex asks once to approve the new hook (#4545).

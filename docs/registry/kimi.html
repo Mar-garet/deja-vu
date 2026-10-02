@@ -54,7 +54,12 @@
 <p>events keep their <code>output</code> text under the <code>tool-output</code> role, error results</p>
 <p>included. Sub-agent histories under <code>agents/&lt;agent-id&gt;/wire.jsonl</code> are read</p>
 <p>only with <code>DEJA_INCLUDE_SUBAGENTS=1</code>, each as a session of its own naming the</p>
-<p>parent session (#4483). Media is out of scope.</p>
+<p>parent session (#4483). A <code>/btw</code> side question is the exception: Kimi runs it</p>
+<p>in a fork of <code>main</code> that <code>state.json</code> marks <code>forkedFrom</code>, and deja reads that</p>
+<p>fork by default, from the <code>btw</code> system trigger on, so the question and the</p>
+<p>answer are kept without the copy of main&#39;s context the fork opens with. It is</p>
+<p>a session of its own, kind <code>fork</code>, naming the session it was asked in (#4484).</p>
+<p>Media is out of scope.</p>
 <ul>
 <li><strong>MCP</strong>: <code>deja install kimi</code> writes <code>mcpServers.deja</code> into</li>
 </ul>

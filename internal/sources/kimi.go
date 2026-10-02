@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/vshulcz/deja-vu/internal/model"
 )
@@ -26,7 +27,9 @@ import (
 // tool.result) and become work records (#655). Only the main agent is indexed
 // by default; think-parts are skipped by design (issue #248), and a sub-agent's
 // agents/<agent-id>/wire.jsonl comes in under DEJA_INCLUDE_SUBAGENTS=1, the
-// same switch as everywhere else (#4483).
+// same switch as everywhere else (#4483). A /btw side question runs in a fork
+// of the main agent that state.json marks forkedFrom; the person asked it, so
+// it is read whatever the switch says (#4484).
 
 // KimiConfigDir is the native Kimi Code home. DEJA_KIMI_ROOT intentionally
 // does not affect it because that variable only relocates reads.
@@ -36,10 +39,64 @@ func KimiRoot() string { return EnvPath("DEJA_KIMI_ROOT", KimiConfigDir()) }
 
 func KimiSessionFiles() []string {
 	subagents := os.Getenv("DEJA_INCLUDE_SUBAGENTS") == "1"
+	forks := map[string]map[string]bool{}
 	return walkFiles(filepath.Join(KimiRoot(), "sessions"), func(p string) bool {
-		return filepath.Base(p) == "wire.jsonl" && filepath.Base(filepath.Dir(p)) == "main" ||
-			subagents && KimiSubagentFile(p)
+		if filepath.Base(p) == "wire.jsonl" && filepath.Base(filepath.Dir(p)) == "main" {
+			return true
+		}
+		if !KimiSubagentFile(p) {
+			return false
+		}
+		if subagents {
+			return true
+		}
+		dir := kimiSessionDirOf(p)
+		f, ok := forks[dir]
+		if !ok {
+			f = kimiForks(dir)
+			forks[dir] = f
+		}
+		return f[filepath.Base(filepath.Dir(p))]
 	})
+}
+
+// kimiSessionDirOf is the session directory of an agent's wire.jsonl at
+// .../sessions/<workDirKey>/<sessionId>/agents/<agent-id>/wire.jsonl.
+func kimiSessionDirOf(p string) string { return filepath.Dir(filepath.Dir(filepath.Dir(p))) }
+
+// kimiForks lists the agents state.json records as forks of another agent.
+// Kimi forks main for a /btw side question; a sub-agent the main agent spawns
+// carries no forkedFrom (#4484).
+func kimiForks(sessionDir string) map[string]bool {
+	var st struct {
+		Agents map[string]struct {
+			ForkedFrom string `json:"forkedFrom"`
+		} `json:"agents"`
+	}
+	b, err := os.ReadFile(filepath.Join(sessionDir, "state.json"))
+	if err != nil || json.Unmarshal(b, &st) != nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for id, a := range st.Agents {
+		if a.ForkedFrom != "" {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+// kimiForkFile reports whether p is the log of an agent forked from another.
+func kimiForkFile(p string) bool {
+	return KimiSubagentFile(p) && kimiForks(kimiSessionDirOf(p))[filepath.Base(filepath.Dir(p))]
+}
+
+// kimiBtwTrigger reports whether an appended message is the reminder Kimi puts
+// in a fork to open a /btw side question; what comes before it is main's
+// context, copied (#4484).
+func kimiBtwTrigger(msg map[string]any) bool {
+	o, _ := msg["origin"].(map[string]any)
+	return msg["role"] == "user" && o["kind"] == "system_trigger" && o["name"] == "btw"
 }
 
 // KimiSidecarFiles lists the per-session state.json the reader opens itself
@@ -186,6 +243,11 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 		Path:    path,
 	}
 	child := KimiSubagentFile(path)
+	// A fork opens with a copy of main's context, which is main's to index:
+	// in a /btw fork only what follows the side-question reminder is read,
+	// and a fork with none is that copy and nothing else (#4484).
+	fork := child && kimiForkFile(path)
+	btw := false
 	if st, ok := kimiSessionState(path); ok {
 		s.Title = strings.TrimSpace(st.Title)
 		s.Project = projectName(st.WorkDir)
@@ -231,6 +293,15 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 			}
 			role, _ := msg["role"].(string)
 			if role != "user" && role != "assistant" {
+				return
+			}
+			if fork && kimiBtwTrigger(msg) {
+				btw = true
+				s.Messages = nil
+				s.Started, s.Updated = time.Time{}, time.Time{}
+				pending.Reset()
+				pendingTime = nil
+				clear(shellAt)
 				return
 			}
 			// Kimi appends the host's own lines under role user too — an
@@ -358,6 +429,13 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 		}
 	})
 	flush()
+	if btw {
+		// The person asked it in the session it forked from; it is not a run
+		// that session spawned.
+		s.Kind = "fork"
+	} else if fork && os.Getenv("DEJA_INCLUDE_SUBAGENTS") != "1" {
+		return nil, err
+	}
 	if len(s.Messages) == 0 {
 		return nil, err
 	}
@@ -367,7 +445,12 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 // kimiTailResumes reads wire.jsonl whole when either rule asks: the tail
 // answers a call made before it (#4443), or it goes on with a reply streamed
 // across the offset (#4445).
+// A fork is read whole too: the tail cannot say where the copied context
+// ends (#4484).
 func kimiTailResumes(path string, offset int64) bool {
+	if offset > 0 && kimiForkFile(path) {
+		return false
+	}
 	return kimiResumes(path, offset) && KimiResumes(path, offset)
 }
 

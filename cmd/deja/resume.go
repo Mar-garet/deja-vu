@@ -257,6 +257,11 @@ func resumeCommand(s model.Session) (string, string, error) {
 	if s.Kind == "subagent" && (s.Harness == "kimi" || s.Harness == "qwen") && s.Parent != "" {
 		return "", "", fmt.Errorf("session %s is a sub-agent run, which %s does not reopen on its own — `deja resume %s` reopens the session that spawned it", digest.Short(s.ID), s.Harness, s.Parent)
 	}
+	// Nor a Kimi /btw side question, which runs in a fork of the session it
+	// was asked in (#4484).
+	if s.Kind == "fork" && s.Harness == "kimi" && s.Parent != "" {
+		return "", "", fmt.Errorf("session %s is a /btw side question, which kimi does not reopen on its own — `deja resume %s` reopens the session it was asked in", digest.Short(s.ID), s.Parent)
+	}
 	switch s.Harness {
 	case "claude":
 		return claudeProjectDirFor(s), "claude --resume " + s.ID, nil
