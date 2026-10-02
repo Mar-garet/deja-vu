@@ -855,7 +855,7 @@
       "display_name": "Kiro",
       "capabilities": {
         "mcp": true,
-        "auto": true,
+        "auto": false,
         "skill": false,
         "command": false,
         "resume": true,
@@ -863,6 +863,11 @@
         "prereq": "sqlite3 for the CLI database"
       },
       "gaps": {
+        "auto": {
+          "state": "blocked",
+          "why": "Only in an agent chosen for it: `deja install kiro-auto` writes a `deja` agent whose agentSpawn and userPromptSubmit hooks carry the digest and per-prompt recall, but a plain `kiro-cli chat` starts the built-in kiro_default, which takes no hooks from a file. It fires with `kiro-cli chat --agent deja` or after `kiro-cli agent set-default deja`; deja does not switch the default for you (#4304).",
+          "source": "https://github.com/vshulcz/deja-vu/issues/4304"
+        },
         "skill": {
           "state": "impossible",
           "why": "Kiro has a user-level guidance channel and deja writes it — `~/.kiro/steering/deja.md`, the global half of steering, scanned for every project — but it is not a skill and calling it one would misdescribe what it costs. A steering document declares an inclusion mode, and the only mode measured as loaded by kiro-cli is `always`: `manual` is not loaded and cannot be invoked from a session, `fileMatch` was withheld (KiroCrew's steering reference, measured against 2.19.1). So the text rides in front of every turn whether it is wanted or not, which is why deja's file there is four lines rather than the skill it writes where one is loaded on demand — the same call aider's entry makes (#3651).",
@@ -893,14 +898,20 @@
       "display_name": "Kilo Code",
       "capabilities": {
         "mcp": true,
-        "auto": true,
+        "auto": false,
         "skill": true,
         "command": true,
         "resume": true,
         "handoff": "paste",
         "prereq": "sqlite3 for the CLI store"
       },
-      "gaps": {}
+      "gaps": {
+        "auto": {
+          "state": "blocked",
+          "why": "Half of it: the CLI gets the session digest from `deja install kilocode-auto`, which writes opencode's plugin into `~/.config/kilo/plugins` (#4398). The extension has no hook surface: it is a Roo fork whose hooks are still in flight upstream (Roo PRs #10785, #11128, #11663), so in the editor recall arrives when the model calls the tool.",
+          "source": "https://github.com/RooCodeInc/Roo-Code/pull/11663"
+        }
+      }
     },
     {
       "id": "roo",
