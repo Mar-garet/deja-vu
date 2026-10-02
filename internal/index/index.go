@@ -618,6 +618,8 @@ import (
 //
 // 60 also: a goose text_editor str_replace sent as a unified diff leaves edit
 // and wrote records (#4287).
+// 60 also: a session renamed to a thin title in the same pass as a new turn
+// takes the title a rebuild gives it (#4592).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

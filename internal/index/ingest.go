@@ -4598,11 +4598,20 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 				// A thin title is widened from the session's first substantial
 				// turn, and a tail does not hold it: one appended turn renamed
 				// the session after itself. A row already named from the whole
-				// session keeps that name (#4452).
+				// session keeps that name (#4452). Unless the sidecar the title
+				// lives in changed too: that is a rename, the row holds the old
+				// name, and only the whole session can widen the new one
+				// (#4592).
 				t, _ := redact.Text(s.Title)
 				t = boundSourceTitle(s.Harness, t)
 				fromTail := known && named && s.Harness != "deja" && thinTitle(t) && !thinTitle(meta.Title)
-				if w := widenThinSourceTitle(s, t); !fromTail && w != meta.Title {
+				w := widenThinSourceTitle(s, t)
+				if fromTail && sidecarChanged(of, changed[p]) {
+					if whole, ok := wholeSession(p, s); ok {
+						w, fromTail = widenThinSourceTitle(whole, t), false
+					}
+				}
+				if !fromTail && w != meta.Title {
 					meta.Title = w
 					meta.AgentTitle = s.AgentTitle
 				}
@@ -4772,6 +4781,27 @@ func carriesWork(ss []model.Session) bool {
 		}
 	}
 	return false
+}
+
+// sidecarChanged reports whether the metadata file read with a transcript
+// (Kimi's state.json, say) changed between two walks.
+func sidecarChanged(a, b FileState) bool {
+	return a.MetadataSize != b.MetadataSize || a.MetadataMTime != b.MetadataMTime
+}
+
+// wholeSession reads s's file from its first byte and returns s as the full
+// build sees it, for what an appended tail cannot tell.
+func wholeSession(p string, s model.Session) (model.Session, bool) {
+	ss, err := parseAppendedFile("", p, FileState{}, true)
+	if err != nil {
+		return model.Session{}, false
+	}
+	for _, w := range ss {
+		if w.Harness == s.Harness && w.ID == s.ID {
+			return w, true
+		}
+	}
+	return model.Session{}, false
 }
 
 func sameFile(a, b FileState) bool {
