@@ -163,6 +163,11 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
   // again. Counted, so a store that really is empty is still only asked a few
   // times.
   const empties = new Map()
+  // Every session the per-prompt hook stamped live. opencode never says a
+  // session ended, so without ending them here the stamp sat out its whole
+  // window and the next session's MCP recall left a finished one out (#4546).
+  const live = new Set()
+  const endSession = (id) => ask(["hook-session-end"], JSON.stringify({ session_id: id }), 5000)
 
   const hooks = {}
 
@@ -312,6 +317,7 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
       // Without it every message re-injects the same block — measured on a real
       // store, half of all injections were a word-for-word repeat.
       const key = input?.sessionID || sessionID || ""
+      if (key) live.add(key)
       const raw = await ask(["hook-prompt"], JSON.stringify({ prompt, session_id: key, cwd }))
       if (!raw) return
       const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
@@ -408,6 +414,25 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
     } catch {
       // memory is optional: never break a tool call over it
     }
+  }
+
+  // A turn is over when opencode publishes session.idle, and the next prompt
+  // stamps the session again before the model can ask anything, so the session
+  // is history to everyone else in between.
+  hooks.event = async ({ event }) => {
+    try {
+      const id = event?.type === "session.idle" ? event.properties?.sessionID : ""
+      if (id) await endSession(id)
+    } catch {
+      // memory is optional: never break the session over it
+    }
+  }
+
+  // `opencode run` exits without waiting for the event above, and it does wait
+  // for dispose: a one-shot run ends what it started here.
+  hooks.dispose = async () => {
+    for (const id of live) await endSession(id)
+    live.clear()
   }
 
   return hooks
