@@ -64,6 +64,10 @@ func clineVSCodeSidecar(p string) (int64, int64) {
 			var metas []clineTaskMeta
 			if json.Unmarshal(b, &metas) == nil {
 				for _, m := range metas {
+					// The reader takes the first entry under an id.
+					if _, seen := c.entries[m.ID]; seen {
+						continue
+					}
 					h := fnv.New64a()
 					_, _ = h.Write([]byte(strconv.FormatInt(m.TS, 10) + "\x00" + m.Task + "\x00" + m.CWD))
 					c.entries[m.ID] = int64(h.Sum64())
