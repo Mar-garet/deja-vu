@@ -175,6 +175,16 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// the same field: Kilo is OpenCode vendored and a CLI session carries
 		// its own working directory — when it is still there (#4201).
 		return existingDir(s.Path), "kilo -s " + s.ID, nil
+	case "zcode":
+		// The terminal client for the ZCode runtime (zcode-app-cli 0.16.9,
+		// runtime 3.14.4) takes `--resume <sessionId>` with the sess_ id its
+		// database stores, and reopens the session from any directory; the cd
+		// keeps the agent in the project, when it is still there (#4430). The
+		// JSONL transcripts are not in that database.
+		if strings.HasSuffix(s.Path, ".jsonl") {
+			return "", "", fmt.Errorf("zcode session %s is a transcript under ~/.zcode/projects; `zcode --resume` opens only sessions from ZCode's CLI database", digest.Short(s.ID))
+		}
+		return existingDir(s.Path), "zcode --resume " + s.ID, nil
 	case "continue":
 		// `cn --fork <sessionId>` loads the session by id straight out of the
 		// store deja reads — `historyManager.load` opens
@@ -404,13 +414,17 @@ func existingDir(p string) string {
 }
 
 // resumeRecordedDir is the directory a session recorded running in, for the
-// harnesses whose resume command goes there when it still exists: opencode and
-// Kilo keep it as the session's path, gjc, Kimchi and Senpi in the transcript
+// harnesses whose resume command goes there when it still exists: opencode,
+// Kilo and ZCode's CLI keep it as the session's path, gjc, Kimchi and Senpi in the transcript
 // header.
 func resumeRecordedDir(s model.Session) string {
 	switch s.Harness {
 	case "opencode", "kilocode":
 		return s.Path
+	case "zcode":
+		if !strings.HasSuffix(s.Path, ".jsonl") {
+			return s.Path
+		}
 	case "gjc", "kimchi", "senpi":
 		return sources.PiHeaderCwd(s.Path)
 	}
@@ -418,7 +432,7 @@ func resumeRecordedDir(s model.Session) string {
 }
 
 // resumeDirGoneNote says where a session whose directory is gone will run:
-// opencode and Kilo reopen it from anywhere, and their tools then work in the
+// opencode, Kilo and ZCode reopen it from anywhere, and their tools then work in the
 // directory the command is run from; gjc, Kimchi and Senpi offer to fork it
 // there instead.
 func resumeDirGoneNote(s model.Session, dir string) string {

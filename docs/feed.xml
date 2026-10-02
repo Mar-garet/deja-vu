@@ -102,6 +102,13 @@
     <summary>How to give Claude Code recall over every coding agent&#39;s sessions on this machine — the MCP server, the SessionStart hook and the plugin marketplace.</summary>
   </entry>
   <entry>
+    <title>Add memory to ZCode: recall past sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-zcode.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-zcode.html"></link>
+    <updated>2026-10-01T00:00:00Z</updated>
+    <summary>ZCode keeps a project log and a CLI database, and reads neither back. deja wires its MCP server and two hooks in one config file, and indexes every agent.</summary>
+  </entry>
+  <entry>
     <title>Resume yesterday&#39;s Claude Code or Codex session — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/guide/resume-a-session.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/resume-a-session.html"></link>
@@ -282,12 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-cursor-chat-history.html"></link>
     <updated>2026-09-30T00:00:00Z</updated>
     <summary>How to delete Cursor chat history — where the chats live in state.vscdb, why deleting the file resets more than chats, and what the CLI writes separately.</summary>
-  </entry>
-  <entry>
-    <title>Delete Gemini CLI chat history — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-gemini-cli-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-gemini-cli-history.html"></link>
-    <updated>2026-09-30T00:00:00Z</updated>
-    <summary>Where Gemini CLI keeps chats under ~/.gemini/tmp, how to map a project id back to a directory, what to delete and what the prompt log keeps.</summary>
   </entry>
 </feed>

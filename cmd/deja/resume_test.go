@@ -47,6 +47,11 @@ func TestResumeCommandPerHarness(t *testing.T) {
 		{"opencode with its dir gone", model.Session{Harness: "opencode", ID: "ses_2", Project: "gone", Path: filepath.Join(tmp, "projects", "gone")}, "", "opencode -s ses_2", ""},
 		{"opencode path that is a file", model.Session{Harness: "opencode", ID: "ses_3", Project: "f", Path: aFile}, "", "opencode -s ses_3", ""},
 		{"kilo with its dir gone", model.Session{Harness: "kilocode", ID: "ses_4", Project: "gone", Path: filepath.Join(tmp, "projects", "gone")}, "", "kilo -s ses_4", ""},
+		// The ZCode terminal client takes the sess_ id its database stores, and
+		// reopens it from anywhere; the cd keeps the agent in the project (#4430).
+		{"zcode cli session", model.Session{Harness: "zcode", ID: "sess_319135bc-f58b-40b8-b7df-4c32660105f1", Project: "my-app", Path: real}, real, "zcode --resume sess_319135bc-f58b-40b8-b7df-4c32660105f1", ""},
+		{"zcode with its dir gone", model.Session{Harness: "zcode", ID: "sess_2", Project: "gone", Path: filepath.Join(tmp, "projects", "gone")}, "", "zcode --resume sess_2", ""},
+		{"zcode desktop transcript", model.Session{Harness: "zcode", ID: "abc", Project: "my-app", Path: filepath.Join(tmp, "zcode", "projects", encoded, "abc.jsonl")}, "", "", "CLI database"},
 		{"grok build session", model.Session{Harness: "grok", ID: "019f-grok", Project: "my-app", Path: grokPath}, real, "grok --resume 019f-grok", ""},
 		{"grok-dev row", model.Session{Harness: "grok", ID: "019f-dev", Project: "my-app", Path: filepath.Join(tmp, "grok.db")}, "", "", "grok-dev store"},
 		{"imported", model.Session{Harness: "claude", ID: "imported-9f5", Project: "imported:my-app"}, "", "", "another machine"},

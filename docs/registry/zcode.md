@@ -24,6 +24,11 @@ block, which deja has no use for and ignores.
   `~/.zcode/cli/config.json` — one level deeper than the `mcpServers` every
   other client here uses — and `deja install zcode-auto` adds the hooks to the
   same file, on `SessionStart` and `UserPromptSubmit`.
+- `deja resume` on a session from the CLI database prints
+  `cd '<dir>' && zcode --resume <sess_id>`, the directory from the session
+  row. The terminal client reopens the session from any directory; the `cd`
+  keeps the agent in the project. A JSONL transcript has no such command
+  (#4430).
 - **Three things decide whether that works, and all three are silent when
   wrong.** Config-file hooks do nothing without `hooks.enabled: true`. A
   config hook gets no template expansion, so the command carries an absolute

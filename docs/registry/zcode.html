@@ -64,6 +64,13 @@
 <p>other client here uses — and <code>deja install zcode-auto</code> adds the hooks to the</p>
 <p>same file, on <code>SessionStart</code> and <code>UserPromptSubmit</code>.</p>
 <ul>
+<li><code>deja resume</code> on a session from the CLI database prints</li>
+</ul>
+<p><code>cd &#39;&lt;dir&gt;&#39; &amp;&amp; zcode --resume &lt;sess_id&gt;</code>, the directory from the session</p>
+<p>row. The terminal client reopens the session from any directory; the <code>cd</code></p>
+<p>keeps the agent in the project. A JSONL transcript has no such command</p>
+<p>(#4430).</p>
+<ul>
 <li>**Three things decide whether that works, and all three are silent when</li>
 </ul>
 <p>wrong.** Config-file hooks do nothing without <code>hooks.enabled: true</code>. A</p>
