@@ -1056,7 +1056,14 @@ func wroteAll(rs ...installResult) installResult {
 }
 
 func installClaudeAuto(exe string, uninstall bool) (installResult, error) {
-	mcp, err := installClaude(exe, uninstall)
+	// ~/.claude.json lives outside ~/.claude, so it went first and was wired
+	// by a run that then refused on the directory, .bak and all (#4560). The
+	// halves that can fail on ~/.claude go first, and the MCP file is asked
+	// whether it can be written before either of them.
+	if err := configWritable(sources.ClaudeJSONPath()); err != nil {
+		return installResult{}, err
+	}
+	hook, err := installClaudeHook(exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
@@ -1064,7 +1071,7 @@ func installClaudeAuto(exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
-	hook, err := installClaudeHook(exe, uninstall)
+	mcp, err := installClaude(exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
