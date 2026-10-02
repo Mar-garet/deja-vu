@@ -341,3 +341,35 @@ func TestUnifiedPatchReadsHunksByCount(t *testing.T) {
 		t.Errorf("wrote = %q, want %q", wrote, want)
 	}
 }
+
+// command-code 1.74.0: shell_command and monitor_command take {command,
+// args[]}, powershell {command}, and read_file's paths may hold globs, which
+// name no file the session touched (#4540).
+func TestCommandCodeShellArgsAndReadGlobs(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DEJA_COMMANDCODE_ROOT", root)
+	n := 0
+	line := func(role string, content []any) string {
+		n++
+		return vocabJSON(map[string]any{"type": "message", "id": fmt.Sprintf("m%d", n), "timestamp": fmt.Sprintf("2026-10-01T10:00:%02d.000Z", n), "message": map[string]any{"role": role, "content": content}})
+	}
+	use := func(name string, in any) string {
+		return line("assistant", []any{map[string]any{"type": "tool_use", "id": "call_" + name, "name": name, "input": in}})
+	}
+	p := vocabWrite(t, filepath.Join(root, "tmp-proj", "cc-1.jsonl"),
+		vocabJSON(map[string]any{"type": "session", "version": 3, "id": "cc-1", "timestamp": "2026-10-01T10:00:00.000Z", "cwd": "/tmp/proj"}),
+		line("user", []any{map[string]any{"type": "text", "text": "fix the retry loop"}}),
+		use("shell_command", map[string]any{"command": "go", "args": []any{"test", "./retry/..."}}),
+		use("powershell", map[string]any{"command": "go vet ./..."}),
+		use("monitor_command", map[string]any{"command": "go", "args": []any{"run", "./cmd/retryd", "--watch"}}),
+		use("read_file", map[string]any{"paths": []any{"/tmp/proj/retry.go", "/tmp/proj/**/*_test.go"}}),
+	)
+	vocabCheck(t, vocabParse(t, ParseCommandCodeFile, p), []string{
+		vocabCmd("$ go test ./retry/..."),
+		vocabCmd("$ go vet ./..."),
+		vocabCmd("$ go run ./cmd/retryd --watch"),
+		vocabFiles("/tmp/proj/retry.go"),
+	}, []string{
+		vocabFiles("/tmp/proj/retry.go\n/tmp/proj/**/*_test.go"),
+	})
+}

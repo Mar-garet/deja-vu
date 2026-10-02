@@ -18,7 +18,12 @@ Tool calls use Command Code's own names with Claude's input keys:
 `shell_command` (`command`), `read_file`, `edit_file` (`file_path`,
 `old_string`, `new_string`), `write_file` (`file_path`, `content`) and
 `read_multiple_files` (`paths`). All of them are indexed as commands, files,
-replaced spans and written lines (#4370).
+replaced spans and written lines (#4370). 1.74 adds `powershell` (`command`)
+and `monitor_command`, and `shell_command` and `monitor_command` take an `args`
+list beside `command`; the command is recorded with its arguments as the client
+shows it, `go test ./...` for `{command: "go", args: ["test", "./..."]}`.
+`read_file` takes a `paths` list too, where an entry with `*`, `?`, `[` or `{`
+is a glob the client expands, not a file, and is left out (#4540).
 
 The older shape, one flat `role`/`content`/`timestamp`/`sessionId` line per
 message, is still read. The client migrates such a file to v3 in place the
