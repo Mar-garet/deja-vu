@@ -85,3 +85,34 @@ func openclawLoadPathsIn(t *testing.T, cfg string) []string {
 	}
 	return root.Plugins.Load.Paths
 }
+
+// Taking out a whole block that is the last key in a JSONC file has to take
+// the comma in front of it too, or the next run refuses the file.
+func TestOpenClawPluginUninstallDropsLastBlockCleanly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	state := sources.OpenClawStateDir()
+	if err := os.MkdirAll(state, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(state, "openclaw.json")
+	before := "{\n  // mine\n  \"gateway\": {\"mode\": \"local\"},\n  \"plugins\": {\"load\": {\"paths\": []}}\n}\n"
+	if err := os.WriteFile(cfg, []byte(before), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installOpenClawPlugin("/bin/deja", false); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if _, err := installOpenClawPlugin("/bin/deja", true); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	after, _ := os.ReadFile(cfg)
+	var root map[string]any
+	if err := json.Unmarshal([]byte(stripJSONComments(string(after))), &root); err != nil {
+		t.Fatalf("uninstall left a config that does not parse: %v\n%s", err, after)
+	}
+	if _, ok := root["gateway"]; !ok {
+		t.Errorf("their gateway block is gone:\n%s", after)
+	}
+}

@@ -491,6 +491,19 @@ func jsoncRemoveKey(text, blockKey, key string, dropFrom int) (string, error) {
 			return text, nil
 		}
 		cut := zedEntrySpan(text, chain)
+		// A block that was the last key leaves the comma in front of it
+		// dangling, the same as a last scalar below.
+		if text[cut[1]-1] != ',' {
+			blank := stripJSONComments(text)
+			for i := cut[0] - 1; i >= 0; i-- {
+				if c := blank[i]; c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+					continue
+				} else if c == ',' {
+					cut[0] = i
+				}
+				break
+			}
+		}
 		return closeEmptied(text[:cut[0]]+text[cut[1]:], keys), nil
 	}
 	block, have := walkJSONCKeys(text, open, keys)
