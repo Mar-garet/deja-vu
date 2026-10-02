@@ -596,6 +596,25 @@ import (
 //
 // 60 also: a Codex fork records the thread it was forked from, and every
 // session keeps a fingerprint of the turn it opens with (#4549).
+//
+// 60 also: an OpenClaw 2026.7 reset or delete archive, stamped
+// 2026-10-01T15-18-21.294Z rather than with a number, is read (#4482).
+//
+// 60 also: a Codex rollout grown by records with no message moves the
+// session's updated time on an append, as a rebuild does (#4166).
+//
+// 60 also: a session whose id two files share takes its Started and Updated
+// from both, whichever sorts first (#4253).
+//
+// 60 also: a Codex rollout compressed in place, or a transcript rewritten
+// under its name in another form, is a move on an update with nothing else
+// removed; its old path and records go (#4252).
+//
+// 60 also: removing one of two transcripts that share an id re-reads the
+// other, so the runs both held stay and the row moves to it (#4310).
+//
+// 60 also: with DEJA_INCLUDE_SUBAGENTS=1, Kimi Code and Qwen Code sub-agent
+// logs are read as sub-agent sessions of their parent (#4483).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

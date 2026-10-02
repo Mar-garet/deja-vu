@@ -261,9 +261,15 @@ func toolResponseText(raw json.RawMessage) string {
 func after(s, key string) string { return afterKey(s, key, false) }
 
 // salvageFromPayload is the whole salvage: scope to the tool's response, pull a
-// value out of it, and bound what comes back.
+// value out of it, and bound what comes back. Qwen Code sends a failed
+// command's report as a top-level error with no tool_response, so without one
+// the last error key is read (#4314).
 func salvageFromPayload(raw string) string {
-	return clampOutput(salvageToolOutput(afterLast(raw, `"tool_response"`)))
+	if scope := afterLast(raw, `"tool_response"`); scope != "" {
+		return clampOutput(salvageToolOutput(scope))
+	}
+	v, _ := jsonStringAfter(afterLast(raw, `"error"`))
+	return clampOutput(v)
 }
 
 // afterLast is after, from the last place the key is used as one. A tool's
@@ -303,7 +309,9 @@ func salvageToolOutput(raw string) string {
 	// of "stderr" inside another value from standing in for the field: read at
 	// the mention, the scan gave up on stderr and answered with stdout, the
 	// half of the payload without the error in it (#2051).
-	for _, key := range []string{`"stderr"`, `"error"`, `"output"`, `"stdout"`, `"content"`, `"result"`} {
+	// llmContent and returnDisplay are where Gemini CLI puts a command's
+	// output (#4314).
+	for _, key := range []string{`"stderr"`, `"error"`, `"output"`, `"stdout"`, `"content"`, `"result"`, `"llmContent"`, `"returnDisplay"`} {
 		// Every occurrence, not the first: a mention of the key that is not a
 		// key — `grep "stderr" build.log` — made this give up on the key
 		// entirely and skip the real one further along (#2051).

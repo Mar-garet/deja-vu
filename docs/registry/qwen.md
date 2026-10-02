@@ -2,7 +2,7 @@
 
 ## Store and files
 
-Qwen Code writes sessions below `${DEJA_QWEN_ROOT:-~/.qwen}/projects/<encoded-project>/chats/*.jsonl`. The project directory uses the same slash-and-hyphen encoding as Claude Code. The `chats/` directory is part of Qwen's layout; only JSONL files directly inside it are session streams.
+Qwen Code writes sessions below `${DEJA_QWEN_ROOT:-~/.qwen}/projects/<encoded-project>/chats/*.jsonl`. The project directory uses the same slash-and-hyphen encoding as Claude Code. The `chats/` directory is part of Qwen's layout; only JSONL files directly inside it are session streams. A sub-agent's log, `subagents/<session>/agent-<id>.jsonl` in the same project directory, is read only with `DEJA_INCLUDE_SUBAGENTS=1`, as a session of its own naming the parent session (#4483).
 
 The Qwen configuration directory remains `~/.qwen` for installer settings. `DEJA_QWEN_ROOT` relocates session reads only.
 

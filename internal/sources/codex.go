@@ -337,9 +337,10 @@ func parseCodexRolloutPath(path string, offset int64, id, project string) ([]mod
 	// lands in the second half, undoing #635 for exactly the sessions someone
 	// is still talking in. One line re-read is cheaper than carrying state.
 	head := ""
+	headID := ""
 	if offset > 0 {
 		if id, cwd, payload := codexRolloutHead(path); id != "" {
-			s.ID = id
+			s.ID, headID = id, id
 			s.Kind, s.Parent = codexLineage(payload)
 			if cwd != "" {
 				s.Project = projectName(cwd)
@@ -353,9 +354,15 @@ func parseCodexRolloutPath(path string, offset int64, id, project string) ([]mod
 	// An append is parsed from an offset, so the head above already settled the
 	// identity; a parent's session_meta sitting in the new bytes must not take
 	// it over (#3933).
-	return parseCodexRolloutWithScanner(s, offset > 0, head, func(fn func(map[string]any)) error {
+	ss, err := parseCodexRolloutWithScanner(s, offset > 0, head, func(fn func(map[string]any)) error {
 		return scanJSONLFromOffset(path, offset, fn)
 	})
+	// A tail with no message carries only its time (below). Without the head's
+	// id it would land on a row named after the file, which holds nothing.
+	if len(ss) == 1 && len(ss[0].Messages) == 0 && headID == "" {
+		return nil, err
+	}
+	return ss, err
 }
 
 // parseCodexRolloutWithScanner normalizes a rollout supplied by the ordinary
@@ -485,6 +492,13 @@ func parseCodexRolloutWithScanner(s model.Session, idSettled bool, knownCWD stri
 		s.Messages = events
 	}
 	if len(s.Messages) == 0 {
+		// An appended tail of records with a time and no message, such as
+		// thread_settings_applied, still moves Updated: a full read touches
+		// every record, and returning nothing left the row behind a rebuild
+		// of the same file (#4166).
+		if idSettled && !s.Updated.IsZero() {
+			return []model.Session{s}, err
+		}
 		return nil, err
 	}
 	return []model.Session{s}, err

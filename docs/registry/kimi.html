@@ -52,8 +52,9 @@
 <p>reads the file whole when the stream goes on, so the reply is stored once</p>
 <p>(#4445). <code>tool.result</code></p>
 <p>events keep their <code>output</code> text under the <code>tool-output</code> role, error results</p>
-<p>included. Sub-agent histories under <code>agents/agent-*</code> and media are out of</p>
-<p>scope.</p>
+<p>included. Sub-agent histories under <code>agents/&lt;agent-id&gt;/wire.jsonl</code> are read</p>
+<p>only with <code>DEJA_INCLUDE_SUBAGENTS=1</code>, each as a session of its own naming the</p>
+<p>parent session (#4483). Media is out of scope.</p>
 <ul>
 <li><strong>MCP</strong>: <code>deja install kimi</code> writes <code>mcpServers.deja</code> into</li>
 </ul>

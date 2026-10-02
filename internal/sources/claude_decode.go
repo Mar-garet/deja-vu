@@ -406,6 +406,12 @@ func scanJSONLBytes(path string, offset int64, fn func([]byte)) error {
 	for {
 		line, err := r.ReadBytes('\n')
 		if trimmed := trimJSONSpace(line); len(trimmed) > 0 {
+			// A last line with no newline that does not parse is the client
+			// still writing it, not a broken line: the next pass reads it
+			// whole, so it is not handed on to be counted unreadable (#4276).
+			if errors.Is(err, io.EOF) && !json.Valid(trimmed) {
+				return nil
+			}
 			fn(trimmed)
 		}
 		if errors.Is(err, io.EOF) {

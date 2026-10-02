@@ -678,6 +678,8 @@ func rebuildWithTombstones(dir string, harness string, scope string, files map[s
 			}
 			if owns {
 				m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
+			} else {
+				widenSpan(m.Sessions, key, s)
 			}
 			if collided {
 				markShared(m.Sessions, key)
@@ -1653,6 +1655,8 @@ func writeSessionsWithSync(tmp, dir string, ss []model.Session, files map[string
 			}
 			if owns {
 				m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
+			} else {
+				widenSpan(m.Sessions, key, s)
 			}
 			if collided {
 				markShared(m.Sessions, key)
@@ -2678,6 +2682,24 @@ var evicted atomic.Int64
 // disappeared since the last build, and clears the counter.
 func ReportEvictedFiles() int {
 	return int(evicted.Swap(0))
+}
+
+// widenSpan takes the span of a file that shares key's id and does not own
+// its row into that row. The owner merges the earlier files' span in when it
+// is read second, so without this the row's Started and Updated followed the
+// file names' order, where an update takes every file's span (#4253).
+func widenSpan(sessions map[string]SessionMeta, key string, s model.Session) {
+	meta, ok := sessions[key]
+	if !ok {
+		return
+	}
+	if !s.Started.IsZero() && (meta.Started.IsZero() || s.Started.Before(meta.Started)) {
+		meta.Started = s.Started
+	}
+	if s.Updated.After(meta.Updated) {
+		meta.Updated = s.Updated
+	}
+	sessions[key] = meta
 }
 
 // claimSession is attributeSession for a session read this pass. A transcript
@@ -3800,12 +3822,13 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 			}
 		}
 	}
+	rewritten := rewrittenInPlace(kept, changed, files, old.Files, old.Sessions)
 	if len(changed) == 0 && len(removed) == 0 {
 		sayKept()
 		lastIngestFiles = 0
 		return nil
 	}
-	if len(removed) == 0 && canAppendIncremental(changed, old.Files) {
+	if len(removed) == 0 && !rewritten && canAppendIncremental(changed, old.Files) {
 		filesTouched, messages, unreadable, err := appendIncremental(dir, harness, scope, old, files, changed)
 		if IsCorrupt(err) {
 			if progress != nil {
@@ -3830,6 +3853,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		}
 		return nil
 	}
+	rereadSharedCopies(removed, changed, files, old.Sessions)
 	var replacements []model.Session
 	// This pass's counts, like every other build path (#1850).
 	emptied.Store(0)
@@ -4169,8 +4193,11 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		}
 		if owns {
 			m.Sessions[key] = metaWithOrd(metaForSession(s), ord)
-		} else if _, present := m.Sessions[key]; !present {
-			m.Sessions[key] = held
+		} else {
+			if _, present := m.Sessions[key]; !present {
+				m.Sessions[key] = held
+			}
+			widenSpan(m.Sessions, key, s)
 		}
 		if collided {
 			markShared(m.Sessions, key)
@@ -4658,6 +4685,80 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 		buildSessionFactsFromIndex(dir)
 	}
 	return filesTouched, messages, unreadable, nil
+}
+
+// rereadSharedCopies reads again each held transcript that shares a removed
+// one's file name, where that name is the id of a row two transcripts share:
+// the filename-derived id two projects can share (#699). A turn both copies
+// held was written once, under the copy read first; dropping that copy's
+// records by path took the survivor's commands and outputs with them, and the
+// row stayed on the deleted file until a rebuild (#4310).
+func rereadSharedCopies(removed map[string]bool, changed, files map[string]FileState, sessions map[string]SessionMeta) {
+	shared := map[string]bool{}
+	for _, meta := range sessions {
+		if meta.Shared {
+			shared[meta.ID] = true
+		}
+	}
+	names := map[string]bool{}
+	for p := range removed {
+		base := filepath.Base(p)
+		if storeHarness(p) == "" && shared[strings.TrimSuffix(base, filepath.Ext(base))] {
+			names[base] = true
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	for p, f := range files {
+		if _, ok := changed[p]; !ok && !removed[p] && names[filepath.Base(p)] && storeHarness(p) == "" {
+			changed[p] = f
+		}
+	}
+}
+
+// rewrittenInPlace reports whether a kept file has another beside it under
+// the same name in another form: Codex compressing x.jsonl to x.jsonl.zst,
+// Gemini rewriting x.json as x.jsonl. That is the file moving, which only the
+// replacement path's rename rule pairs up; the append path wrote the new
+// file's records beside the old ones and kept the dead path (#4252). A pass
+// that ran between zstd writing the .zst and removing the .jsonl held both,
+// the row marked shared; the .zst is read again so the rule can pair them.
+func rewrittenInPlace(kept map[string]bool, changed, files, held map[string]FileState, sessions map[string]SessionMeta) bool {
+	if len(kept) == 0 {
+		return false
+	}
+	stems := map[string]bool{}
+	for p := range kept {
+		stems[fileStem(p)] = true
+	}
+	shared := map[string]bool{}
+	for _, meta := range sessions {
+		if meta.Shared && kept[meta.Path] {
+			shared[fileStem(meta.Path)] = true
+		}
+	}
+	found := false
+	for p, f := range files {
+		if kept[p] || !stems[fileStem(p)] {
+			continue
+		}
+		if _, ok := changed[p]; ok {
+			if _, known := held[p]; !known {
+				found = true
+			}
+		} else if shared[fileStem(p)] {
+			changed[p] = f
+			found = true
+		}
+	}
+	return found
+}
+
+// fileStem is p without its compression suffix and its extension.
+func fileStem(p string) string {
+	p = strings.TrimSuffix(p, ".zst")
+	return strings.TrimSuffix(p, filepath.Ext(p))
 }
 
 // carriesWork reports whether any of these sessions holds a command or the

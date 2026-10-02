@@ -25,7 +25,9 @@ output of `openclaw doctor --session-sqlite import` over the JSONL fixture.
 Read in the sessions directory beside the live transcripts: what a reset or a
 delete left behind — `<id>.jsonl.reset.<ts>`, `<id>.jsonl.deleted.<ts>` and the
 compressed `<id>.jsonl.deleted.<ts>.zst` an explicit delete writes since the
-SQLite flip. That is the history someone asks for after losing it. An archive
+SQLite flip. `<ts>` is a number or, from 2026.7, an ISO stamp with dashes such
+as `2026-10-01T15-18-21.294Z`. That is the history someone asks for after
+losing it. An archive
 whose live file is back stands down, so a reset conversation is indexed once.
 Skipped: `sessions.json` (store metadata), compaction checkpoints
 (`<id>.checkpoint.<uuid>.jsonl`), `.bak` copies and the
