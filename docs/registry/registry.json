@@ -272,17 +272,18 @@
     {
       "id": "deepseek",
       "store_paths": [
+        "${DSH_HOME:-~/.dsh}/sessions/*/session-*/session.v4.jsonl.zstd",
         "${DSH_HOME:-~/.dsh}/sessions/*/session-*/session.v3.jsonl.zstd",
         "${DSH_HOME:-~/.dsh}/sessions/*/session-*/session.jsonl.zstd",
         "${DSH_HOME:-~/.dsh}/sessions/*/session-*/session.jsonl",
-        "${DEJA_DEEPSEEK_ROOT}/*/session-*/session.v3.jsonl.zstd"
+        "${DEJA_DEEPSEEK_ROOT}/*/session-*/session.v4.jsonl.zstd"
       ],
       "format_kind": "jsonl",
       "fixture_paths": [
         "fixtures/registry/deepseek/sessions/--work-pgbouncer-lab--/session-eaf5c9ac-0e47-4d2f-b982-8bae306062d1/session.jsonl"
       ],
       "parser_source": "internal/sources/deepseek.go",
-      "last_verified": "2026-08-21",
+      "last_verified": "2026-10-02",
       "display_name": "DeepSeek Harness",
       "capabilities": {
         "mcp": true,

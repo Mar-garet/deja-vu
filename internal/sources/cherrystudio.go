@@ -245,7 +245,7 @@ func CherryStudioSessionFiles() []string {
 		})...)
 	}
 	for _, root := range cherryStudioDshRoots() {
-		out = append(out, walkFiles(root, isDeepSeekLog)...)
+		out = append(out, deepSeekLogs(root)...)
 	}
 	return out
 }
