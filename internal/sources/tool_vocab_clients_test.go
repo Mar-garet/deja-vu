@@ -172,3 +172,29 @@ func TestRooLegacyReadFileList(t *testing.T) {
 		"files": []any{map[string]any{"path": "retry.go", "lineRanges": []any{map[string]any{"start": 1, "end": 20}}}, map[string]any{"path": "jitter.go"}}, "_legacyFormat": true}))
 	vocabCheck(t, ss, []string{vocabFiles("/tmp/proj/retry.go\n/tmp/proj/jitter.go")}, nil)
 }
+
+// Crush v0.97.1: lsp_replace_symbol {symbol, file_path, replacement, action}
+// writes replacement in place of the symbol, or before or after it; a delete
+// writes nothing (#4533).
+func TestCrushReplaceSymbolWrote(t *testing.T) {
+	replaced := "func backoffJitter(attempt int) time.Duration { return time.Duration(rand.Int63n(int64(attempt+1))) }"
+	deleted := "func legacyRetry() error { return errGiveUp }"
+	call := func(id, input string) string {
+		return crushInsert(t, "a_"+id, "s1", "assistant", 1784282401, []any{
+			map[string]any{"type": "tool_call", "data": map[string]any{"id": "c_" + id, "name": "lsp_replace_symbol", "input": input, "finished": true}}})
+	}
+	sql := "insert into sessions values ('s1',null,'retry',2,0,0,0.0,1784282405,1784282400,null,null);\n" +
+		call("1", vocabJSON(map[string]any{"symbol": "backoffJitter", "file_path": "/tmp/proj/jitter.go", "replacement": replaced, "action": "replace"})) +
+		call("2", vocabJSON(map[string]any{"symbol": "legacyRetry", "file_path": "/tmp/proj/retry.go", "replacement": deleted, "action": "delete"}))
+	ss, err := ParseCrushDB(crushStore(t, "proj", sql))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vocabCheck(t, ss, []string{
+		vocabFiles("/tmp/proj/jitter.go"),
+		vocabWrote("/tmp/proj/jitter.go", replaced),
+		vocabFiles("/tmp/proj/retry.go"),
+	}, []string{
+		vocabWrote("/tmp/proj/retry.go", deleted),
+	})
+}
