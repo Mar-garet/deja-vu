@@ -23,6 +23,14 @@ func TestInstallRefusesATOMLKeyWrittenInline(t *testing.T) {
 			func() string { return filepath.Join(sources.GrokHome(), "config.toml") }},
 		{"kimi-auto", "default_model = \"kimi-k2\"\nhooks = []\n",
 			func() string { return filepath.Join(sources.KimiConfigDir(), "config.toml") }},
+		// deja itself, inline under the table or as dotted keys: the header deja
+		// appends redefines that one key, and TOML refuses it the same way.
+		{"codex", "[mcp_servers]\ndeja = { command = \"/usr/local/bin/deja\", args = [\"mcp\"] }\n",
+			func() string { return filepath.Join(sources.CodexHome(), "config.toml") }},
+		{"codex", "mcp_servers.deja.command = \"/usr/local/bin/deja\"\n",
+			func() string { return filepath.Join(sources.CodexHome(), "config.toml") }},
+		{"grok", "[mcp_servers]\ndeja = { command = \"/usr/local/bin/deja\" }\n",
+			func() string { return filepath.Join(sources.GrokHome(), "config.toml") }},
 	} {
 		t.Run(c.target, func(t *testing.T) {
 			hermeticEnv(t)

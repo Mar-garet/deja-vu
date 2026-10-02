@@ -961,7 +961,7 @@ func installKimiAuto(exe string, uninstall bool) (installResult, error) {
 		return installResult{}, err
 	}
 	if !uninstall {
-		if err := tomlInlineKey(lfText(old), "hooks", "[[hooks]]"); err != nil {
+		if err := tomlInlineKey(lfText(old), "[[hooks]]"); err != nil {
 			return installResult{}, configParseError(path, err)
 		}
 	}

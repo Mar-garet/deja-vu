@@ -870,7 +870,7 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 			if err != nil {
 				return installResult{}, err
 			}
-			if err := tomlInlineKey(lfText(old), "hooks", "[[hooks]]"); err != nil {
+			if err := tomlInlineKey(lfText(old), "[[hooks]]"); err != nil {
 				return installResult{}, configParseError(path, err)
 			}
 		}
@@ -2574,24 +2574,53 @@ func tomlHeadersClose(text string) error {
 	return nil
 }
 
-// tomlInlineKey refuses a config whose top level gives the key its whole value
-// inline — `mcp_servers = { mine = {…} }`, `hooks = []`. The table deja appends
-// for the same key then defines it a second time, which TOML forbids: codex
-// stopped loading its config at all, and kimi and grok refused the file (#4554).
-// Dotted keys (`mcp_servers.mine.command = …`) are tables, and a header may
-// extend them.
-func tomlInlineKey(text, key, header string) error {
+// tomlInlineKey refuses a config that gives the table deja appends — header,
+// `[mcp_servers.deja]` or `[[hooks]]` — or a table above it a value by a key:
+// `mcp_servers = { mine = {…} }`, `hooks = []`, `deja = {…}` under
+// `[mcp_servers]`, `mcp_servers.deja.command = …`. deja's header then defines
+// it a second time, which TOML forbids: codex stopped loading its config at
+// all, and kimi and grok refused the file (#4554). A dotted key beside deja's
+// (`mcp_servers.mine.command = …`) is a table a header may extend.
+func tomlInlineKey(text, header string) error {
+	want := tomlKeyPath(strings.Trim(header, "[]"))
+	table := []string(nil)
 	for i, line := range strings.Split(text, "\n") {
 		code := tomlCode(line)
-		if strings.HasPrefix(code, "[") {
-			return nil
+		if strings.HasPrefix(code, "[") && strings.HasSuffix(code, "]") {
+			table = tomlKeyPath(strings.Trim(code, "[]"))
+			continue
 		}
 		k, _, ok := strings.Cut(code, "=")
-		if ok && strings.Trim(strings.TrimSpace(k), `"'`) == key {
-			return fmt.Errorf("line %d sets %s inline, and the %s table deja adds would define it twice — write it as %s tables or add deja by hand", i+1, key, header, header)
+		if !ok || tomlPathHasPrefix(table, want) {
+			continue
+		}
+		path := append(append([]string(nil), table...), tomlKeyPath(k)...)
+		if tomlPathHasPrefix(want, path) || tomlPathHasPrefix(path, want) {
+			return fmt.Errorf("line %d sets %s inline, and the %s table deja adds would define it twice — write it as %s tables or add deja by hand", i+1, strings.Join(path, "."), header, header)
 		}
 	}
 	return nil
+}
+
+// tomlKeyPath splits a dotted TOML key into its parts, unquoted.
+func tomlKeyPath(k string) []string {
+	var out []string
+	for _, part := range strings.Split(k, ".") {
+		out = append(out, strings.Trim(strings.TrimSpace(part), `"'`))
+	}
+	return out
+}
+
+func tomlPathHasPrefix(path, prefix []string) bool {
+	if len(path) < len(prefix) {
+		return false
+	}
+	for i := range prefix {
+		if path[i] != prefix[i] {
+			return false
+		}
+	}
+	return true
 }
 
 type tomlMCPBlock struct {
@@ -2613,7 +2642,7 @@ func installTOML(path, block string, uninstall bool) (installResult, error) {
 		return installResult{}, configParseError(path, err)
 	}
 	if !uninstall {
-		if err := tomlInlineKey(text, "mcp_servers", "[mcp_servers.deja]"); err != nil {
+		if err := tomlInlineKey(text, "[mcp_servers.deja]"); err != nil {
 			return installResult{}, configParseError(path, err)
 		}
 	}
