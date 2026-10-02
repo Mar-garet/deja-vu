@@ -81,8 +81,9 @@ func fileText(t *testing.T, path string) string {
 // An install over deja's own entry turned it back on wherever the writer built
 // a fresh entry rather than merging into the old one, and said nothing about
 // it: the next client start ran deja again for somebody who had switched it
-// off (#4467). Install keeps the switch where the reader put it and says so,
-// the way cursor's entry always has (#2479).
+// off (#4467). The plugin registries did the same through the -auto targets,
+// openclaw while reporting "unchanged" (#4472). Install keeps the switch where
+// the reader put it and says so, the way cursor's entry always has (#2479).
 func TestInstallKeepsTheReadersOffSwitch(t *testing.T) {
 	for _, tc := range []struct {
 		target   string
@@ -167,6 +168,43 @@ func TestInstallKeepsTheReadersOffSwitch(t *testing.T) {
 			},
 			stillOff: func(t *testing.T) bool {
 				return strings.Count(fileText(t, filepath.Join(sources.DSHHome(), "cordis.patch.yml")), "disabled: true") == 2
+			},
+		},
+		{
+			// `openclaw plugins disable deja` and `openclaw hooks disable
+			// deja-recall`.
+			target: "openclaw-auto",
+			off: func(t *testing.T) {
+				path := filepath.Join(sources.OpenClawStateDir(), "openclaw.json")
+				switchJSON(t, path, false, "plugins", "entries", openclawPluginID, "enabled")
+				switchJSON(t, path, false, "hooks", "internal", "entries", openclawHookName, "enabled")
+			},
+			stillOff: func(t *testing.T) bool {
+				path := filepath.Join(sources.OpenClawStateDir(), "openclaw.json")
+				return readJSONPath(t, path, "plugins", "entries", openclawPluginID, "enabled") == false &&
+					readJSONPath(t, path, "hooks", "internal", "entries", openclawHookName, "enabled") == false
+			},
+		},
+		{
+			// `hermes plugins disable deja` moves the name from one list to
+			// the other.
+			target: "hermes-auto",
+			off: func(t *testing.T) {
+				switchText(t, filepath.Join(sources.HermesHome(), "config.yaml"),
+					"plugins:\n  enabled:\n    - deja\n", "plugins:\n  enabled: []\n  disabled:\n  - deja\n")
+			},
+			stillOff: func(t *testing.T) bool {
+				return strings.Contains(fileText(t, filepath.Join(sources.HermesHome(), "config.yaml")), "  enabled: []\n  disabled:\n  - deja\n")
+			},
+		},
+		{
+			// `reasonix plugin disable deja`.
+			target: "reasonix-auto",
+			off: func(t *testing.T) {
+				switchText(t, reasonixStatePath(), `"enabled": true`, `"enabled": false`)
+			},
+			stillOff: func(t *testing.T) bool {
+				return strings.Contains(fileText(t, reasonixStatePath()), `"enabled": false`)
 			},
 		},
 	} {

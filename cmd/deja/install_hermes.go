@@ -59,6 +59,13 @@ func installHermesPlugin(exe string, uninstall bool) (installResult, error) {
 	// A discovered plugin is listed as "not enabled" and never loaded until
 	// its name is in plugins.enabled, so the installer puts it there rather
 	// than leaving the user a second step nothing tells them about.
+	//
+	// Unless the reader took it out: `hermes plugins disable deja` moves the
+	// name to plugins.disabled, and listing it under enabled again turned it
+	// back on and left it in both lists (#4472).
+	if hermesPluginDisabled() {
+		return installResult{Path: dir, Action: a, Note: "left deja's plugin switched off, the way it was — `hermes plugins enable deja` turns it back on"}, nil
+	}
 	if err := setHermesPluginEnabled(true); err != nil {
 		return installResult{}, err
 	}
