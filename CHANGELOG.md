@@ -207,6 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja show` no longer says a plain `grok -p` session has no recorded parent: Grok Build marks every scripted run "headless", which deja took for a spawn kind, and those sessions are no longer kept out of `deja rules` candidates as subagents either (#4585).
 - `deja doctor` no longer reports a fully indexed Grok Build store as having files it does not recognise: `usage.json` and `tool_definitions.json`, which grok 1.0.41 writes into every session, are counted as grok's own (#4586).
 - `deja doctor` no longer suggests `grok mcp add deja -c deja -a mcp` to a Grok Build user, whose `grok` rejects it and already reads the server from `~/.grok/config.toml`; the line shows only when the `grok` on PATH is @vibe-kit/grok-cli or there is none (#4587).
+- Under Grok Build the session-start and prompt hooks no longer claim memory arrived: grok drops what those two events return, so deja serves nothing there, the receipt stops saying "1.7 KB of context", and the "memory arrived" count no longer rises on every grok session start and prompt. Recall in grok comes from the `deja` tool and the tool-call hooks, which grok does pass on (#4588).
 
 ## [0.21.4] - 2026-09-29
 

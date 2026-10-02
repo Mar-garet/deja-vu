@@ -107,6 +107,14 @@
 <p>command that exited non-zero and hands <code>additionalContext</code> to the model with</p>
 <p>the result. The output is read from <code>toolResult.output_for_prompt</code>; <code>output</code></p>
 <p>there is the raw bytes as a number array (#4499).</p>
+<ul>
+<li>On 1.0.41 session start and the prompt are still passive: grok shows a</li>
+</ul>
+<p>hook&#39;s <code>systemMessage</code> and drops its <code>additionalContext</code>, and the session&#39;s</p>
+<p><code>chat_history.jsonl</code> carries no deja-recall from either. Under grok, which</p>
+<p>sets <code>GROK_HOOK_EVENT</code> on every hook it runs, <code>hook-context</code> and</p>
+<p><code>hook-prompt</code> serve nothing and log nothing as arrived; the session-start</p>
+<p>receipt is left to say only what the index is doing (#4588).</p>
 <p><strong>Last verified:</strong> 2026-08-24 against Grok Build 1.0.5 (macos-aarch64)</p>
 
 <hr>

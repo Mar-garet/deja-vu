@@ -32,6 +32,9 @@ func TestMain(m *testing.M) {
 		"DEJA_INDEX_DIR":       "",
 		"DEJA_NOTES_FILE":      "",
 		"DEJA_SOURCE_INSTANCE": "",
+		// Set by grok on the hooks it runs, where hook-context and
+		// hook-prompt answer nothing (#4588).
+		"GROK_HOOK_EVENT": "",
 		// Guard: hook tests must never spawn a real detached warmup —
 		// os.Executable() inside tests is the test binary itself.
 		"DEJA_WARMUP_SENTINEL":  filepath.Join(root, "warmup-guard"),

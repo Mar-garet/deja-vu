@@ -76,5 +76,11 @@ not that something spawned it, so deja records no kind for it (#4585).
   command that exited non-zero and hands `additionalContext` to the model with
   the result. The output is read from `toolResult.output_for_prompt`; `output`
   there is the raw bytes as a number array (#4499).
+- On 1.0.41 session start and the prompt are still passive: grok shows a
+  hook's `systemMessage` and drops its `additionalContext`, and the session's
+  `chat_history.jsonl` carries no deja-recall from either. Under grok, which
+  sets `GROK_HOOK_EVENT` on every hook it runs, `hook-context` and
+  `hook-prompt` serve nothing and log nothing as arrived; the session-start
+  receipt is left to say only what the index is doing (#4588).
 
 **Last verified:** 2026-08-24 against Grok Build 1.0.5 (macos-aarch64)

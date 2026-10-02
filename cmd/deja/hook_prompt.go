@@ -177,6 +177,11 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	// Written down for the surfaces that are told no session id: this hook drops
 	// the caller's own session by hand below, and the MCP tool cannot (#3945).
 	markSessionLive(dir, input.SessionID)
+	// Grok discards what this hook returns. Answering anyway logged memory as
+	// arrived and marked it shown to a session that never saw it (#4588).
+	if grokDropsContext() {
+		return nil
+	}
 	if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "UserPromptSubmit", shape, stdout); delivered {
 		return err
 	}
