@@ -54,10 +54,11 @@ func jsonStrings(v any) []string {
 	return out
 }
 
-// nameIsDeja is a server or plugin name as clients compare them: gemini
-// lowercases and trims ids before it looks.
+// nameIsDeja is a server or plugin name as clients compare them: exactly.
+// Gemini lowercases ids only in the commands that write them, and copilot,
+// hermes, goose and claude-code look names up as they are.
 func nameIsDeja(s string) bool {
-	return strings.EqualFold(strings.TrimSpace(s), "deja")
+	return s == "deja"
 }
 
 func anyDeja(list []string) bool {

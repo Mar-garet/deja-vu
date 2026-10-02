@@ -238,7 +238,8 @@ func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
 				"disabledExtensions: [extension-module:deja]\n")},
 		{name: "cline plugin", target: "cline-auto", section: "auto_recall", row: "cline", key: "disabledPlugins",
 			off: func(t *testing.T) {
-				setJSON(filepath.Join(sources.ClineConfigDir(), "settings", "global-settings.json"), []string{"disabledPlugins"}, []any{"deja"})(t)
+				setJSON(filepath.Join(sources.ClineConfigDir(), "settings", "global-settings.json"), []string{"disabledPlugins"},
+					[]any{filepath.Join(sources.ClinePluginsDir(), "deja", "index.js")})(t)
 			}},
 		{name: "hermes plugin", target: "hermes-auto", section: "auto_recall", row: "hermes", key: "plugins.enabled",
 			off: replace(func() string { return filepath.Join(sources.HermesHome(), "config.yaml") },
@@ -435,6 +436,80 @@ func TestGeminiAndQwenServerListsReadAsTheClientReadsThem(t *testing.T) {
 			}
 			if got := clientMCPDenied(c.client) != ""; got != c.off {
 				t.Errorf("switched off = %v, want %v (%q)", got, c.off, clientMCPDenied(c.client))
+			}
+		})
+	}
+}
+
+// Each client matches deja's id its own way, and a near miss is not an off
+// switch: omp and gjc key extensions as extension-module:<name>, cline lists
+// the module file, goose reads its plugin settings from ~/.config/goose
+// whatever XDG says and lets a project's list overrule the user's, and every
+// list compares exactly.
+func TestClientPluginAndServerListsMatchOnlyWhatTheClientMatches(t *testing.T) {
+	write := func(t *testing.T, p, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	userGoose := func() string { return filepath.Join(os.Getenv("HOME"), ".config", "goose", "settings.json") }
+	cases := []struct {
+		name, client string
+		hooks        bool
+		setup        func(t *testing.T)
+		off          bool
+	}{
+		{"omp bare name", "omp", true, func(t *testing.T) {
+			write(t, filepath.Join(sources.OmpConfigDir(), "config.yml"), "disabledExtensions:\n  - deja\n")
+		}, false},
+		{"omp module id", "omp", true, func(t *testing.T) {
+			write(t, filepath.Join(sources.OmpConfigDir(), "config.yml"), "disabledExtensions:\n  - extension-module:deja\n")
+		}, true},
+		{"cline bare name", "cline", true, func(t *testing.T) {
+			write(t, filepath.Join(sources.ClineConfigDir(), "settings", "global-settings.json"), `{"disabledPlugins":["deja"]}`)
+		}, false},
+		{"cline plugin dir", "cline", true, func(t *testing.T) {
+			b, _ := json.Marshal(map[string]any{"disabledPlugins": []string{filepath.Join(sources.ClinePluginsDir(), "deja")}})
+			write(t, filepath.Join(sources.ClineConfigDir(), "settings", "global-settings.json"), string(b))
+		}, false},
+		{"cline module file", "cline", true, func(t *testing.T) {
+			b, _ := json.Marshal(map[string]any{"disabledPlugins": []string{filepath.Join(sources.ClinePluginsDir(), "deja", "index.js")}})
+			write(t, filepath.Join(sources.ClineConfigDir(), "settings", "global-settings.json"), string(b))
+		}, true},
+		{"copilot other case", "copilot", false, func(t *testing.T) {
+			write(t, filepath.Join(filepath.Dir(copilotMCPConfigPath()), "settings.json"), `{"disabledMcpServers":["Deja"]}`)
+		}, false},
+		{"goose under XDG", "goose", true, func(t *testing.T) {
+			xdg := filepath.Join(os.Getenv("HOME"), "xdg")
+			t.Setenv("XDG_CONFIG_HOME", xdg)
+			write(t, filepath.Join(xdg, "goose", "settings.json"), `{"disabledPlugins":["deja"]}`)
+		}, false},
+		{"goose user file with XDG set", "goose", true, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(os.Getenv("HOME"), "xdg"))
+			write(t, userGoose(), `{"disabledPlugins":["deja"]}`)
+		}, true},
+		{"goose project enables it", "goose", true, func(t *testing.T) {
+			write(t, userGoose(), `{"disabledPlugins":["deja"]}`)
+			project := filepath.Join(os.Getenv("HOME"), "work")
+			write(t, filepath.Join(project, ".config", "goose", "settings.json"), `{"enabledPlugins":["deja"]}`)
+			t.Chdir(project)
+		}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hermeticEnv(t)
+			t.Chdir(t.TempDir())
+			c.setup(t)
+			note := clientMCPDenied(c.client)
+			if c.hooks {
+				note = clientHooksOff(c.client)
+			}
+			if got := note != ""; got != c.off {
+				t.Errorf("switched off = %v, want %v (%q)", got, c.off, note)
 			}
 		})
 	}

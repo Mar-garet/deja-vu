@@ -203,9 +203,26 @@ func clientHooksOff(name string) string {
 				" — openclaw will not run its recall on each prompt"
 		}
 	case "goose":
-		p := filepath.Join(gooseConfigDir(), "settings.json")
-		if listHasDeja(jsonAt(readJSONConfig(p), "disabledPlugins")) {
-			return pluginOffNote(name, "`disabledPlugins` lists deja", p)
+		// Goose reads plugin settings from ~/.config/goose (or under
+		// GOOSE_PATH_ROOT) whatever XDG says, and the project's local and
+		// shared files first: the first one naming deja decides.
+		user := filepath.Join(sources.Home(), ".config", "goose", "settings.json")
+		if root := os.Getenv("GOOSE_PATH_ROOT"); filepath.IsAbs(root) {
+			user = filepath.Join(root, ".config", "goose", "settings.json")
+		}
+		files := []string{user}
+		if cwd, err := os.Getwd(); err == nil {
+			project := filepath.Join(cwd, ".config", "goose")
+			files = []string{filepath.Join(project, "settings.local.json"), filepath.Join(project, "settings.json"), user}
+		}
+		for _, p := range files {
+			root := readJSONConfig(p)
+			if listHasDeja(jsonAt(root, "disabledPlugins")) {
+				return pluginOffNote(name, "`disabledPlugins` lists deja", p)
+			}
+			if listHasDeja(jsonAt(root, "enabledPlugins")) {
+				break
+			}
 		}
 	case "pi", "senpi":
 		dir := sources.PiConfigDir()
@@ -225,16 +242,22 @@ func clientHooksOff(name string) string {
 		if b, err := readConfig(p); err == nil {
 			_, items, _ := yamlLookup(string(b), "disabledExtensions")
 			for _, s := range items {
-				if s == "extension-module:deja" || nameIsDeja(s) {
+				// The id is extension-module:<name>; a bare name is not read.
+				if s == "extension-module:deja" {
 					return pluginOffNote(name, "`disabledExtensions` lists "+s, p)
 				}
 			}
 		}
 	case "cline":
+		// Cline filters plugin module files by exact path, and its toggle
+		// writes the module's path: a name or the plugin's directory is not
+		// read.
 		p := filepath.Join(sources.ClineConfigDir(), "settings", "global-settings.json")
+		if env := os.Getenv("CLINE_GLOBAL_SETTINGS_PATH"); env != "" {
+			p = env
+		}
 		for _, s := range jsonStrings(jsonAt(readJSONConfig(p), "disabledPlugins")) {
-			if nameIsDeja(s) || filepath.Clean(s) == filepath.Join(sources.ClinePluginsDir(), "deja") ||
-				filepath.Clean(s) == filepath.Join(sources.ClinePluginsDir(), "deja", "index.js") {
+			if s == filepath.Join(sources.ClinePluginsDir(), "deja", "index.js") {
 				return pluginOffNote(name, "`disabledPlugins` lists deja", p)
 			}
 		}
