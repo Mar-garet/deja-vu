@@ -260,6 +260,11 @@ func (j *crushJoin) add(s *model.Session, recs []crushRecord, results []crushRes
 		if code, ok := statusCode(lastLine(crushStripCWD(r.content)), "Exit code ", ""); ok {
 			j.exits.stamp(s.Messages, r.call, "", code)
 		}
+		// A result answers the call before it, once: a provider that numbers
+		// calls per turn reuses the id, and a later failure under it is not
+		// the earlier call's.
+		delete(j.exits, r.call)
+		delete(j.changes, r.call)
 	}
 }
 
@@ -368,17 +373,18 @@ func crushMessages(role, parts string, at time.Time) ([]crushRecord, []crushResu
 // crushStripCWD drops the <cwd>…</cwd> tag Crush appends to a tool result. It
 // is the same directory on every line of every session, and left in it is a
 // path that matches a search for the project name in every tool output there
-// is.
+// is. Only the tag at the end is crush's: one earlier is what the command
+// printed, and cutting there lost the exit line below it.
 func crushStripCWD(s string) string {
-	at := strings.Index(s, "<cwd>")
+	t := strings.TrimRight(s, " \t\r\n")
+	if !strings.HasSuffix(t, "</cwd>") {
+		return s
+	}
+	at := strings.LastIndex(t, "<cwd>")
 	if at < 0 {
 		return s
 	}
-	end := strings.Index(s[at:], "</cwd>")
-	if end < 0 {
-		return s[:at]
-	}
-	return s[:at] + s[at+end+len("</cwd>"):]
+	return t[:at]
 }
 
 func crushRows(db, q string) ([]crushRow, error) {
