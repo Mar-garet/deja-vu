@@ -55,6 +55,15 @@ func runInstall(dir string, args []string, uninstall bool) error {
 		}
 		return fmt.Errorf("%s cannot find your home directory — set HOME to the account deja should wire", verb)
 	}
+	// What this run reads is what its writes are checked against (#4561).
+	readBytesMu.Lock()
+	readBytes = map[string][]byte{}
+	readBytesMu.Unlock()
+	defer func() {
+		readBytesMu.Lock()
+		readBytes = nil
+		readBytesMu.Unlock()
+	}()
 	// One install at a time. Every writer here reads a config, edits it and
 	// writes it back, which is three steps a second process can land in the
 	// middle of: with `deja install claude-auto` and `deja install statusline`
@@ -225,6 +234,11 @@ func runInstall(dir string, args []string, uninstall bool) error {
 	defer func() { installBuildsIndex = false }()
 	for _, t := range targets {
 		r, err := installTarget(t, exe, uninstall)
+		// A client saved a config under the edit: edited again from its
+		// version rather than renamed over it (#4561).
+		for i := 0; i < configRaceRetries && errors.Is(err, errConfigChanged); i++ {
+			r, err = installTarget(t, exe, uninstall)
+		}
 		if err != nil {
 			note(t, err)
 			continue
@@ -872,6 +886,17 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 	case "kimi-auto":
 		// Both halves in the result: the report is what says which files were
 		// touched, and this one wrote mcp.json without ever naming it (#3254).
+		// The hooks' refusal is asked first, so a refused target writes nothing.
+		if !uninstall {
+			path := filepath.Join(sources.KimiConfigDir(), "config.toml")
+			old, err := readConfig(path)
+			if err != nil {
+				return installResult{}, err
+			}
+			if err := tomlInlineKey(lfText(old), "[[hooks]]"); err != nil {
+				return installResult{}, configParseError(path, err)
+			}
+		}
 		mcp, err := installMCPJSON(filepath.Join(sources.KimiConfigDir(), "mcp.json"), exe, uninstall)
 		if err != nil {
 			return installResult{}, err
@@ -1068,7 +1093,14 @@ func wroteAll(rs ...installResult) installResult {
 }
 
 func installClaudeAuto(exe string, uninstall bool) (installResult, error) {
-	mcp, err := installClaude(exe, uninstall)
+	// ~/.claude.json lives outside ~/.claude, so it went first and was wired
+	// by a run that then refused on the directory, .bak and all (#4560). The
+	// halves that can fail on ~/.claude go first, and the MCP file is asked
+	// whether it can be written before either of them.
+	if err := configWritable(sources.ClaudeJSONPath()); err != nil {
+		return installResult{}, err
+	}
+	hook, err := installClaudeHook(exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
@@ -1076,7 +1108,7 @@ func installClaudeAuto(exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
-	hook, err := installClaudeHook(exe, uninstall)
+	mcp, err := installClaude(exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
@@ -1583,6 +1615,7 @@ func readConfig(path string) ([]byte, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
+	rememberRead(path, b, err != nil)
 	return bytes.TrimPrefix(b, utf8BOM), nil
 }
 
@@ -1619,6 +1652,34 @@ func fileStartsWithBOM(path string) bool {
 	return n == len(utf8BOM) && bytes.Equal(head[:], utf8BOM)
 }
 
+// readOnlyConfigError is the refusal for a config its owner made read-only.
+// It is a permission error underneath, so the run's remedy names permissions.
+type readOnlyConfigError struct{ path string }
+
+func (e readOnlyConfigError) Error() string {
+	return e.path + " is read-only, so deja left it as it was"
+}
+
+func (e readOnlyConfigError) Is(target error) bool { return target == fs.ErrPermission }
+
+// configWritable refuses a config that is there and cannot be opened for
+// writing. writeIfChanged replaces a file by renaming a temp file over it, which
+// only the directory's mode governs: `chmod 444` on the file stopped the
+// reader's own editor and not deja, and the result kept the 0444 (#4558).
+// Asked by opening the file for writing, without truncating it, so whatever
+// the platform enforces — a mode, an ACL, Windows' read-only attribute — is
+// what decides.
+func configWritable(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err == nil {
+		return f.Close()
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		return readOnlyConfigError{path}
+	}
+	return nil
+}
+
 func writeIfChanged(path string, old, next []byte) (string, error) {
 	// The last guard for a file deja could not read: the writers go through
 	// readConfig now, but this also covers the ones that write a file they
@@ -1643,9 +1704,25 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	bom := fileStartsWithBOM(path)
 	if removingWiring {
 		next = snapshotIfSameJSON(path, old, next)
+		next = snapshotIfOnlyEmptyBlocksDiffer(path, old, next)
+	}
+	// An empty config the reader made — `touch ~/.codex/config.toml` — comes
+	// back empty, not deleted and not `{}`: the snapshot deja took of it says
+	// it was there, and holding nothing is how it was (#4563).
+	keptEmpty := false
+	if removingWiring && (len(next) == 0 || structurallyEmptyConfig(next)) && !wiringCreated(path) {
+		if b, ok := ownSnapshot(path); ok && len(bytes.TrimSpace(b)) == 0 {
+			next, keptEmpty = b, true
+		}
 	}
 	if bytes.Equal(old, next) {
 		return "unchanged", nil
+	}
+	if err := yamlWriteBreaks(path, old, next); err != nil {
+		return "", err
+	}
+	if err := configWritable(path); err != nil {
+		return "", err
 	}
 	// Removing something must not leave more behind than it found. A file that
 	// is not there has nothing in it to remove.
@@ -1660,7 +1737,10 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 		// here. Before backupOnce, so the backup of a file that was entirely
 		// ours is not created either — the .bak of a config the user already
 		// had still is.
-		if len(next) == 0 {
+		if len(next) == 0 && !keptEmpty {
+			if err := changedSinceRead(path, old); err != nil {
+				return "", err
+			}
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return "", err
 			}
@@ -1682,6 +1762,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 		// bytes. Only for a file deja created: a config the reader already had
 		// keeps its place, emptied of deja and of nothing else (#2583).
 		if structurallyEmptyConfig(next) && wiringCreated(path) {
+			if err := changedSinceRead(path, old); err != nil {
+				return "", err
+			}
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return "", err
 			}
@@ -1779,9 +1862,15 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
+	beforeConfigReplace(path)
+	if err := changedSinceRead(given, old); err != nil {
+		return "", err
+	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return "", err
 	}
+	// The next write to this file is checked against the read it is built from.
+	forgetRead(given)
 	if len(old) == 0 {
 		return "created", nil
 	}
@@ -2508,6 +2597,55 @@ func tomlHeadersClose(text string) error {
 	return nil
 }
 
+// tomlInlineKey refuses a config that gives the table deja appends — header,
+// `[mcp_servers.deja]` or `[[hooks]]` — or a table above it a value by a key:
+// `mcp_servers = { mine = {…} }`, `hooks = []`, `deja = {…}` under
+// `[mcp_servers]`, `mcp_servers.deja.command = …`. deja's header then defines
+// it a second time, which TOML forbids: codex stopped loading its config at
+// all, and kimi and grok refused the file (#4554). A dotted key beside deja's
+// (`mcp_servers.mine.command = …`) is a table a header may extend.
+func tomlInlineKey(text, header string) error {
+	want := tomlKeyPath(strings.Trim(header, "[]"))
+	table := []string(nil)
+	for i, line := range strings.Split(text, "\n") {
+		code := tomlCode(line)
+		if strings.HasPrefix(code, "[") && strings.HasSuffix(code, "]") {
+			table = tomlKeyPath(strings.Trim(code, "[]"))
+			continue
+		}
+		k, _, ok := strings.Cut(code, "=")
+		if !ok || tomlPathHasPrefix(table, want) {
+			continue
+		}
+		path := append(append([]string(nil), table...), tomlKeyPath(k)...)
+		if tomlPathHasPrefix(want, path) || tomlPathHasPrefix(path, want) {
+			return fmt.Errorf("line %d sets %s inline, and the %s table deja adds would define it twice — write it as %s tables or add deja by hand", i+1, strings.Join(path, "."), header, header)
+		}
+	}
+	return nil
+}
+
+// tomlKeyPath splits a dotted TOML key into its parts, unquoted.
+func tomlKeyPath(k string) []string {
+	var out []string
+	for _, part := range strings.Split(k, ".") {
+		out = append(out, strings.Trim(strings.TrimSpace(part), `"'`))
+	}
+	return out
+}
+
+func tomlPathHasPrefix(path, prefix []string) bool {
+	if len(path) < len(prefix) {
+		return false
+	}
+	for i := range prefix {
+		if path[i] != prefix[i] {
+			return false
+		}
+	}
+	return true
+}
+
 type tomlMCPBlock struct {
 	key        string
 	start, end int
@@ -2525,6 +2663,11 @@ func installTOML(path, block string, uninstall bool) (installResult, error) {
 	// named deja's lines (#3576).
 	if err := tomlHeadersClose(text); err != nil {
 		return installResult{}, configParseError(path, err)
+	}
+	if !uninstall {
+		if err := tomlInlineKey(text, "[mcp_servers.deja]"); err != nil {
+			return installResult{}, configParseError(path, err)
+		}
 	}
 	blocks := tomlMCPBlocks(text)
 	hasDeja := false
@@ -2660,7 +2803,12 @@ func foreignTOMLDejaKeys(s string) []string {
 	return keys
 }
 
+// tomlBlockRunsDeja is entryIsDejaServer for a [mcp_servers.X] table: deja as
+// the command, or deja in the args beside `mcp`. A filesystem server serving
+// ~/code/deja ends its args with the binary's name too, and was adopted and
+// overwritten with deja's command (#4556).
 func tomlBlockRunsDeja(lines []string, block tomlMCPBlock) bool {
+	command, inArgs, hasArgs, mcp := false, false, false, false
 	for i := block.start + 1; i < block.end; i++ {
 		key, value, ok := tomlLineKeyValue(lines[i])
 		if !ok {
@@ -2670,19 +2818,19 @@ func tomlBlockRunsDeja(lines []string, block tomlMCPBlock) bool {
 		case "command":
 			for _, value := range tomlStringValues(value) {
 				if commandIsDeja(value) {
-					return true
+					command = true
 				}
 			}
 		case "args":
+			hasArgs = true
 			value, i = tomlArrayValue(lines, i, block.end, value)
 			for _, value := range tomlStringValues(value) {
-				if commandIsDeja(value) {
-					return true
-				}
+				inArgs = inArgs || commandIsDeja(value)
+				mcp = mcp || value == "mcp"
 			}
 		}
 	}
-	return false
+	return (command && (!hasArgs || mcp)) || (inArgs && mcp)
 }
 
 func tomlLineKeyValue(line string) (string, string, bool) {
@@ -2904,8 +3052,10 @@ func dejaEntryKey(m map[string]any) string {
 		}
 	}
 	sort.Strings(keys)
+	// Deja's server, not any entry with the binary's name in it: a filesystem
+	// server serving ~/code/deja was taken over and lost its command (#4556).
 	for _, key := range keys {
-		if mcpEntryRunsDeja(m[key]) {
+		if entry, ok := m[key].(map[string]any); ok && entryIsDejaServer(entry) {
 			return key
 		}
 	}
@@ -3054,6 +3204,24 @@ func otherDejaEntriesNote(servers map[string]any, mine string) string {
 			names = append(names, name)
 		}
 	}
+	return otherDejaNamesNote(names)
+}
+
+// withOtherDejaNames is withOtherDejaEntries for a writer that found the other
+// entries itself: a list of servers, a YAML block, a file edited as text
+// (#4556).
+func withOtherDejaNames(note string, names []string) string {
+	other := otherDejaNamesNote(names)
+	if other == "" {
+		return note
+	}
+	if note != "" {
+		return note + "; " + other
+	}
+	return other
+}
+
+func otherDejaNamesNote(names []string) string {
 	if len(names) == 0 {
 		return ""
 	}
@@ -3389,8 +3557,8 @@ func installOpenClawMCP(exe string, uninstall bool) (installResult, error) {
 		command, args := mcpCommandArgs(exe)
 		return writeJSONCEntry(path, old, "mcp.servers",
 			map[string]any{"command": command, "args": args}, uninstall)
-	} else if err := json.Unmarshal(old, &root); err != nil {
-		return installResult{}, configParseError(path, err)
+	} else if json.Unmarshal(old, &root) != nil {
+		return installResult{}, openclawParseError(path, old)
 	}
 	mcp, _, err := mcpBlock(root, "mcp", path)
 	if err != nil {
@@ -3708,7 +3876,7 @@ func opencodeNestedServers(m map[string]any) (map[string]any, bool) {
 // The generic JSONC writer is used here because it already handles dotted
 // object paths, comments, trailing commas, aliases and nested indentation.
 func updateOpencodeJSONCNested(old []byte, exe string, uninstall bool) ([]byte, string, error) {
-	text := string(old)
+	text := lfText(old)
 	var root map[string]any
 	if err := json.Unmarshal([]byte(jsoncToJSON(text)), &root); err != nil {
 		return nil, "", err
@@ -4214,7 +4382,10 @@ func mergedJSONCEntryLine(dropped []string, key, exe string) (string, string) {
 
 func updateOpencodeJSONC(old []byte, exe string, uninstall bool) ([]byte, string, error) {
 	line := fmt.Sprintf(`    "deja": {"type":"local","command":[%q,"mcp"]}`, exe)
-	s := string(old)
+	// In LF, like the other writers that splice lines: split on '\n' alone,
+	// every line kept its '\r', the comma check missed it and the second
+	// install wrote `},\r,` (#4553). writeIfChanged puts the CRs back.
+	s := lfText(old)
 	if strings.TrimSpace(s) == "" {
 		if uninstall {
 			return []byte("{}\n"), "", nil

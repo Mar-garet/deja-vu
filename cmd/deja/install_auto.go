@@ -1012,6 +1012,11 @@ func installKimiAuto(exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
+	if !uninstall {
+		if err := tomlInlineKey(lfText(old), "[[hooks]]"); err != nil {
+			return installResult{}, configParseError(path, err)
+		}
+	}
 	s := strings.TrimRight(removeKimiHookBlock(lfText(old)), "\n")
 	if !uninstall {
 		block := kimiHookEntry("UserPromptSubmit", hookRun(exe, "hook-context", "--plain", "--once")) +

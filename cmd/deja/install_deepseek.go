@@ -443,6 +443,16 @@ func installDeepSeek(exe string, uninstall, withAuto bool) (installResult, error
 		pruneCreatedDir(filepath.Dir(filepath.Dir(dshCommandPath())))
 		return installResult{Path: path, Action: a}, nil
 	}
+	// The layer is worked out before the plugins are written, so a layer deja
+	// cannot patch refuses the target with nothing written (#4555).
+	block, note := dshKeepSwitches(lfText(old), dshPatchBlock(exe, withAuto))
+	patched, perr := dshPatchWith(lfText(old), block)
+	if perr != nil {
+		return installResult{}, perr
+	}
+	if err := yamlWriteBreaks(path, old, []byte(patched)); err != nil {
+		return installResult{}, err
+	}
 	noteCreatedDirs(filepath.Dir(path))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return installResult{}, err
@@ -499,11 +509,6 @@ func installDeepSeek(exe string, uninstall, withAuto bool) (installResult, error
 		}
 	} else if err := os.Remove(dshAutoPath()); err != nil && !os.IsNotExist(err) {
 		return installResult{}, err
-	}
-	block, note := dshKeepSwitches(lfText(old), dshPatchBlock(exe, withAuto))
-	patched, perr := dshPatchWith(lfText(old), block)
-	if perr != nil {
-		return installResult{}, perr
 	}
 	a, err := writeIfChanged(path, old, []byte(patched))
 	if err != nil {

@@ -136,14 +136,24 @@ func installVSCodeMCPAt(path, exe string, uninstall bool) (installResult, error)
 		servers = map[string]any{}
 		root["servers"] = servers
 	}
+	var note string
 	if uninstall {
 		delete(servers, "deja")
+		removeAdoptedDejaEntries(path, "servers", servers)
+		note = leftDejaEntriesNote(servers)
 		if len(servers) == 0 {
 			delete(root, "servers")
 		}
 	} else {
+		// An entry wired by hand under another name is taken over, not given
+		// a sibling that starts deja twice (#4556, as #2269 for mcpServers).
+		key := dejaEntryKey(servers)
+		if key != "deja" {
+			noteBlockAdded(path, "servers."+key)
+		}
 		command, args := mcpCommandArgs(exe)
-		servers["deja"] = map[string]any{"type": "stdio", "command": command, "args": args}
+		servers[key] = map[string]any{"type": "stdio", "command": command, "args": args}
+		note = withOtherDejaEntries("", servers, key)
 	}
 	next, err := marshalConfigLike(old, root)
 	if err != nil {
@@ -155,5 +165,5 @@ func installVSCodeMCPAt(path, exe string, uninstall bool) (installResult, error)
 		return installResult{}, err
 	}
 	a, err := writeIfChanged(path, old, next)
-	return installResult{Path: path, Action: a}, err
+	return installResult{Path: path, Action: a, Note: note}, err
 }
