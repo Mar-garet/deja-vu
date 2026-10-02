@@ -1,7 +1,9 @@
 package sources
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -93,5 +95,56 @@ func TestCopilotChatMessageURIsOnlyForReadFile(t *testing.T) {
 	ss := vocabParse(t, ParseCopilotChatFile, p)
 	if got := vocabRoles(ss, RoleFiles); len(got) != 1 || got[0] != "/tmp/proj/retry.go" {
 		t.Errorf("files records = %q, want only the file readFile opened", got)
+	}
+}
+
+// A patch names files relative to where it runs: Copilot CLI and Cline resolve
+// `*** Update File: retry.go` against the session's directory, and the record
+// has to say /tmp/proj/retry.go for blame and restore to find it (#4491,
+// #4503).
+const relPatch = "*** Begin Patch\n*** Update File: retry.go\n@@\n-" + oldLoop + "\n+" + newLoop + "\n*** End Patch"
+
+var relPatchWants = []string{
+	vocabFiles("/tmp/proj/retry.go"),
+	vocabEdit("/tmp/proj/retry.go", oldLoop),
+	vocabWrote("/tmp/proj/retry.go", newLoop),
+}
+
+func TestRelativePatchPathsResolveAgainstTheSession(t *testing.T) {
+	for name, parse := range map[string]func(t *testing.T) []model.Session{
+		"copilot": vocabCopilot(relPatch),
+		"copilot from an offset": func(t *testing.T) []model.Session {
+			ss := vocabCopilot(relPatch)(t)
+			path := ss[0].Path
+			// Past session.start, the way an incremental index reads on.
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			off := int64(strings.Index(string(raw), "\n") + 1)
+			out, err := ParseCopilotFileFromOffset(path, off)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return out
+		},
+		"cline-sdk": func(t *testing.T) []model.Session {
+			dir := filepath.Join(t.TempDir(), "1790877871095_abcdf")
+			vocabWrite(t, filepath.Join(dir, "1790877871095_abcdf.json"), `{"session_id":"1790877871095_abcdf","cwd":"/tmp/proj"}`)
+			p := vocabWrite(t, filepath.Join(dir, "1790877871095_abcdf.messages.json"), vocabJSON(map[string]any{"messages": []any{
+				map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": "fix the retry loop"}}},
+				map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "tool_use", "id": "c1", "name": "apply_patch", "input": map[string]any{"input": relPatch}}}},
+			}}))
+			return vocabParse(t, ParseClineFile, p)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ss := parse(t)
+			for _, w := range relPatchWants {
+				if !vocabHas(ss, w) {
+					t.Errorf("missing %q; files %q, edits %q", w, vocabRoles(ss, RoleFiles), vocabRoles(ss, RoleEdit))
+				}
+			}
+		})
 	}
 }

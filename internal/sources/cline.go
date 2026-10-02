@@ -226,9 +226,10 @@ func parseClineModernSession(path string) ([]model.Session, error) {
 	id := filepath.Base(sessionDir)
 	s := model.Session{Harness: "cline", ID: id, Path: path, Project: "cline"}
 	var man clineManifest
+	cwd := ""
 	if mb, err := os.ReadFile(filepath.Join(sessionDir, id+".json")); err == nil {
 		if json.Unmarshal(mb, &man) == nil {
-			cwd := man.CWD
+			cwd = man.CWD
 			if cwd == "" {
 				cwd = man.WorkspaceRoot
 			}
@@ -268,7 +269,7 @@ func parseClineModernSession(path string) ([]model.Session, error) {
 		// The work rides in the same content list, in blocks clineContentText
 		// drops because they are not type:"text" — so the file an assistant
 		// edited and the command it ran were reachable from nothing.
-		if recs := clineWorkRecords(m.Content, ts); len(recs) > 0 {
+		if recs := clineWorkRecords(m.Content, cwd, ts); len(recs) > 0 {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, recs...)
 		}
@@ -446,7 +447,8 @@ func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string, xmlEra 
 }
 
 // clineWorkRecords turns the tool blocks of one message into work records.
-func clineWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
+// cwd is where the session ran: a patch names its files relative to it.
+func clineWorkRecords(raw json.RawMessage, cwd string, ts time.Time) []model.Message {
 	var blocks []any
 	if json.Unmarshal(raw, &blocks) != nil {
 		return nil
@@ -468,7 +470,7 @@ func clineWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 		}
 	}
 	for _, patch := range applyPatchInputs(blocks, clineDialect) {
-		out = append(out, applyPatchRecords(patch, nil, ts)...)
+		out = append(out, applyPatchRecords(patch, func(p string) string { return resolveToolPath(p, cwd) }, ts)...)
 	}
 	if IndexCommands() {
 		for _, cmd := range commandsIn(blocks, clineDialect) {
