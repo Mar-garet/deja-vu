@@ -851,11 +851,11 @@
         "fixtures/registry/kiro/w-api/sess_00000000-0000-4000-8000-000000000000/messages.jsonl"
       ],
       "parser_source": "internal/sources/kiro.go",
-      "last_verified": "2026-10-01",
+      "last_verified": "2026-10-02",
       "display_name": "Kiro",
       "capabilities": {
         "mcp": true,
-        "auto": false,
+        "auto": true,
         "skill": false,
         "command": false,
         "resume": true,
@@ -863,10 +863,6 @@
         "prereq": "sqlite3 for the CLI database"
       },
       "gaps": {
-        "auto": {
-          "state": "todo",
-          "why": "Kiro's agent hooks are per-workspace and fire on file events (`.kiro/hooks/`), not before a prompt, so there is no session-start surface a global install can write. Tracked in #3651."
-        },
         "skill": {
           "state": "impossible",
           "why": "Kiro has a user-level guidance channel and deja writes it — `~/.kiro/steering/deja.md`, the global half of steering, scanned for every project — but it is not a skill and calling it one would misdescribe what it costs. A steering document declares an inclusion mode, and the only mode measured as loaded by kiro-cli is `always`: `manual` is not loaded and cannot be invoked from a session, `fileMatch` was withheld (KiroCrew's steering reference, measured against 2.19.1). So the text rides in front of every turn whether it is wanted or not, which is why deja's file there is four lines rather than the skill it writes where one is loaded on demand — the same call aider's entry makes (#3651).",

@@ -612,6 +612,11 @@
       "path": "<tmp>/home/.grok/hooks/deja.json"
     },
     {
+      "name": "kiro",
+      "state": "missing",
+      "path": "<tmp>/home/.kiro/agents/deja.json"
+    },
+    {
       "name": "copilot",
       "state": "missing",
       "path": "<tmp>/home/.copilot/settings.json"

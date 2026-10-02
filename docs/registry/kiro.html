@@ -59,7 +59,7 @@
 <p><code>history</code> holds the turns: a <code>Prompt</code> or <code>ToolUseResults</code> user side, a</p>
 <p><code>ToolUse</code> or <code>Response</code> assistant side. `kiro-cli chat --resume-id</p>
 <p>&lt;conversation_id&gt;` reopens a row.</p>
-<p><strong>Last verified:</strong> 2026-10-01</p>
+<p><strong>Last verified:</strong> 2026-10-02</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li>Resume: <code>cd &lt;cwd&gt; &amp;&amp; kiro-cli chat --resume-id &lt;sessionId&gt;</code>, which needs</li>
@@ -141,12 +141,26 @@
 <p>tool and stops rather than carrying the full skill deja writes where a skill</p>
 <p>is loaded on demand.</p>
 <ul>
-<li>Auto-recall is still a gap, and not for lack of a hook system: Kiro&#39;s agent</li>
+<li>Auto-recall: <code>deja install kiro-auto</code> writes the above and an agent of</li>
 </ul>
-<p>hooks are per-workspace and fire on file events, not before a prompt, so</p>
-<p>they need a per-project install, which deja does not have yet. The global</p>
-<p>steering file above names the tool; it does not carry recall.</p>
+<p>deja&#39;s own, <code>~/.kiro/agents/deja.json</code> (<code>tools: [&#34;*&#34;]</code>, <code>includeMcpJson</code>),</p>
+<p>with two hooks: <code>agentSpawn</code> runs <code>deja hook-context --plain</code> and</p>
+<p><code>userPromptSubmit</code> runs <code>deja hook-prompt --plain</code>. kiro-cli adds what those</p>
+<p>print to the model&#39;s context, the agentSpawn output for the whole</p>
+<p>conversation; what <code>preToolUse</code> and <code>postToolUse</code> print is not sent, so</p>
+<p>there is no pre-edit line. The hooks run in that agent only:</p>
+<p><code>kiro-cli chat --agent deja</code>, or <code>kiro-cli agent set-default deja</code>. The</p>
+<p>built-in <code>kiro_default</code> takes no hooks from a file (a <code>kiro_default.json</code> is</p>
+<p>ignored), and deja does not switch <code>chat.defaultAgent</code>, which would trade</p>
+<p>the default agent&#39;s prompt for its own. The IDE&#39;s <code>.kiro/hooks/</code> are a</p>
+<p>different system: per workspace, fired on file events (#4304).</p>
 <h2 id="measured-on-a-live-install">Measured on a live install</h2>
+<p><code>kiro-cli</code> 2.22.0 with its own mock model (<code>KIRO_MOCK_CHAT_RESPONSE</code>), after</p>
+<p><code>deja install kiro-auto</code>: <code>kiro-cli chat --no-interactive --agent deja</code> sent a</p>
+<p>request whose context carried the <code>&lt;deja-recall&gt;</code> digest naming the earlier</p>
+<p>kiro session in that directory and its answer. A probe agent with all five</p>
+<p>hooks echoing a marker showed the agentSpawn and userPromptSubmit markers in</p>
+<p>the request and the preToolUse and postToolUse ones nowhere.</p>
 <p><code>kiro-cli</code> 2.22.0 (homebrew cask), in a hermetic HOME:</p>
 <ul>
 <li><code>deja install kiro</code> writes <code>~/.kiro/settings/mcp.json</code> and</li>

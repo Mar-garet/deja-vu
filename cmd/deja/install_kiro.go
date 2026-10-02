@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
@@ -70,5 +73,72 @@ func installKiro(exe string, uninstall bool) (installResult, error) {
 	}
 	out := wroteAll(res, steering)
 	out.Note = joinNotes(out.Note, kiroAgentNote)
+	return out, nil
+}
+
+// kiro-cli runs the hooks of the agent a chat starts in: an agent file in
+// `~/.kiro/agents` takes agentSpawn, userPromptSubmit, preToolUse, postToolUse
+// and stop. Measured on 2.22.0, what an agentSpawn or userPromptSubmit hook
+// prints goes in front of the model, the first for the whole conversation;
+// what preToolUse and postToolUse print does not, so there is no pre-edit
+// line here (#4304).
+//
+// The hooks go in an agent of deja's own rather than into the reader's: the
+// built-in kiro_default takes no hooks from a file (a kiro_default.json beside
+// it is ignored), and deja does not switch `chat.defaultAgent` for them, since
+// that would trade the default agent's prompt for this one.
+func kiroAgentPath() string {
+	return filepath.Join(sources.KiroConfigDir(), "agents", "deja.json")
+}
+
+const kiroAgentDescription = "Kiro's tools with deja-vu recall — written by deja install kiro-auto"
+
+const kiroAgentHookTimeoutMs = 10000
+
+func kiroAgentJSON(exe string) (string, error) {
+	hook := func(args ...string) []map[string]any {
+		return []map[string]any{{"command": hookRun(exe, args...), "timeout_ms": kiroAgentHookTimeoutMs}}
+	}
+	b, err := json.MarshalIndent(map[string]any{
+		"name":           "deja",
+		"description":    kiroAgentDescription,
+		"tools":          []string{"*"},
+		"includeMcpJson": true,
+		"hooks": map[string]any{
+			"agentSpawn":       hook("hook-context", "--plain"),
+			"userPromptSubmit": hook("hook-prompt", "--plain"),
+		},
+	}, "", "  ")
+	return string(b) + "\n", err
+}
+
+const kiroAutoNote = "kiro-cli runs these hooks in the deja agent: `kiro-cli chat --agent deja`, " +
+	"or `kiro-cli agent set-default deja` for every chat"
+
+func installKiroAuto(exe string, uninstall bool) (installResult, error) {
+	path := kiroAgentPath()
+	// An agent called deja that deja did not write is the reader's.
+	if b, err := os.ReadFile(path); err == nil && !strings.Contains(string(b), kiroAgentDescription) {
+		if uninstall {
+			return installKiro(exe, uninstall)
+		}
+		return installResult{}, fmt.Errorf("%s is an agent deja did not write — rename it, or add the hooks to it by hand", path)
+	}
+	base, err := installKiro(exe, uninstall)
+	if err != nil {
+		return base, err
+	}
+	body, err := kiroAgentJSON(hookExeFor(exe, uninstall))
+	if err != nil {
+		return installResult{}, err
+	}
+	agent, err := installTextFile(path, body, uninstall)
+	if err != nil {
+		return installResult{}, err
+	}
+	out := wroteAll(base, agent)
+	if !uninstall {
+		out.Note = joinNotes(out.Note, kiroAutoNote)
+	}
 	return out, nil
 }

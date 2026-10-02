@@ -80,6 +80,9 @@ func autoWirings() []autoWiring {
 		// whole of auto-recall here — there is no digest hook to look for.
 		{"crush", func() string { return crushConfigPath() }, "hook-tool", ""},
 		{"grok", func() string { return grokHooksPath() }, "hook-context", ""},
+		// kiro-cli runs hooks from the agent a chat starts in; deja's is its
+		// own agent file (#4304).
+		{"kiro", func() string { return kiroAgentPath() }, "hook-context", ""},
 		// Copilot CLI keeps hooks with the rest of its user settings; the row
 		// follows them to config.json while they have not moved yet. The flag
 		// is part of the marker: a plain hook-context line answers in Claude's
