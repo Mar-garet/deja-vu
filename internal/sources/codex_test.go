@@ -581,7 +581,7 @@ func TestCodexAppendResolvesPatchPathsAgainstTheHeadCWD(t *testing.T) {
 	if err != nil || len(ss) != 1 {
 		t.Fatalf("offset parse: %v %#v", err, ss)
 	}
-	want := filepath.Join("/w/child", "app/main.go")
+	want := "/w/child/app/main.go"
 	found := false
 	for _, msg := range ss[0].Messages {
 		if msg.Role == RoleFiles && strings.Contains(msg.Text, want) {

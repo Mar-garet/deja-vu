@@ -559,10 +559,7 @@ func codexPatch(s *model.Session, payload map[string]any, cwd string, t time.Tim
 	current := ""
 	for _, line := range strings.Split(body, "\n") {
 		if m := codexPatchFile.FindStringSubmatch(line); m != nil {
-			current = strings.TrimSpace(m[1])
-			if cwd != "" && !filepath.IsAbs(current) {
-				current = filepath.Join(cwd, current)
-			}
+			current = resolveToolPath(strings.TrimSpace(m[1]), cwd)
 			if !seen[current] {
 				seen[current] = true
 				files = append(files, current)
