@@ -43,13 +43,14 @@ func GrokSessionFiles() []string {
 // GrokSidecarFiles lists what a Grok store keeps beside its transcripts: the
 // summary the reader opens itself for the metadata, and the bookkeeping the
 // CLI writes per session. doctor counted all of it as transcripts it could not
-// read — 94 of them on a store with 11 sessions (#3319).
+// read — 94 of them on a store with 11 sessions (#3319). Grok Build 1.0.41
+// added usage.json and tool_definitions.json to every session (#4586).
 func GrokSidecarFiles() []string {
 	return walkFiles(filepath.Join(GrokRoot(), "sessions"), func(p string) bool {
 		switch filepath.Base(p) {
 		case "summary.json", "chat_history.jsonl", "events.jsonl", "rewind_points.jsonl",
 			"prompt_context.json", "announcement_state.json", "signals.json",
-			"resources_state.json", "prompt_history.jsonl":
+			"resources_state.json", "prompt_history.jsonl", "usage.json", "tool_definitions.json":
 			return true
 		}
 		return false

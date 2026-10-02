@@ -205,6 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja doctor` no longer calls pi's MCP entry wired when pi-mcp-adapter, the only thing in pi that reads `~/.pi/agent/mcp.json`, is not installed: the row says `no adapter` (`no-adapter` in `--json`) with the command that adds it, and `deja install pi` says the same (#4583).
 - In pi the session-start digest tells the agent to run `deja ctx` in the shell instead of calling `recall_context`, a tool pi does not have; following the old lead ended in "Tool recall_context not found". Run `deja install pi-auto` again to update the extension (#4584).
 - `deja show` no longer says a plain `grok -p` session has no recorded parent: Grok Build marks every scripted run "headless", which deja took for a spawn kind, and those sessions are no longer kept out of `deja rules` candidates as subagents either (#4585).
+- `deja doctor` no longer reports a fully indexed Grok Build store as having files it does not recognise: `usage.json` and `tool_definitions.json`, which grok 1.0.41 writes into every session, are counted as grok's own (#4586).
 
 ## [0.21.4] - 2026-09-29
 
