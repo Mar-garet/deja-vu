@@ -449,6 +449,15 @@ import (
 // 60 also: a rooted DeepSeek TUI or Codex tool path from the other OS's
 // convention is no longer joined onto the session's cwd, and a Roo path with
 // one leading `\` stays as written (#4438).
+//
+// 60 also: a line written while a pass ran is held once, where the pass read
+// it and the next read it again (#4442); copies already held go on a rebuild.
+//
+// 60 also: a Codex, Copilot CLI, Kimi or pi-shaped command whose result came
+// a pass after its call carries its exit, and a refused edit is dropped (#4443).
+//
+// 60 also: a Codex session known only from history.jsonl is one session per
+// id, not per line, so a full build derives it from every prompt (#4449).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

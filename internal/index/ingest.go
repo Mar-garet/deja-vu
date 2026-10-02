@@ -546,6 +546,7 @@ func rebuild(dir string, harness string, scope string, files map[string]FileStat
 }
 
 func rebuildWithTombstones(dir string, harness string, scope string, files map[string]FileState, progress io.Writer, dead map[string]bool) error {
+	defer readTo(files)()
 	// This build's counts, not the process's: see writeSessionsWithSync (#1850).
 	beginPass()
 	emptied.Store(0)
@@ -1045,9 +1046,26 @@ func vanishedFromStores(dir, harness string, files map[string]FileState, fresh [
 	for _, s := range fresh {
 		have[s.Harness+":"+s.ID] = true
 	}
+	// An OpenCode-schema session records its project directory as its path,
+	// not the database (#2033), so the path alone carried none of them and a
+	// rebuild dropped what the incremental pass keeps (#4447). The harness
+	// names the store there, as sessionInStore has it.
+	schemaDB := map[string]bool{}
+	for h, db := range opencodeSchemaDBs {
+		if stores[db()] {
+			schemaDB[h] = true
+		}
+	}
+	inStore := func(r Record) bool {
+		if stores[r.SourcePath] {
+			return true
+		}
+		h, _, _ := strings.Cut(r.Key, ":")
+		return schemaDB[h] && inOpencodeSchemaDB(h, r.SourcePath)
+	}
 	by := map[string]*model.Session{}
 	_ = eachRecord(filepath.Join(dir, "records.bin"), tablesFromManifest(m), func(r Record) {
-		if !stores[r.SourcePath] || have[r.Key] {
+		if have[r.Key] || !inStore(r) {
 			return
 		}
 		s := by[r.Key]
@@ -1445,6 +1463,7 @@ func forgetUnreadStores(files map[string]FileState) {
 }
 
 func rebuildForSearch(dir string, o query.Options, scope string, files map[string]FileState, progress io.Writer) error {
+	defer readTo(files)()
 	beginPass()
 	tmp := dir + ".tmp"
 	_ = os.RemoveAll(tmp)
@@ -3616,6 +3635,7 @@ func parsedThisPass(files map[string]FileState) {
 }
 
 func updateIndex(dir, harness, scope string, files map[string]FileState, force bool, progress io.Writer) error {
+	defer readTo(files)()
 	// Cleared here rather than beside the other two: this build counts what
 	// went away further down, before the incremental paths reset theirs, so a
 	// reset down there would zero the number this build is about to report
@@ -4172,8 +4192,10 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		return err
 	}
 	carrySidecars(dir, tmp)
-	// After carrying, not instead of it: both of these write only when they
-	// have something to say, and the carried file is what a quiet update leaves.
+	// After carrying, not instead of it: the fixes merge writes only when it
+	// has something to say, and the carried file is what a quiet update leaves.
+	// The command table is recomputed whole, and an empty one removes the
+	// carried file, as a full build would not write it (#4441).
 	mergeFixes(dir, tmp, replacements, replaceKeys)
 	buildCommandsFromIndex(tmp)
 	for key := range replaceKeys {
@@ -4343,6 +4365,20 @@ func canAppendIncremental(changed map[string]FileState, old map[string]FileState
 	return true
 }
 
+// readTo holds this pass's transcript reads to the sizes its walk recorded,
+// which is where the next pass resumes. A line the client wrote after the walk
+// was read here and again there, and the copies stayed until a rebuild
+// (#4442).
+func readTo(files map[string]FileState) func() {
+	ends := make(map[string]int64, len(files))
+	for p, f := range files {
+		if strings.HasSuffix(p, ".jsonl") {
+			ends[p] = f.Size
+		}
+	}
+	return sources.LimitReads(ends)
+}
+
 // resumeOffset is where an appended read of a known file starts: the end of
 // the last complete line indexed, or the old size when none was recorded.
 func resumeOffset(old FileState) int64 {
@@ -4453,7 +4489,8 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 		for _, s := range ss {
 			key := s.Harness + ":" + s.ID
 			meta := m.Sessions[key]
-			if meta.ID == "" {
+			named := meta.ID != ""
+			if !named {
 				meta = metaWithOrd(metaForSession(s), nextSessionOrd(m.Sessions))
 			}
 			if meta.Started.IsZero() || (!s.Started.IsZero() && s.Started.Before(meta.Started)) {
@@ -4523,8 +4560,16 @@ func appendIncremental(dir, harness, scope string, old Manifest, files map[strin
 				// The same widening the first naming does, or a session that
 				// gets its thin title later — dsh and opencode both retitle
 				// after the fact — would keep it until an unrelated rebuild.
-				if t, _ := redact.Text(s.Title); widenThinSourceTitle(s, boundSourceTitle(s.Harness, t)) != meta.Title {
-					meta.Title = widenThinSourceTitle(s, boundSourceTitle(s.Harness, t))
+				//
+				// A thin title is widened from the session's first substantial
+				// turn, and a tail does not hold it: one appended turn renamed
+				// the session after itself. A row already named from the whole
+				// session keeps that name (#4452).
+				t, _ := redact.Text(s.Title)
+				t = boundSourceTitle(s.Harness, t)
+				fromTail := known && named && s.Harness != "deja" && thinTitle(t) && !thinTitle(meta.Title)
+				if w := widenThinSourceTitle(s, t); !fromTail && w != meta.Title {
+					meta.Title = w
 					meta.AgentTitle = s.AgentTitle
 				}
 			}
