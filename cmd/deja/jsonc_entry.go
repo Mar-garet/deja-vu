@@ -288,7 +288,9 @@ func jsoncEntryText(entry map[string]any) (string, error) {
 // this path dropping an env block, flipping `disabled`, writing a second entry
 // beside one under another name, and saying none of it (#2740).
 func writeJSONCEntry(path string, old []byte, blockKey string, want map[string]any, uninstall bool) (installResult, error) {
-	text := string(old)
+	// LF text: the scanners below test for '\n', and in a CRLF file they met
+	// '\r' and wrote a `   \r` line that uninstall kept (#4553).
+	text := lfText(old)
 	var root map[string]any
 	if err := json.Unmarshal([]byte(jsoncToJSON(text)), &root); err != nil {
 		return installResult{}, configParseError(path, err)
@@ -706,6 +708,10 @@ func readableStrictJSON(paths ...string) error {
 		// (#3696).
 		b, err := readConfig(path)
 		if err != nil {
+			return err
+		}
+		// And one it cannot write, for the same reason (#4558).
+		if err := configWritable(path); err != nil {
 			return err
 		}
 		if len(bytes.TrimSpace(b)) == 0 {
