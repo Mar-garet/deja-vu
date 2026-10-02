@@ -620,6 +620,10 @@ import (
 // and wrote records (#4287).
 // 60 also: a session renamed to a thin title in the same pass as a new turn
 // takes the title a rebuild gives it (#4592).
+//
+// 60 also: a row shared by two files keeps the span of the one that does not
+// own it, so reading the owner again leaves Updated where a rebuild has it
+// (#4574).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
@@ -773,6 +777,13 @@ type SessionMeta struct {
 	// like something they said (#1100). Additive: an older manifest decodes
 	// with it false, and the line then reads as it did before.
 	AgentTitle bool `json:",omitempty"`
+	// SharedStarted and SharedUpdated are the span of the files that share
+	// this row's id and do not own it, a Gemini resume stub beside its
+	// transcript. A pass that reads only the owner builds the row from that
+	// file again, and the stub's later Updated was gone until a rebuild
+	// (#4574).
+	SharedStarted time.Time `json:",omitzero"`
+	SharedUpdated time.Time `json:",omitzero"`
 	// OrigID is the id a session had on the machine it came from. Import
 	// renames every session to imported-<hash>, so a promoted note stopped
 	// looking like one the moment it crossed a machine boundary and every rule
