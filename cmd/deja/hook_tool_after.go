@@ -63,6 +63,10 @@ type toolAfterInput struct {
 	Error     json.RawMessage `json:"error"`
 	SessionID string          `json:"session_id"`
 	CWD       string          `json:"cwd"`
+	// Grok spells the rest in camelCase and puts the result under
+	// toolResult (#4499). See hook_grok.go.
+	grokEnvelope
+	ToolResult json.RawMessage `json:"toolResult"`
 }
 
 func runHookToolAfter(dir string, stdin io.Reader, stdout io.Writer) error {
@@ -76,6 +80,8 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 	var input toolAfterInput
 	raw := readHookPayload(stdin, hookStdinWait)
 	_ = json.NewDecoder(bytes.NewReader(raw)).Decode(&input)
+	input.ToolName = adoptGrok(input.ToolName, input.grokEnvelope.ToolName)
+	input.SessionID = adoptGrok(input.SessionID, input.grokEnvelope.SessionID)
 	// The kill switch, before anything is read. It reached the session-start
 	// hook and nothing else, so a machine with recall off still had text drawn
 	// from its own indexed sessions injected here (#2701).
@@ -113,6 +119,9 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 	}
 	if len(bytes.TrimSpace(response)) == 0 {
 		response = input.Error
+	}
+	if len(bytes.TrimSpace(response)) == 0 {
+		response = input.ToolResult
 	}
 	out := toolResponseText(response)
 	if out == "" {
@@ -156,7 +165,13 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 		return nil
 	}
 	var resp sessionStartHookResponse
+	// The event it was sent. Claude Code fires PostToolUseFailure for a command
+	// that exited non-zero and drops a reply naming any other event (#4488);
+	// qwen takes either. Everything else gets the name it always had.
 	resp.HookSpecificOutput.HookEventName = "PostToolUse"
+	if input.HookEventName == "PostToolUseFailure" {
+		resp.HookSpecificOutput.HookEventName = input.HookEventName
+	}
 	resp.HookSpecificOutput.AdditionalContext = payload
 	b, err := json.Marshal(resp)
 	if err != nil {
@@ -172,9 +187,13 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 func isCommandTool(name string) bool {
 	switch name {
 	case "Bash", "bash", "shell", "Shell", "run_command", "execute_command", "terminal",
+		// Claude Code's shell on Windows (#4489), and the pi-coding-agent's
+		// under Senpi and Kimchi (#4523).
+		"PowerShell", "powershell",
 		"run_shell_command", "run_terminal_command", "run_commands",
 		// Command Code's payload carries the internal name, not the SHELL its
-		// matcher sees (#4371).
+		// matcher sees (#4371); that matcher is a case-insensitive regex, so it
+		// fires on powershell too (#4540).
 		"shell_command":
 		return true
 	}
@@ -216,7 +235,9 @@ func toolResponseText(raw json.RawMessage) string {
 	// capped, so a long stdout must not push it out of reach.
 	// llmContent is gemini's: the text it puts in front of the model, which for
 	// a shell tool is the command's own output inside a wrapper of its own.
-	for _, key := range []string{"stderr", "error", "output", "stdout", "content", "result", "llmContent"} {
+	// output_for_prompt is grok's: its `output` is the raw bytes as a number
+	// array, and this is the text the model reads (#4499).
+	for _, key := range []string{"stderr", "error", "output", "stdout", "content", "result", "llmContent", "output_for_prompt"} {
 		v, ok := obj[key].(string)
 		if !ok || strings.TrimSpace(v) == "" {
 			continue

@@ -2,10 +2,12 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -766,20 +768,72 @@ func copilotChatTool(m map[string]any, t time.Time, extras *[]model.Message) {
 				paths = append(paths, p)
 			}
 		}
+		// VS Code keeps no resultDetails for copilot_readFile: the file is
+		// only in the uris of the message the call showed. readFile alone —
+		// the other tools' uris are directories, every file with a problem in
+		// the workspace, or the extension's own memory files (#4492).
+		if id, _ := m["toolId"].(string); len(paths) == 0 && id == "copilot_readFile" {
+			paths = copilotChatMessageURIs(m)
+		}
 		if len(paths) > 0 {
 			*extras = append(*extras, model.Message{Role: RoleFiles, Text: strings.Join(paths, "\n"), Time: t})
 		}
-	}
-	if !IndexCommands() {
-		return
 	}
 	data, _ := m["toolSpecificData"].(map[string]any)
 	if data == nil {
 		return
 	}
-	if cmd := copilotChatTerminalCommand(data); cmd != "" && worthIndexing(cmd) {
-		*extras = append(*extras, model.Message{Role: RoleCommand, Text: "$ " + cmd, Time: t})
+	cmd := copilotChatTerminalCommand(data)
+	if cmd == "" || !worthIndexing(cmd) {
+		return
 	}
+	// A terminal call keeps how the command ended and what it printed beside
+	// the command line, terminalCommandState.exitCode and
+	// terminalCommandOutput.text; only the line was read (#4493).
+	if IndexCommands() {
+		line := "$ " + cmd
+		if st, ok := data["terminalCommandState"].(map[string]any); ok {
+			if code, ok := piExitCode(st["exitCode"]); ok {
+				line += fmt.Sprintf("  → exit %d", code)
+			}
+		}
+		*extras = append(*extras, model.Message{Role: RoleCommand, Text: line, Time: t})
+	}
+	if IndexToolOutput() {
+		out, _ := data["terminalCommandOutput"].(map[string]any)
+		if text, _ := out["text"].(string); strings.TrimSpace(text) != "" {
+			*extras = append(*extras, model.Message{Role: RoleToolOutput, Text: capParsedMessage(strings.TrimSpace(text)), Time: t})
+		}
+	}
+}
+
+// copilotChatMessageURIs is the files a tool's past-tense message names, or
+// its invocation message's when it has none, in a stable order.
+func copilotChatMessageURIs(m map[string]any) []string {
+	for _, k := range []string{"pastTenseMessage", "invocationMessage"} {
+		msg, _ := m[k].(map[string]any)
+		uris, _ := msg["uris"].(map[string]any)
+		keys := make([]string, 0, len(uris))
+		for k := range uris {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var out []string
+		for _, k := range keys {
+			if u, _ := uris[k].(map[string]any); u != nil {
+				if scheme, _ := u["scheme"].(string); scheme != "" && scheme != "file" {
+					continue
+				}
+			}
+			if p := copilotChatRefPath(uris[k]); p != "" {
+				out = append(out, p)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
 }
 
 func copilotChatTerminalCommand(data map[string]any) string {

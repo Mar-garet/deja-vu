@@ -331,9 +331,9 @@ func opencodeV1Query(harness, where string, limit int) string {
 		`when 'integer' then json_extract(m.data,'$.summary') ` +
 		`when 'text' then substr(json_extract(m.data,'$.summary'),1,8) end,` +
 		`'path',` + opencodeV1Path(harness) + `,` +
-		`'cmd',json_extract(p.data,'$.state.input.command'),` +
+		`'cmd',` + opencodeV1Command(harness) + `,` +
 		`'patch',json_extract(p.data,'$.state.input.patchText'),` +
-		zcodeV1Fields(harness) +
+		opencodeV1EditFields(harness) +
 		// The output of a bash call and its exit status. Only bash: `read`
 		// output is 119 MB of file contents on this store against 49 MB of
 		// command output, and #547 measured file bodies as the weakest slice
@@ -372,49 +372,90 @@ func opencodeV1Query(harness, where string, limit int) string {
 		` or (instr(substr(p.data,1,200),'"tool":"bash"')>0 ` +
 		`and json_extract(p.data,'$.tool')='bash')` +
 		` or (instr(substr(p.data,1,200),'"tool":"apply_patch"')>0 ` +
-		`and json_extract(p.data,'$.tool')='apply_patch')` + zcodeV1Tools(harness) + `)` +
+		`and json_extract(p.data,'$.tool')='apply_patch')` + opencodeV1Tools(harness) + `)` +
 		where + ` order by s.id,m.time_created,p.id` + lim
 	return q
 }
 
-// zcodeV1Fields and zcodeV1Tools read ZCode's tool parts, which sit in
-// OpenCode's schema under Claude Code's names and arguments: Bash {command},
-// Read {file_path}, Edit {file_path, old_string, new_string} and Write
-// {file_path, content}. Matched only for ZCode, so opencode's own query gains
-// no clause; read as opencode's were, ZCode sessions were text alone (#4428).
-func zcodeV1Fields(harness string) string {
-	if harness != "zcode" {
-		return ""
+// opencodeV1EditFields read the two sides of an edit. opencode's own edit
+// takes {filePath, oldString, newString} and its write {filePath, content};
+// the 1.x reader took neither, so a session whose changes went through them
+// had nothing for restore or blame (#4495). ZCode's tool parts sit in the same
+// schema under Claude Code's names and arguments, Edit {file_path, old_string,
+// new_string} and Write {file_path, content} (#4428).
+func opencodeV1EditFields(harness string) string {
+	path := `when json_extract(p.data,'$.tool') in ('edit','write') then json_extract(p.data,'$.state.input.filePath') `
+	old := `json_extract(p.data,'$.state.input.oldString')`
+	nw := `json_extract(p.data,'$.state.input.newString'),` +
+		`case when json_extract(p.data,'$.tool')='write' then json_extract(p.data,'$.state.input.content') end`
+	if harness == "zcode" {
+		path += `when json_extract(p.data,'$.tool') in ('Edit','Write') then json_extract(p.data,'$.state.input.file_path') `
+		old = `coalesce(` + old + `,json_extract(p.data,'$.state.input.old_string'))`
+		nw += `,json_extract(p.data,'$.state.input.new_string'),` +
+			`case when json_extract(p.data,'$.tool')='Write' then json_extract(p.data,'$.state.input.content') end`
 	}
-	return `'editpath',case when json_extract(p.data,'$.tool') in ('Edit','Write') ` +
-		`then json_extract(p.data,'$.state.input.file_path') end,` +
-		`'old',json_extract(p.data,'$.state.input.old_string'),` +
-		`'new',coalesce(json_extract(p.data,'$.state.input.new_string'),` +
-		`case when json_extract(p.data,'$.tool')='Write' then json_extract(p.data,'$.state.input.content') end),` +
-		// An Edit ZCode refused — "File has not been read yet" — changed
-		// nothing, and is not recorded as if it had.
+	if harness == "kilocode" {
+		// Kilo CLI's notebook_edit {path, action, kind, source}: insert and
+		// replace write source into a cell; delete and create write none of
+		// it (#4534).
+		path += `when json_extract(p.data,'$.tool')='notebook_edit' then json_extract(p.data,'$.state.input.path') `
+		nw += `,case when json_extract(p.data,'$.tool')='notebook_edit' and json_extract(p.data,'$.state.input.action') in ('insert','replace') ` +
+			`then json_extract(p.data,'$.state.input.source') end`
+	}
+	return `'editpath',case ` + path + `end,` +
+		`'old',` + old + `,` +
+		`'new',coalesce(` + nw + `),` +
+		// An edit the tool refused — ZCode's "File has not been read yet",
+		// opencode's error state — changed nothing, and is not recorded as if
+		// it had.
 		`'refused',case when json_extract(p.data,'$.state.status')='error' then 1 end,`
 }
 
-// opencodeV1Path is the file a read opened: `filePath` in opencode's read,
-// `file_path` in ZCode's Read.
-func opencodeV1Path(harness string) string {
-	if harness != "zcode" {
-		return `json_extract(p.data,'$.state.input.filePath')`
+// opencodeV1Tools admits the edit and write parts beside read, bash and
+// apply_patch, with the same cheap gate in front of the exact test; and for
+// ZCode its Claude-named tools, so opencode's own query gains no clause for
+// them; read as opencode's were, ZCode sessions were text alone (#4428).
+func opencodeV1Tools(harness string) string {
+	names := []string{"edit", "write"}
+	if harness == "zcode" {
+		names = append(names, "Bash", "Read", "Edit", "Write")
 	}
-	return `coalesce(json_extract(p.data,'$.state.input.filePath'),case when json_extract(p.data,'$.tool')='Read' ` +
-		`then json_extract(p.data,'$.state.input.file_path') end)`
-}
-
-func zcodeV1Tools(harness string) string {
-	if harness != "zcode" {
-		return ""
+	if harness == "kilocode" {
+		// Kilo CLI 7.8's own tools beside opencode's (#4534).
+		names = append(names, "background_process", "notebook_edit", "notebook_read")
 	}
 	var b strings.Builder
-	for _, name := range []string{"Bash", "Read", "Edit", "Write"} {
+	for _, name := range names {
 		fmt.Fprintf(&b, ` or (instr(substr(p.data,1,200),'"tool":"%s"')>0 and json_extract(p.data,'$.tool')='%s')`, name, name)
 	}
 	return b.String()
+}
+
+// opencodeV1Command is the command a part ran. Kilo CLI's background_process
+// takes one only to start or monitor a process; its other actions name a
+// process by id (#4534).
+func opencodeV1Command(harness string) string {
+	cmd := `json_extract(p.data,'$.state.input.command')`
+	if harness != "kilocode" {
+		return cmd
+	}
+	return `case when json_extract(p.data,'$.tool')='background_process' ` +
+		`and coalesce(json_extract(p.data,'$.state.input.action'),'') not in ('start','monitor') then null else ` + cmd + ` end`
+}
+
+// opencodeV1Path is the file a read opened: `filePath` in opencode's read,
+// `file_path` in ZCode's Read, and the notebook Kilo CLI's notebook_read and
+// notebook_edit name under `path` (#4534).
+func opencodeV1Path(harness string) string {
+	if harness == "kilocode" {
+		return `case when json_extract(p.data,'$.tool')='read' then json_extract(p.data,'$.state.input.filePath') ` +
+			`when json_extract(p.data,'$.tool') in ('notebook_read','notebook_edit') then json_extract(p.data,'$.state.input.path') end`
+	}
+	if harness != "zcode" {
+		return `case when json_extract(p.data,'$.tool')='read' then json_extract(p.data,'$.state.input.filePath') end`
+	}
+	return `coalesce(json_extract(p.data,'$.state.input.filePath'),case when json_extract(p.data,'$.tool')='Read' ` +
+		`then json_extract(p.data,'$.state.input.file_path') end)`
 }
 
 // readOpencodeRows runs one projection and folds its rows into by, keyed by
@@ -466,11 +507,26 @@ func readOpencodeRows(harness, db, q string, by map[string]*model.Session) (int,
 		if path := str(r["path"]); path != "" && IndexToolPaths() {
 			t := partTime(r)
 			s.Touch(t)
-			s.Messages = append(s.Messages, model.Message{Role: RoleFiles, Text: path, Time: t})
-			continue
+			s.Messages = append(s.Messages, model.Message{Role: RoleFiles, Text: kiloNotebookPath(harness, path, s.Path), Time: t})
+			// A notebook edit names its file and writes a cell, so it goes on
+			// to the edit below.
+			if str(r["old"]) == "" && str(r["new"]) == "" {
+				continue
+			}
 		}
 		if cmd := str(r["cmd"]); cmd != "" {
 			t := partTime(r)
+			out := str(r["out"])
+			if r["exit"] == nil && harness == "zcode" {
+				// ZCode records no exit field and writes a failed run's code
+				// Claude's way, "Exit code N" as the output's first line, and
+				// only for a non-zero N (#4536).
+				head, rest, _ := strings.Cut(out, "\n")
+				if code, ok := statusCode(head, "Exit code ", ""); ok && code != 0 {
+					r["exit"] = float64(code)
+					out = rest
+				}
+			}
 			if IndexCommands() && worthIndexing(cmd) {
 				// A non-zero exit rides with the command. opencode records it on
 				// 99% of runs, which is the one thing Claude's transcripts
@@ -487,7 +543,7 @@ func readOpencodeRows(harness, db, q string, by map[string]*model.Session) (int,
 			}
 			// The output is a separate record under the same role Claude's tool
 			// results use, so `--role tool-output` means the same thing on both.
-			if out := str(r["out"]); out != "" && IndexToolOutput() {
+			if out != "" && IndexToolOutput() {
 				s.Touch(t)
 				s.Messages = append(s.Messages, model.Message{Role: RoleToolOutput, Text: out, Time: t})
 			}
@@ -499,7 +555,7 @@ func readOpencodeRows(harness, db, q string, by map[string]*model.Session) (int,
 			if opencodeSynthetic(r["refused"]) {
 				continue
 			}
-			path := str(r["editpath"])
+			path := kiloNotebookPath(harness, str(r["editpath"]), s.Path)
 			t := partTime(r)
 			if path != "" && old != "" && IndexEdits() {
 				span := old
@@ -575,6 +631,16 @@ func readOpencodeRows(harness, db, q string, by map[string]*model.Session) (int,
 		return rows, err
 	}
 	return rows, nil
+}
+
+// kiloNotebookPath puts a Kilo CLI path relative to the session directory
+// onto it: the notebook tools take one relative to the request directory, where
+// opencode's own tools take absolute paths (#4534).
+func kiloNotebookPath(harness, path, dir string) string {
+	if harness != "kilocode" {
+		return path
+	}
+	return resolveToolPath(path, dir)
 }
 
 // opencodeParents maps a session id to its parent's, for the sessions that
