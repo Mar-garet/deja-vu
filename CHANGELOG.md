@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Recall no longer prints an empty bullet for a message that was only deja's own credit line, or quotes that credit back as the answer under it (#4247).
 - `deja doctor` names a missing hook launcher once under the row, not a second time as the binary the hook runs (#4245).
 - `deja doctor` finds the Hermes 0.17 store, one `state.db` under `~/.hermes` with no `profiles/` directory, instead of calling it missing while it is indexed and `--json` says ok (#4244).
 - deja follows `COPILOT_HOME`: Copilot CLI sessions under it are indexed, and `deja install copilot`, the skill and `deja doctor` use its `mcp-config.json` instead of `~/.copilot` (#4240).
