@@ -24,9 +24,26 @@ func TestHookToolKnowsClaudesPowerShellAndNotebookEdit(t *testing.T) {
 	if !isCommandTool("PowerShell") {
 		t.Error("PowerShell is not read as a command tool")
 	}
+	// Both tool events, in settings.json and in the plugin: a failed
+	// PowerShell command never reached hook-tool-after (#4489).
 	for _, w := range claudeHookWiring {
-		if w.Event == "PreToolUse" && !strings.Contains("|"+w.Matcher+"|", "|PowerShell|") {
-			t.Errorf("PreToolUse matcher %q leaves PowerShell out", w.Matcher)
+		if (w.Event == "PreToolUse" || w.Event == "PostToolUse") && !strings.Contains("|"+w.Matcher+"|", "|PowerShell|") {
+			t.Errorf("%s matcher %q leaves PowerShell out", w.Event, w.Matcher)
+		}
+	}
+	var plugin struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(repoFile(t, "claude-plugin/.claude-plugin/plugin.json"), &plugin); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range []string{"PreToolUse", "PostToolUse"} {
+		for _, g := range plugin.Hooks[ev] {
+			if !strings.Contains("|"+g.Matcher+"|", "|PowerShell|") {
+				t.Errorf("plugin.json %s matcher %q leaves PowerShell out", ev, g.Matcher)
+			}
 		}
 	}
 }

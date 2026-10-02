@@ -1849,9 +1849,9 @@ var claudeHookWiring = []struct{ Event, Sub, Matcher string }{
 	{"PreToolUse", "hook-tool", "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Task|Agent"},
 	// The other half of the point of action: the pre-tool line speaks before a
 	// command runs, this one speaks when it failed and the store knows what
-	// followed that error before. Bash only — a failed edit does not carry a
-	// shell error signature.
-	{"PostToolUse", "hook-tool-after", "Bash"},
+	// followed that error before. The shells only — a failed edit does not
+	// carry a shell error signature. PowerShell is the shell on Windows (#4489).
+	{"PostToolUse", "hook-tool-after", "Bash|PowerShell"},
 	// The session is over, so its live stamp goes and the next session's MCP
 	// recall can answer with it (#4210).
 	{"SessionEnd", "hook-session-end", ""},
