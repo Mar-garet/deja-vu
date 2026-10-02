@@ -101,6 +101,19 @@ func isDeepSeekLog(p string) bool {
 	return ok
 }
 
+// DeepSeekLogSupersedes reports whether newer is a later dsh log generation of
+// the same session as older: the file dsh migrated older into. The index uses
+// it to tell a log left behind by a migration, still on disk and no longer
+// listed, from a transcript a client deleted (#4600).
+func DeepSeekLogSupersedes(newer, older string) bool {
+	if filepath.Dir(newer) != filepath.Dir(older) {
+		return false
+	}
+	n, ok := deepSeekLogGeneration(newer)
+	o, ok2 := deepSeekLogGeneration(older)
+	return ok && ok2 && n > o
+}
+
 // deepSeekLogs walks root for session logs and keeps the newest generation in
 // each session directory. dsh migrates a session it opens into a new
 // generation holding the whole history and leaves the old file untouched, so
