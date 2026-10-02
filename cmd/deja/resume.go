@@ -448,7 +448,7 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "prime":
 		// In the session's own directory: prime-agent refuses a session from
 		// another project (#4408).
-		return existingDir(sources.PrimeSessionDir(s.Path)), "prime-agent --resume " + s.ID, nil
+		return existingDir(resumeRecordedDir(s)), "prime-agent --resume " + s.ID, nil
 	case "copilot":
 		return "", "copilot --resume=" + s.ID, nil
 	case "copilot-chat":
@@ -491,8 +491,8 @@ func existingDir(p string) string {
 
 // resumeRecordedDir is the directory a session recorded running in, for the
 // harnesses whose resume command goes there when it still exists: opencode,
-// Kilo and ZCode's CLI keep it as the session's path, gjc, Kimchi and Senpi in the transcript
-// header.
+// Kilo and ZCode's CLI keep it as the session's path, gjc, Kimchi, Senpi and
+// prime-agent in the transcript header.
 func resumeRecordedDir(s model.Session) string {
 	switch s.Harness {
 	case "opencode", "kilocode":
@@ -503,6 +503,8 @@ func resumeRecordedDir(s model.Session) string {
 		}
 	case "gjc", "kimchi", "senpi":
 		return sources.PiHeaderCwd(s.Path)
+	case "prime":
+		return sources.PrimeSessionDir(s.Path)
 	}
 	return ""
 }
@@ -511,7 +513,8 @@ func resumeRecordedDir(s model.Session) string {
 // opencode, Kilo and ZCode reopen it from anywhere, and their tools then work
 // in the directory the command is run from. Cline does the same, and its
 // directory is the manifest's rather than the store path's (#4318). gjc,
-// Kimchi and Senpi offer to fork it there instead.
+// Kimchi and Senpi offer to fork it there instead, and prime-agent refuses it
+// unless told to fork (#4408).
 func resumeDirGoneNote(s model.Session, dir string) string {
 	if dir == "" && s.Harness == "cline" && s.Path != "" {
 		if d := sources.ClineSessionDir(s.Path); d != "" {
@@ -525,6 +528,9 @@ func resumeDirGoneNote(s model.Session, dir string) string {
 	}
 	if _, err := os.Stat(recorded); !os.IsNotExist(err) {
 		return ""
+	}
+	if s.Harness == "prime" {
+		return fmt.Sprintf("the directory this session ran in is gone (%s); from any other directory prime-agent refuses it unless you add --fork %s", recorded, s.ID)
 	}
 	if s.Harness == "gjc" || s.Harness == "kimchi" || s.Harness == "senpi" {
 		return fmt.Sprintf("the directory this session ran in is gone (%s); from any other directory %s offers to fork it rather than reopen it", recorded, s.Harness)

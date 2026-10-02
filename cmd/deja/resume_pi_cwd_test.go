@@ -43,6 +43,9 @@ func TestResumeGjcAndKimchiRunInTheSessionDirectory(t *testing.T) {
 		// Senpi does what Kimchi does: from another directory it asks to fork
 		// the session into it (#4426).
 		{"senpi", "senpi --session 01a0f93c-7bdc-7074-a7dd-641dd530ce0c"},
+		// prime-agent refuses a session from another project and points at
+		// --fork (#4408), so a gone directory needs the same line.
+		{"prime", "prime-agent --resume 01a0f93c-7bdc-7074-a7dd-641dd530ce0c"},
 	} {
 		t.Run(c.harness, func(t *testing.T) {
 			s := model.Session{Harness: c.harness, ID: "01a0f93c-7bdc-7074-a7dd-641dd530ce0c", Path: transcript(c.harness, proj)}
