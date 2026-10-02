@@ -128,11 +128,36 @@ func heldRecords(dir string, m Manifest) func(asker, other SessionMeta) bool {
 			return false
 		}
 		recs, err := recordsForKey(path, tables, other.Harness+":"+other.ID)
-		if err != nil || len(recs) == 0 {
+		if err != nil {
 			return false
 		}
-		return set[key(recs[len(recs)-1])]
+		// What the harness writes into a source after the fork is not work:
+		// a backgrounded session gains "No response requested." and a task
+		// notification, and the fork that holds every turn before them got
+		// its source back as recall (#4251).
+		for i := len(recs) - 1; i >= 0; i-- {
+			if !afterForkNoise(recs[i]) {
+				return set[key(recs[i])]
+			}
+		}
+		return false
 	}
+}
+
+// afterForkNoise reports a record the harness wrote on its own rather than a
+// turn anyone took: an envelope under the user role, Claude Code's reply to a
+// turn that wanted none, an empty tool output.
+func afterForkNoise(r Record) bool {
+	t := strings.TrimSpace(r.Text)
+	switch {
+	case t == "":
+		return true
+	case r.Role == "user":
+		return harnessPreamble(t)
+	case r.Role == "assistant":
+		return t == "No response requested."
+	}
+	return false
 }
 
 // HasSession reports whether the index holds a session with this id.
