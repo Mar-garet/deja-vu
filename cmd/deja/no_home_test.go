@@ -128,6 +128,10 @@ func TestWithNoHomeNothingIsWrittenWhereDejaHappensToRun(t *testing.T) {
 		{args: []string{"doctor"}},
 	} {
 		t.Run(strings.Join(c.args, " "), func(t *testing.T) {
+			// Each arm is a process of its own in a directory of its own, and
+			// a clean one spends its time waiting out the warmup: run together,
+			// the arms cost one wait instead of twenty-two.
+			t.Parallel()
 			code, left := runWithNoHome(t, c.args...)
 			if code != c.wantCode {
 				t.Errorf("exit %d, want %d", code, c.wantCode)
