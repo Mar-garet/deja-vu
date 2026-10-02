@@ -55,6 +55,15 @@ func runInstall(dir string, args []string, uninstall bool) error {
 		}
 		return fmt.Errorf("%s cannot find your home directory — set HOME to the account deja should wire", verb)
 	}
+	// What this run reads is what its writes are checked against (#4561).
+	readBytesMu.Lock()
+	readBytes = map[string][]byte{}
+	readBytesMu.Unlock()
+	defer func() {
+		readBytesMu.Lock()
+		readBytes = nil
+		readBytesMu.Unlock()
+	}()
 	// One install at a time. Every writer here reads a config, edits it and
 	// writes it back, which is three steps a second process can land in the
 	// middle of: with `deja install claude-auto` and `deja install statusline`
@@ -219,6 +228,11 @@ func runInstall(dir string, args []string, uninstall bool) error {
 	}
 	for _, t := range targets {
 		r, err := installTarget(t, exe, uninstall)
+		// A client saved a config under the edit: edited again from its
+		// version rather than renamed over it (#4561).
+		for i := 0; i < configRaceRetries && errors.Is(err, errConfigChanged); i++ {
+			r, err = installTarget(t, exe, uninstall)
+		}
 		if err != nil {
 			note(t, err)
 			continue
@@ -1578,6 +1592,7 @@ func readConfig(path string) ([]byte, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
+	rememberRead(path, b, err != nil)
 	return bytes.TrimPrefix(b, utf8BOM), nil
 }
 
@@ -1700,6 +1715,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 		// ours is not created either — the .bak of a config the user already
 		// had still is.
 		if len(next) == 0 && !keptEmpty {
+			if err := changedSinceRead(path, old); err != nil {
+				return "", err
+			}
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return "", err
 			}
@@ -1721,6 +1739,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 		// bytes. Only for a file deja created: a config the reader already had
 		// keeps its place, emptied of deja and of nothing else (#2583).
 		if structurallyEmptyConfig(next) && wiringCreated(path) {
+			if err := changedSinceRead(path, old); err != nil {
+				return "", err
+			}
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return "", err
 			}
@@ -1818,9 +1839,15 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
+	beforeConfigReplace(path)
+	if err := changedSinceRead(given, old); err != nil {
+		return "", err
+	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return "", err
 	}
+	// The next write to this file is checked against the read it is built from.
+	forgetRead(given)
 	if len(old) == 0 {
 		return "created", nil
 	}
