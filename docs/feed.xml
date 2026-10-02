@@ -18,6 +18,13 @@
     <summary>How to give Qwen Code recall over every coding agent&#39;s sessions on this machine — the Gemini extension format, and Claude-format marketplaces.</summary>
   </entry>
   <entry>
+    <title>Where Gemini CLI stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/gemini.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/gemini.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Gemini CLI writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>Where Goose stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/goose.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/goose.html"></link>
@@ -100,13 +107,6 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/cursor.html"></link>
     <updated>2026-10-01T00:00:00Z</updated>
     <summary>Where Cursor writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Gemini CLI stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/gemini.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/gemini.html"></link>
-    <updated>2026-10-01T00:00:00Z</updated>
-    <summary>Where Gemini CLI writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where opencode stores its history — session format</title>
