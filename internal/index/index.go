@@ -590,6 +590,12 @@ import (
 // 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
 // call leaves files records, notebook_edit a wrote record and delete_range an
 // edit record from its result's diff (#4541).
+//
+// 60 also: a Codex sub-agent's rollout records the thread that spawned it as
+// its parent (#4547).
+//
+// 60 also: a Codex fork records the thread it was forked from, and every
+// session keeps a fingerprint of the turn it opens with (#4549).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
@@ -758,6 +764,11 @@ type SessionMeta struct {
 	Kind   string `json:",omitempty"`
 	Parent string `json:",omitempty"`
 	Agent  string `json:",omitempty"`
+	// Opening identifies the turn the session opens with. A fork copies the
+	// turns it was forked from, times included, so a fork and its source open
+	// alike, and recall reads that to keep a fork's source off its page (#4549).
+	// Additive: an older manifest decodes with it zero, which matches nothing.
+	Opening uint64 `json:",omitempty"`
 	// From is the machine this session was worked on. Every imported session
 	// read as "from elsewhere" and nothing more, so with three machines
 	// exchanging history there was no way to ask what the server did, and no

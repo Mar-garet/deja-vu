@@ -2078,7 +2078,7 @@ func metaForSession(s model.Session) SessionMeta {
 		last = messageFingerprint(s.Messages[len(s.Messages)-1])
 	}
 	return SessionMeta{ID: s.ID, Harness: s.Harness, Project: s.Project, Path: s.Path, Title: title, AgentTitle: agentTitle, Started: s.Started, Updated: s.Updated, Touched: touched, TouchHits: touchHits, Counted: len(s.Messages), LastMsg: last, Asked: askedHashes(s.Messages), Hit: frictionHashes(s.Messages), GaveUp: gaveUp(s.Messages), Words: sessionWords(s.Messages), NoText: !holdsText(s), Settled: sessionSettled(s),
-		Kind: s.Kind, Parent: s.Parent, Agent: s.Agent,
+		Kind: s.Kind, Parent: s.Parent, Agent: s.Agent, Opening: SessionOpening(s),
 		OrigID: s.OrigID, From: s.From, Lifecycle: s.Lifecycle, LifecycleNote: s.LifecycleNote, LifecycleAt: s.LifecycleAt}
 }
 
@@ -2147,6 +2147,9 @@ func extendDerived(meta *SessionMeta, ms []model.Message) {
 		return
 	}
 	meta.Counted += len(tail)
+	if meta.Opening == 0 {
+		meta.Opening = SessionOpening(model.Session{Harness: meta.Harness, Messages: tail})
+	}
 	if meta.NoText && holdsText(model.Session{Messages: tail}) {
 		meta.NoText = false
 	}

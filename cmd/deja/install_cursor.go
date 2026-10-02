@@ -50,6 +50,10 @@ func installCursorHooks(exe string, uninstall bool) (installResult, error) {
 	setCursorHook(hooks, "preToolUse", hookRun(exe, "hook-tool"), uninstall)
 	setCursorHook(hooks, "postToolUse", hookRun(exe, "hook-tool-after"), uninstall)
 	setCursorHook(hooks, "preCompact", hookRun(exe, "hook-precompact"), uninstall)
+	// cursor-agent 2026.09.02 runs sessionEnd with conversation_id, which is
+	// what clears the live stamp so the next session's MCP recall can answer
+	// with this one (#4545).
+	setCursorHook(hooks, "sessionEnd", hookRun(exe, "hook-session-end"), uninstall)
 	if len(hooks) == 0 {
 		delete(root, "hooks")
 		delete(root, "version")

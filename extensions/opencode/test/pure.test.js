@@ -303,3 +303,70 @@ test("the after-tool hook carries a file's history back from a read", () => {
   )
   assert.ok(body.includes("output.output = ftext"), "the line is not folded into the tool result")
 })
+
+// A session the plugin stamped live through hook-prompt was never ended, so it
+// stayed out of the next session's MCP recall for twenty minutes (#4546).
+// opencode publishes session.idle when a turn is over, and awaits dispose
+// before `opencode run` exits.
+test("the plugin ends the sessions it stamped, at idle and at dispose", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "deja-oc-"))
+  const bin = join(dir, "deja")
+  const calls = join(dir, "calls")
+  writeFileSync(bin, `#!/bin/sh\nif [ "$1" = version ]; then echo 0.0.0; exit 0; fi\nprintf '%s %s\\n' "$1" "$(cat)" >> ${calls}\n`, {
+    mode: 0o755,
+  })
+  const ended = () => {
+    let text = ""
+    try {
+      text = readFileSync(calls, "utf8")
+    } catch {}
+    return text.split("\n").filter((l) => l.startsWith("hook-session-end "))
+  }
+  await withConfigHome(dir, async () => {
+    const hooks = await DejaPlugin({ client: quietClient(), directory: dir }, { bin })
+    await hooks["experimental.chat.messages.transform"](
+      { sessionID: "ses_F" },
+      { messages: [{ info: { role: "user", sessionID: "ses_F" }, parts: [{ type: "text", text: "the retry loop" }] }] },
+    )
+    assert.equal(typeof hooks.event, "function", "no event hook: a stamped session is never ended")
+    await hooks.event({ event: { type: "session.status", properties: { sessionID: "ses_F", status: { type: "busy" } } } })
+    assert.equal(ended().length, 0, "a busy status ended the session")
+    await hooks.event({ event: { type: "session.idle", properties: { sessionID: "ses_F" } } })
+    assert.deepEqual(ended(), ['hook-session-end {"session_id":"ses_F"}'])
+    rmSync(calls, { force: true })
+    assert.equal(typeof hooks.dispose, "function", "no dispose: opencode run exits with the session stamped")
+    await hooks.dispose()
+    assert.deepEqual(ended(), ['hook-session-end {"session_id":"ses_F"}'])
+  })
+})
+
+// A task sub-agent's digest and recall led with the session that spawned it,
+// which is live and asking through it (#4548). opencode says who the parent is.
+test("the plugin names a sub-agent's parent to the digest and the recall", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "deja-oc-"))
+  const bin = join(dir, "deja")
+  const calls = join(dir, "calls")
+  writeFileSync(bin, `#!/bin/sh\nif [ "$1" = version ]; then echo 0.0.0; exit 0; fi\nprintf '%s %s\\n' "$1" "$(cat)" >> ${calls}\n`, {
+    mode: 0o755,
+  })
+  const client = {
+    ...quietClient(),
+    session: { get: async ({ path }) => ({ data: { id: path.id, parentID: path.id === "ses_child" ? "ses_parent" : undefined } }) },
+  }
+  await withConfigHome(dir, async () => {
+    const hooks = await DejaPlugin({ client, directory: dir }, { bin })
+    await hooks["experimental.chat.system.transform"]({ sessionID: "ses_child" }, { system: [] })
+    await hooks["experimental.chat.messages.transform"](
+      { sessionID: "ses_child" },
+      { messages: [{ info: { role: "user", sessionID: "ses_child" }, parts: [{ type: "text", text: "find the retry fix" }] }] },
+    )
+    const lines = readFileSync(calls, "utf8").split("\n")
+    for (const hook of ["hook-context", "hook-prompt"]) {
+      const line = lines.find((l) => l.startsWith(hook + " "))
+      assert.ok(line, `${hook} was not called`)
+      const payload = JSON.parse(line.slice(hook.length + 1))
+      assert.equal(payload.session_id, "ses_child", hook)
+      assert.equal(payload.parent_session_id, "ses_parent", hook)
+    }
+  })
+})
