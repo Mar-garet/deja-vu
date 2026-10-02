@@ -1,7 +1,8 @@
 # deja for Claude Code
 
-The plugin bundle Claude Code, Cursor, Qwen, OpenClaw and Copilot install from
-this repository's marketplace:
+The plugin bundle Claude Code, Cursor, Qwen and OpenClaw install from
+this repository's marketplace. Copilot CLI installs it too but takes only the
+skill (no hooks, no MCP server); `deja install copilot-auto` wires those:
 
 ```sh
 claude plugin marketplace add vshulcz/deja-vu && claude plugin install deja-vu@deja-vu

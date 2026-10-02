@@ -78,6 +78,11 @@ func autoWirings() []autoWiring {
 		// whole of auto-recall here — there is no digest hook to look for.
 		{"crush", func() string { return crushConfigPath() }, "hook-tool", ""},
 		{"grok", func() string { return grokHooksPath() }, "hook-context", ""},
+		// Copilot CLI keeps hooks with the rest of its user settings; the row
+		// follows them to config.json while they have not moved yet. The flag
+		// is part of the marker: a plain hook-context line answers in Claude's
+		// envelope, which Copilot runs and drops.
+		{"copilot", func() string { return copilotHooksPath() }, "hook-context --copilot", ""},
 		// ZCode keeps its hooks in the same file as its server map, and the
 		// line deja writes ends in `--strict` — its schema discards a whole
 		// response over one key it does not know.
@@ -102,6 +107,7 @@ func autoWirings() []autoWiring {
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
 	"cursor": true, "qwen": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+	"copilot": true,
 }
 
 // autoUnwired reports whether a row's file holds no deja wiring at all: it is

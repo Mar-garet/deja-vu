@@ -272,6 +272,9 @@ func installHermesMCP(exe string, uninstall bool) (installResult, error) {
 	// The file's own final newline, the way both goose writers keep it: this
 	// was the only writer that did not, so a config whose deja block ended it
 	// came back without one (#2606, #2730).
+	if !uninstall {
+		note = withOtherDejaNames(note, yamlDejaEntryNames(next, "mcp_servers:"))
+	}
 	a, werr := writeIfChanged(path, old, []byte(keepTrailingNewline(lfText(old), next)))
 	return installResult{Path: path, Action: a, Note: note}, werr
 }

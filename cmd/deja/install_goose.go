@@ -204,6 +204,9 @@ func installGoose(exe string, uninstall bool) (installResult, error) {
 	if crlf {
 		next = strings.ReplaceAll(next, "\n", "\r\n")
 	}
+	if !uninstall {
+		note = withOtherDejaNames(note, yamlDejaEntryNames(next, "extensions:"))
+	}
 	a, werr := writeIfChanged(path, old, []byte(next))
 	return installResult{Path: path, Action: a, Note: note}, werr
 }

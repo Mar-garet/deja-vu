@@ -103,7 +103,7 @@ _deja_completion() {
             fi
             ;;
         hook-context)
-            COMPREPLY=( $(compgen -W "--plain --once --notes" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--plain --once --copilot --notes" -- "$cur") )
             ;;
         index)
             COMPREPLY=( $(compgen -W "--rebuild -rebuild --quiet -quiet" -- "$cur") )
@@ -271,7 +271,7 @@ _deja() {
       _arguments '--to=[target agent]:agent:(%HANDOFF_TARGETS%)' '--exec[launch the target agent]' '1:session ID prefix:'
       ;;
     hook-context)
-      _arguments '--plain[omit formatting]' '--once[one digest per session]' '--notes[only the notes meant for the person]'
+      _arguments '--plain[omit formatting]' '--once[one digest per session]' '--copilot[answer in the Copilot CLI hook shape]' '--notes[only the notes meant for the person]'
       ;;
     index)
       _arguments '--rebuild[force a full rebuild]' '-rebuild[force a full rebuild]' '--quiet[say nothing when it worked]' '-quiet[say nothing when it worked]'
@@ -470,7 +470,7 @@ Register-ArgumentCompleter -Native -CommandName deja -ScriptBlock {
                 if ($previous -eq '--to') { $handoffTargets }
                 else { @('--to', '--exec') }
             }
-            'hook-context' { @('--plain', '--once', '--notes') }
+            'hook-context' { @('--plain', '--once', '--copilot', '--notes') }
             'index' { @('--rebuild', '-rebuild') }
             'install' { $installTargets + @('--no-guidance', '--no-index', '--force') }
             'uninstall' { $installTargets + @('--no-guidance') }

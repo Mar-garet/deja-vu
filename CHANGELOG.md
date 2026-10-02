@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `deja install copilot-auto` adds a `sessionStart` hook to Copilot CLI, so a new or resumed session starts with the project digest, as it does in Claude Code and Gemini CLI. The hook goes under `hooks` in `~/.copilot/settings.json` (or in `config.json` while your own hooks are still there, since Copilot moves them over on start), and uninstall gives the file back byte for byte. It also wires `preMcpToolCall` and `sessionEnd`, so MCP recall leaves out the session asking it however long that session runs (#4231, #4551).
 - ZCode's older sessions, the snapshots under `~/.zcode/v2/sessions` that the current runtime leaves until you restore them, are indexed, and `deja doctor` counts them. Deleted ones are skipped, and one already restored into the CLI database is read from there (#4432).
 - pi, omp, OpenClaw, gjc, prime-agent, senpi and Kimchi sessions carry their tool calls: the files read and written, the commands run with how they ended, and the replaced text of each edit, so `deja files`, `deja how`, `deja restore` and `deja blame` answer for them. gjc's hashline edits are read too. The index rebuilds once (#4113).
 - `deja install grok-auto` wires `PostToolUse`, so a Grok Build command that fails gets the earlier fix for the same error, as Claude Code and Codex do; `deja hook-tool-after` reads grok's camelCase payload and its `output_for_prompt` (#4499).
 
 ### Fixed
 
+- deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).
 - A Codex or Cursor CLI session you quit is back in the next session's MCP recall right away instead of 20 minutes later: `deja install codex-auto` and `cursor-auto` wire the session-end hook, and the Codex plugin carries it too. Codex asks once to approve the new hook (#4545).
 - An opencode 1.x session is back in the next session's MCP recall as soon as its turn ends, instead of 20 minutes later: the plugin `deja install opencode-auto` writes, and the `opencode-deja` package, end the sessions they stamped at `session.idle` and when opencode disposes them (#4546).
 - A Claude Code or Codex sub-agent's MCP recall no longer lists the sub-agent's own transcript. The sub-agents of a live session count as live, and a Codex sub-agent's rollout now records the thread that spawned it. The index rebuilds once (#4547).
@@ -236,6 +238,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja install codex-auto` says when some of its hooks still need approving in codex, as after an upgrade that adds SessionEnd; it spoke only when none were approved (#4572).
 - On opencode 2.x the plugin `deja install opencode-auto` writes, and the `opencode-deja` package, end the sessions they stamped when a turn finishes and when opencode exits, as they already did on 1.x, so a finished session is back in the next one's MCP recall at once (#4571).
 - An opencode turn that is only an image stamps its session live like any other, so its MCP recall no longer hands the session back to itself (#4573).
+- A CRLF config with a comment in it installs and uninstalls cleanly: a second `deja install opencode` or `kilocode` no longer writes `\r,` after its entry, which opencode refused to load, and gemini, VS Code, prime, amp and OpenClaw no longer keep a blank line deja added (#4553).
+- `deja install codex`, `grok` and `kimi-auto` refuse a `config.toml` that sets `mcp_servers` or `hooks` inline (`mcp_servers = { … }`, `hooks = []`) and say which line, rather than appending a table that redefines it, after which codex would not load its config at all (#4554).
+- The same refusal for a `config.toml` that wires deja by hand inline, `deja = { … }` under `[mcp_servers]` or `mcp_servers.deja.command = …`: `deja install codex` and `grok` appended a `[mcp_servers.deja]` table that defined it twice (#4554).
+- A YAML config that is `{}` on one line, or that sets `mcp_servers: {}` inline, is refused with the reason rather than given a block after it that no parser reads; hermes fell back to its defaults and goose dropped the config. Continue, aider and dsh had the same append (#4555).
+- The same for a YAML document opened on its marker line, `--- {}`, which hermes and goose got deja's block appended to (#4555).
+- An `openclaw.json` in JSON5, with unquoted keys or single quotes, is refused saying OpenClaw reads it as JSON5, not with a JSON error pointing at the comment above it; and one with trailing commas uninstalls the way it installed (#4557).
+- Uninstall gives back an empty block as it found it: a `"hooks": {}`, `"servers": {}` or `"context_servers": {}` you had stays in Claude Code, Codex, Cursor, Command Code, Zed, VS Code, grok, prime and amp, and the `"mcp": {}` deja added to an empty opencode or kilo config goes (#4562).
+- That snapshot no longer undoes an empty block you added or removed yourself after install, such as `"inputs": []` in VS Code's `mcp.json` (#4562).
+- An empty config you created (`touch ~/.codex/config.toml`) is still there, empty, after `deja install` and `deja uninstall`; TOML, YAML and aider configs were deleted and JSON ones came back as `{}` (#4563).
+- With deja already wired under another name, `deja install` for VS Code, prime, amp and ZCode takes that entry over instead of adding a second server, and for Zed, grok, hermes, goose and Continue it says the other entry also runs deja, rather than a plain `updated` while the client starts the server twice (#4556).
+- An MCP server that only has a path ending in `deja` in its args, like a filesystem server serving `~/code/deja`, is no longer taken for deja's own entry and overwritten with deja's command by `deja install` (Claude Code, Codex, VS Code, prime, amp, ZCode and the other MCP writers) (#4556).
+- A config you made read-only (`chmod 444`) is refused, named, and left as it was; install and uninstall wrote a temp file and renamed it over the lock (#4558).
+- `deja install claude-auto` refused on a read-only `~/.claude` no longer leaves deja's MCP server wired in `~/.claude.json` with a `.bak` beside it; the halves that can refuse go first (#4560).
+- A change the client saves to its config while `deja install` is editing it is kept: deja reads the file again before replacing it and, if it moved, edits the new version. Measured on `~/.claude.json` with a client saving during install, lost saves went from 31 and 116 of 200 runs to 4 and 5 (#4561).
 
 ## [0.21.4] - 2026-09-29
 
