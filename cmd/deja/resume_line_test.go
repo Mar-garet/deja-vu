@@ -93,11 +93,13 @@ func TestResumeLineLandsInTheDirInEachShell(t *testing.T) {
 			if !ok {
 				continue
 			}
-			script := filepath.Join(t.TempDir(), "line")
+			script, body := filepath.Join(t.TempDir(), "line"), line+"\n"
 			if goos == "windows" {
-				script += ".ps1"
+				// Windows PowerShell reads a .ps1 without a BOM as ANSI, which
+				// a line pasted at its prompt never goes through.
+				script, body = script+".ps1", "\ufeff"+body
 			}
-			if err := os.WriteFile(script, []byte(line+"\n"), 0o644); err != nil {
+			if err := os.WriteFile(script, []byte(body), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			out, err := exec.Command(shell[0], append(shell[1:], script)...).CombinedOutput()
