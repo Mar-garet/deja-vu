@@ -23,6 +23,16 @@ import (
 
 func hermeticEnv(t *testing.T) string {
 	t.Helper()
+	// Each test stands in for a deja process of its own, and what a run
+	// created is recorded per process. Carried over, one test's directories
+	// landed in the next one's wiring record, so an uninstall test passed or
+	// failed on windows depending on which tests ran before it.
+	freshRunRecord := func() {
+		createdDirsByThisRun, createdByThisRun, snapshotsByThisRun = nil, nil, nil
+		blocksAddedThisRun, blocksForgottenThisRun = nil, map[string]bool{}
+	}
+	freshRunRecord()
+	t.Cleanup(freshRunRecord)
 	tmp := t.TempDir()
 	home := filepath.Join(tmp, "home")
 	t.Setenv("HOME", home)

@@ -64,10 +64,11 @@ func runWithNoHome(t *testing.T, args ...string) (int, []string) {
 		code = exit.ExitCode()
 	}
 	// The warmup is detached, so what it writes lands after the process is
-	// gone: wait for it rather than racing it. Short, because every clean arm
-	// pays the whole wait.
+	// gone: wait for it rather than racing it. Every clean arm pays the whole
+	// wait, but the arms wait side by side, so it can be long enough for a
+	// warmup slowed by -race on a busy runner.
 	var left []string
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 40; i++ {
 		found, err := filepath.Glob(filepath.Join(wd, "*"))
 		if err != nil {
 			t.Fatal(err)
@@ -128,6 +129,10 @@ func TestWithNoHomeNothingIsWrittenWhereDejaHappensToRun(t *testing.T) {
 		{args: []string{"doctor"}},
 	} {
 		t.Run(strings.Join(c.args, " "), func(t *testing.T) {
+			// Each arm is a process of its own in a directory of its own, and
+			// a clean one spends its time waiting out the warmup: run together,
+			// the arms cost one wait instead of twenty-two.
+			t.Parallel()
 			code, left := runWithNoHome(t, c.args...)
 			if code != c.wantCode {
 				t.Errorf("exit %d, want %d", code, c.wantCode)
