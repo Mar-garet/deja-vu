@@ -197,3 +197,30 @@ func TestInstallKeepsTheReadersOffSwitch(t *testing.T) {
 		})
 	}
 }
+
+// gemini's hooksConfig.enabled defaults to true, so a false there is the
+// reader turning every hook off. Install turned it on with nothing but "also
+// updated", and uninstall left it on, so their own hooks ran from then on
+// (#4471, the shape #4431 fixed for zcode).
+func TestGeminiAutoGivesBackTheHooksSwitch(t *testing.T) {
+	hermeticEnv(t)
+	path := filepath.Join(sources.GeminiHome(), "settings.json")
+	theirs := "{\n  \"hooksConfig\": {\n    \"enabled\": false\n  }\n}\n"
+	writeTestFile(t, path, theirs)
+	out, err := captureRun(t, "install", "gemini-auto", "--no-index")
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !strings.Contains(out, "hooksConfig.enabled") {
+		t.Errorf("install turned on hooks the reader had off and did not say so:\n%s", out)
+	}
+	if out, err = captureRun(t, "uninstall", "gemini-auto"); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if got := fileText(t, path); got != theirs {
+		t.Errorf("settings.json did not come back as it was.\nbefore:\n%s\nafter:\n%s\nuninstall said:\n%s", theirs, got, out)
+	}
+	if strings.Contains(out, "left hooksConfig.enabled on") {
+		t.Errorf("uninstall says it left the switch on after turning it back off:\n%s", out)
+	}
+}
