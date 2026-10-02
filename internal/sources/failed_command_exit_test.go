@@ -99,6 +99,12 @@ insert into messages(session_id,role,content_json,created_timestamp) values ('20
  {"user":{"content":{"ToolUseResults":{"tool_use_results":[{"tool_use_id":"t1","content":[{"Json":{"exit_status":"1","stdout":"","stderr":"./retry.go:12:5: undefined: backoffJitter"}}],"status":"Success"}]}},"timestamp":null},
   "assistant":{"Response":{"message_id":"m2","content":"The build is broken."}}}]}`, 1790848800000))
 		}},
+		{name: "copilot-chat", kind: "copilot-chat", fixture: func(t *testing.T, dir string) string {
+			return write(t, filepath.Join(dir, "workspaceStorage", "a1b2", "chatSessions", "5c0ffee0-0000-4000-8000-000000000000.jsonl"), strings.Join([]string{
+				`{"kind":0,"v":{"version":3,"sessionId":"5c0ffee0-0000-4000-8000-000000000000","creationDate":1790000000000,"customTitle":"fix the retry loop","requests":[]}}`,
+				`{"kind":2,"k":["requests"],"v":[{"requestId":"request_1","timestamp":1790000001000,"message":{"text":"fix the retry loop"},"response":[{"kind":"toolInvocationSerialized","isComplete":true,"toolCallId":"c2","toolId":"run_in_terminal","toolSpecificData":{"kind":"terminal","commandLine":{"original":"go test ./..."},"language":"sh","terminalCommandState":{"exitCode":1,"timestamp":1790000003000,"duration":1200},"terminalCommandOutput":{"text":"./retry.go:12:5: undefined: backoffJitter\nFAIL"}}}]}]}`,
+			}, "\n")+"\n")
+		}},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {

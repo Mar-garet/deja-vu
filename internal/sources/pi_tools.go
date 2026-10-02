@@ -335,6 +335,8 @@ func piCommandFailed(msg map[string]any) bool {
 	return ok && code != 0
 }
 
+// piExitCode reads a numeric exit code as either decoder hands it back; the
+// Copilot Chat reader, which decodes with UseNumber, uses it too.
 func piExitCode(v any) (int, bool) {
 	switch n := v.(type) {
 	case float64:
