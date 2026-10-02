@@ -70,7 +70,8 @@ type doctorComponent struct {
 
 // doctorAutoStatus is one auto-recall wiring, in the same four states the text
 // report prints: wired, stale (the file is there and nothing in it calls deja),
-// missing, and plugin (the harness carries its own). BinaryMissing is the state
+// missing, and plugin (the harness carries its own); aider adds broken, a
+// read: entry naming a context file that is gone (#4327). BinaryMissing is the state
 // an upgrade leaves — the entry is there, wired, and names a path that no
 // longer exists, so every hook exits 127 and nothing else says so.
 type doctorAutoStatus struct {

@@ -529,6 +529,9 @@ without anyone asking, one row per harness deja can wire. `state` is `wired`,
 how a dead integration looks), `missing` (no file, or a client config such as
 Kimi's `config.toml` or Qwen's `settings.json` with no deja hook in it), or
 `plugin` (the harness carries its own).
+The `aider` row is `stale` when the context file is there and `~/.aider.conf.yml`
+has no `read:` entry for it, and `broken` when the entry is there and the file
+is not, which makes aider print an error on every start.
 `binary_missing` marks a row whose entries name a deja binary that is no longer
 there — what an upgrade leaves behind, with every hook exiting 127.
 `switched_off` marks a `wired` row the harness has turned off, so it will not
