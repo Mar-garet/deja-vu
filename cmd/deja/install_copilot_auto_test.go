@@ -442,7 +442,7 @@ func TestCopilotHomeMovesEveryCopilotPath(t *testing.T) {
 // PowerShell runs a quoted path only behind `&`, and inside single quotes the
 // only character that means anything is the quote itself, doubled.
 func TestCopilotPowerShellLineQuotesThePath(t *testing.T) {
-	got := copilotPowerShellCommand(`C:\Users\O'Brien\$x (1)\deja.exe`)
+	got := copilotPowerShellCommand(`C:\Users\O'Brien\$x (1)\deja.exe`, "hook-context", "--copilot")
 	want := `& 'C:/Users/O''Brien/$x (1)/deja.exe' hook-context --copilot`
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)

@@ -1990,6 +1990,7 @@ var hookNames = map[string]bool{
 	"hook-context":      true,
 	"hook-goose":        true,
 	"hook-goose-prompt": true,
+	"hook-mcp-call":     true,
 	"hook-plan":         true,
 	"hook-precompact":   true,
 	"hook-prompt":       true,

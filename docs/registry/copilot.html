@@ -78,7 +78,12 @@
 <p><code>~/.copilot/settings.json</code>. Copilot puts the <code>additionalContext</code> it prints in</p>
 <p>front of the first request as its own message and keeps it for the session;</p>
 <p>the payload names the session as <code>sessionId</code> and sends <code>source: &#34;resume&#34;</code></p>
-<p>on <code>copilot --resume</code>. <code>COPILOT_HOME</code> moves all of these files.</p>
+<p>on <code>copilot --resume</code>. It also adds <code>preMcpToolCall</code> (<code>deja hook-mcp-call</code>)</p>
+<p>and <code>sessionEnd</code> (<code>deja hook-session-end</code>): the MCP server is told nothing</p>
+<p>about who is calling, so the first marks the session live before each MCP</p>
+<p>request and recall leaves it out, and the second clears the mark. A</p>
+<p><code>preMcpToolCall</code> hook&#39;s output becomes the request&#39;s <code>_meta</code>, so it prints</p>
+<p>nothing. <code>COPILOT_HOME</code> moves all of these files.</p>
 <ul>
 <li><strong>Resume</strong>: <code>copilot --resume=&lt;sessionId&gt;</code>.</li>
 <li><strong>Handoff</strong>: exec.</li>

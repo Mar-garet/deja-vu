@@ -9,16 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `deja install copilot-auto` adds a `sessionStart` hook to Copilot CLI, so a new or resumed session starts with the project digest, as it does in Claude Code and Gemini CLI. The hook goes under `hooks` in `~/.copilot/settings.json` (or in `config.json` while your own hooks are still there, since Copilot moves them over on start), and uninstall gives the file back byte for byte (#4231).
-
-### Fixed
-
-- deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).
+- `deja install copilot-auto` adds a `sessionStart` hook to Copilot CLI, so a new or resumed session starts with the project digest, as it does in Claude Code and Gemini CLI. The hook goes under `hooks` in `~/.copilot/settings.json` (or in `config.json` while your own hooks are still there, since Copilot moves them over on start), and uninstall gives the file back byte for byte. It also wires `preMcpToolCall` and `sessionEnd`, so MCP recall leaves out the session asking it however long that session runs (#4231, #4551).
 - ZCode's older sessions, the snapshots under `~/.zcode/v2/sessions` that the current runtime leaves until you restore them, are indexed, and `deja doctor` counts them. Deleted ones are skipped, and one already restored into the CLI database is read from there (#4432).
 - pi, omp, OpenClaw, gjc, prime-agent, senpi and Kimchi sessions carry their tool calls: the files read and written, the commands run with how they ended, and the replaced text of each edit, so `deja files`, `deja how`, `deja restore` and `deja blame` answer for them. gjc's hashline edits are read too. The index rebuilds once (#4113).
 
 ### Fixed
 
+- deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).
 - On Windows, a DeepSeek TUI or Codex tool path such as `/tmp/proj/retry.go` is kept as written instead of being joined onto the session's directory as `\tmp\proj\tmp\proj\retry.go`, a pi, Senpi or omp file relative to `/tmp/proj` is recorded as `/tmp/proj/retry.go` rather than `\tmp\proj\retry.go`, and `deja doctor` keeps the drive of a `file://C:/…` dsh plugin it reports missing (#4438).
 - `deja doctor` no longer counts a client's own files as transcripts it could not read: Kimi's goal queue and background task records, Gemini's saved chats, restore points and task lists, Qwen's session groups and workflow runs, Copilot CLI's autopilot objective and OpenClaw's cost cache. Kimi and Qwen sub-agent logs count as skipped sub-agents, Claude's `agent-*.meta.json` no longer flips the sub-agent note to "skipped", and OpenClaw's `<id>.trajectory.jsonl`, live or archived by a delete, is no longer indexed as a second session (#4473, #4474, #4475, #4476, #4477, #4478).
 - `deja doctor` and `doctor --json` read the client's own off switches: an MCP entry turned off in goose, hermes, codex, grok or dsh config, a client deny list or MCP master switch, a client-wide hooks switch, and deja's extension or plugin disabled through the client. Those rows said `wired` (#4466, #4468, #4469, #4470).

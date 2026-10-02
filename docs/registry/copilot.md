@@ -34,7 +34,12 @@ already name every file.
   `~/.copilot/settings.json`. Copilot puts the `additionalContext` it prints in
   front of the first request as its own message and keeps it for the session;
   the payload names the session as `sessionId` and sends `source: "resume"`
-  on `copilot --resume`. `COPILOT_HOME` moves all of these files.
+  on `copilot --resume`. It also adds `preMcpToolCall` (`deja hook-mcp-call`)
+  and `sessionEnd` (`deja hook-session-end`): the MCP server is told nothing
+  about who is calling, so the first marks the session live before each MCP
+  request and recall leaves it out, and the second clears the mark. A
+  `preMcpToolCall` hook's output becomes the request's `_meta`, so it prints
+  nothing. `COPILOT_HOME` moves all of these files.
 - **Resume**: `copilot --resume=<sessionId>`.
 - **Handoff**: exec.
 

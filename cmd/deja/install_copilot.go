@@ -47,16 +47,25 @@ func copilotHooksPath() string {
 	return filepath.Join(copilotHome(), "settings.json")
 }
 
-// copilotHookCommand is the line deja's sessionStart entry runs. --copilot
-// makes hook-context answer in the only shape Copilot reads.
-func copilotHookCommand(exe string) string {
-	return hookRun(exe, "hook-context", "--copilot")
+// copilotHooks is every event deja wires in Copilot CLI. --copilot makes
+// hook-context answer in the only shape Copilot reads. The two after
+// sessionStart keep recall from answering with the session asking it (#4551):
+// preMcpToolCall restamps it before each MCP request, which a sessionStart
+// stamp alone stops covering twenty minutes in, and sessionEnd takes the
+// stamp back. Both payloads name the session as `sessionId` (1.0.91).
+var copilotHooks = []struct {
+	event string
+	args  []string
+}{
+	{"sessionStart", []string{"hook-context", "--copilot"}},
+	{"preMcpToolCall", []string{"hook-mcp-call"}},
+	{"sessionEnd", []string{"hook-session-end"}},
 }
 
 // installCopilotAuto wires Copilot CLI's sessionStart hook to the digest, with
 // the MCP server beside it (#4231).
 //
-// Only sessionStart. Measured on 1.0.79, what it prints goes in front of the
+// The digest goes in on sessionStart. Measured on 1.0.79, what it prints goes in front of the
 // first request as a message of its own, is kept for every later turn of the
 // session, and is not written into the user's message; userPromptSubmitted
 // output is appended to the user's own turn instead. The payload names the
@@ -168,7 +177,9 @@ func planCopilotHooks(path, exe string, uninstall bool) (copilotHooksPlan, error
 		root["hooks"] = hooks
 		added = true
 	}
-	setCopilotHook(hooks, "sessionStart", exe, uninstall)
+	for _, h := range copilotHooks {
+		setCopilotHook(hooks, h.event, exe, uninstall, h.args...)
+	}
 	// The object deja added can be in either file by now: Copilot moves
 	// config.json's hooks into settings.json on start, and the record names
 	// the file deja wrote.
@@ -222,8 +233,8 @@ func snapshotIfSame(path string, root map[string]any, next []byte) []byte {
 // setCopilotHook keeps one deja entry under an event and leaves every other
 // one alone. Entries are flat — {"type","bash","timeoutSec"} — the same schema
 // as a repository's .github/hooks/*.json.
-func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool) {
-	cmd := copilotHookCommand(exe)
+func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool, args ...string) {
+	cmd := hookRun(exe, args...)
 	base := strings.TrimSuffix(cmd, " --copilot")
 	entries, _ := hooks[event].([]any)
 	var kept []any
@@ -252,7 +263,7 @@ func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool) {
 			entry["bash"] = cmd
 			entry["timeoutSec"] = copilotHookTimeoutSec
 			if runtime.GOOS == "windows" {
-				entry["powershell"] = copilotPowerShellCommand(exe)
+				entry["powershell"] = copilotPowerShellCommand(exe, args...)
 			}
 		}
 		kept = append(kept, entryAny)
@@ -262,7 +273,7 @@ func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool) {
 		// On Windows Copilot picks the powershell line when there is one;
 		// `&` is what lets PowerShell run a quoted path.
 		if runtime.GOOS == "windows" {
-			entry["powershell"] = copilotPowerShellCommand(exe)
+			entry["powershell"] = copilotPowerShellCommand(exe, args...)
 		}
 		kept = append(kept, entry)
 	}
@@ -296,7 +307,7 @@ func copilotHooksDisabled() bool {
 // runs a quoted path only behind `&`, and a double-quoted one expands `$` and
 // backticks, so the path goes in single quotes, where only the quote itself
 // means anything and is written twice.
-func copilotPowerShellCommand(exe string) string {
+func copilotPowerShellCommand(exe string, args ...string) string {
 	p := strings.ReplaceAll(exe, `\`, "/")
-	return "& '" + strings.ReplaceAll(p, "'", "''") + "' hook-context --copilot"
+	return strings.Join(append([]string{"& '" + strings.ReplaceAll(p, "'", "''") + "'"}, args...), " ")
 }

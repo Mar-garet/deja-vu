@@ -247,6 +247,10 @@ var commands = map[string]command{
 		runHookSessionEnd(dir, os.Stdin)
 		return nil
 	},
+	"hook-mcp-call": func(dir string, _ []string) error {
+		runHookMCPCall(dir, os.Stdin, os.Stdout)
+		return nil
+	},
 	"hook-plan": func(dir string, _ []string) error {
 		if sayIfTypedByHand("hook-plan") {
 			return nil
@@ -4087,6 +4091,7 @@ var helpHidden = map[string]bool{
 	"hook-context":      true,
 	"hook-goose":        true,
 	"hook-goose-prompt": true,
+	"hook-mcp-call":     true,
 	"hook-precompact":   true,
 	"hook-refresh":      true,
 	"hook-session-end":  true,
