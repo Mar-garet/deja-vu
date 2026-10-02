@@ -313,7 +313,14 @@ func codeWhalePatchRecords(raw json.RawMessage, failed map[string]bool, workspac
 			continue
 		}
 		if patch, _ := in["patch"].(string); patch != "" {
-			path, _ := in["path"].(string)
+			// file_path and filePath are folded onto path before it runs
+			// (file.rs PATH_ALIASES).
+			path := ""
+			for _, k := range []string{"path", "file_path", "filePath"} {
+				if path, _ = in[k].(string); path != "" {
+					break
+				}
+			}
 			files, spans, wrote := unifiedPatch(patch, path, resolve)
 			out = append(out, patchRecords(files, spans, wrote, ts)...)
 			continue

@@ -350,6 +350,20 @@ func TestCodeWhaleApplyPatch(t *testing.T) {
 		vocabEdit("/tmp/proj/retry.go", oldLoop),
 		vocabWrote("/tmp/proj/retry.go", newLoop),
 	})
+
+	// file_path and filePath are folded onto path before the patch runs
+	// (file.rs PATH_ALIASES), so they retarget it too.
+	for _, key := range []string{"file_path", "filePath"} {
+		aliased := cwSaved(t, "applied", false,
+			map[string]any{"name": "apply_patch", "input": map[string]any{key: "backoff.go", "patch": diff}})
+		vocabCheck(t, aliased, []string{
+			vocabFiles("/tmp/proj/backoff.go"),
+			vocabWrote("/tmp/proj/backoff.go", newLoop),
+		}, []string{
+			vocabFiles("/tmp/proj/retry.go"),
+			vocabWrote("/tmp/proj/retry.go", newLoop),
+		})
+	}
 }
 
 func TestUnifiedPatchReadsHunksByCount(t *testing.T) {
