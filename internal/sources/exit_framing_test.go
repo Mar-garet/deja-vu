@@ -134,3 +134,59 @@ func TestRooContinueAmpAntigravityKeepTheExitCode(t *testing.T) {
 		{"antigravity output naming a code", "antigravity", antigravityExitTranscript("Created At: 2026-09-30T10:00:05Z\nOutput:\nThe command exited with code 1."), "$ go test ./..."},
 	})
 }
+
+// crush.db keeps a call and its result as separate parts on separate rows, and
+// the reader recorded each on its own: a failed bash lost the "Exit code N"
+// its result ends with, and an edit crush refused left edit and wrote records
+// of text the file never held (#4532).
+func TestCrushJoinsACallToItsResult(t *testing.T) {
+	const oldLoop = "\tfor {"
+	edit := `{"file_path":"/tmp/proj/retry.go","old_string":"\tfor {","new_string":"\tfor attempt := 0; attempt < maxAttempts; attempt++ {"}`
+	cases := []struct {
+		id, tool, input, result string
+		isErr                   bool
+		want                    []string
+	}{
+		{"bash_fail", "bash", `{"command":"go vet ./retry"}`, "./retry.go:12:5: undefined: backoffJitter\nExit code 1\n\n<cwd>/tmp/proj</cwd>", false, []string{"command go vet ./retry  → exit 1"}},
+		{"bash_ok", "bash", `{"command":"go test ./retry"}`, "ok  retry 0.01s\n\n<cwd>/tmp/proj</cwd>", false, []string{"command go test ./retry"}},
+		// The code is crush's last line, not one quoted in the output.
+		{"bash_quoting", "bash", `{"command":"go test ./retry"}`, "Exit code 1\nok  retry 0.01s\n\n<cwd>/tmp/proj</cwd>", false, []string{"command go test ./retry"}},
+		{"edit_ok", "edit", edit, "Content replaced in file", false, []string{"files /tmp/proj/retry.go", "edit /tmp/proj/retry.go\n" + oldLoop, "wrote"}},
+		{"edit_refused", "edit", edit, "you must read the file before editing it. Use the View tool first", true, []string{"files /tmp/proj/retry.go"}},
+		{"edit_unanswered", "edit", edit, "", false, []string{"files /tmp/proj/retry.go", "edit /tmp/proj/retry.go\n" + oldLoop, "wrote"}},
+	}
+	sql := ""
+	for i, c := range cases {
+		sql += "insert into sessions values ('" + c.id + "',null,'retry',2,0,0,0.0," + itoa(1784282405+i*10) + "," + itoa(1784282400+i*10) + ",null,null);\n"
+		sql += crushInsert(t, "a_"+c.id, c.id, "assistant", int64(1784282400+i*10), []any{
+			map[string]any{"type": "tool_call", "data": map[string]any{"id": "c_" + c.id, "name": c.tool, "input": c.input, "finished": true}}})
+		if c.result != "" {
+			sql += crushInsert(t, "t_"+c.id, c.id, "tool", int64(1784282401+i*10), []any{
+				map[string]any{"type": "tool_result", "data": map[string]any{"tool_call_id": "c_" + c.id, "name": c.tool, "content": c.result, "is_error": c.isErr}}})
+		}
+	}
+	ss, err := ParseCrushDB(crushStore(t, "proj", sql))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		var got []string
+		for _, s := range ss {
+			if s.ID != c.id {
+				continue
+			}
+			for _, m := range s.Messages {
+				switch m.Role {
+				case RoleToolOutput:
+				case RoleWrote:
+					got = append(got, "wrote")
+				default:
+					got = append(got, m.Role+" "+m.Text)
+				}
+			}
+		}
+		if strings.Join(got, "|") != strings.Join(c.want, "|") {
+			t.Errorf("%s: records = %q, want %q", c.id, got, c.want)
+		}
+	}
+}

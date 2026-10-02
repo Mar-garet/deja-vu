@@ -532,6 +532,9 @@ import (
 //
 // 60 also: a Roo, Kilo Code, Continue, Amp or Antigravity command carries the
 // `→ exit N` its result reports (#4530).
+//
+// 60 also: a Crush command carries its `→ exit N`, and an edit Crush refused
+// leaves no edit or wrote records (#4532).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
