@@ -86,7 +86,8 @@ func installKiro(exe string, uninstall bool) (installResult, error) {
 // The hooks go in an agent of deja's own rather than into the reader's: the
 // built-in kiro_default takes no hooks from a file (a kiro_default.json beside
 // it is ignored), and deja does not switch `chat.defaultAgent` for them, since
-// that would trade the default agent's prompt for this one.
+// that would trade the default agent's prompt for this one. So the agent runs
+// when a chat is started in it, and doctor says which of the two it is.
 func kiroAgentPath() string {
 	return filepath.Join(sources.KiroConfigDir(), "agents", "deja.json")
 }
@@ -137,9 +138,52 @@ func installKiroAuto(exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
+	if uninstall && agent.Action == "removed" {
+		if err := kiroForgetDefaultAgent(); err != nil {
+			return installResult{}, err
+		}
+	}
 	out := wroteAll(base, agent)
 	if !uninstall {
 		out.Note = joinNotes(out.Note, kiroAutoNote)
 	}
 	return out, nil
+}
+
+// kiroSettingsPath is kiro-cli's own settings file, where
+// `kiro-cli agent set-default` writes `chat.defaultAgent`.
+func kiroSettingsPath() string {
+	return filepath.Join(sources.KiroConfigDir(), "settings", "cli.json")
+}
+
+// kiroDefaultAgent is the agent a plain `kiro-cli chat` starts in, "" for the
+// built-in one.
+func kiroDefaultAgent() string {
+	name, _ := readJSONConfig(kiroSettingsPath())["chat.defaultAgent"].(string)
+	return name
+}
+
+// kiroForgetDefaultAgent takes `chat.defaultAgent` out when it names deja's
+// agent, which uninstall has just removed: left in, kiro-cli is pointed at an
+// agent that is gone. Any other value is the reader's.
+func kiroForgetDefaultAgent() error {
+	if kiroDefaultAgent() != "deja" {
+		return nil
+	}
+	path := kiroSettingsPath()
+	old, err := readConfig(path)
+	if err != nil {
+		return err
+	}
+	root := map[string]any{}
+	if err := json.Unmarshal([]byte(jsoncToJSON(string(old))), &root); err != nil {
+		return nil
+	}
+	delete(root, "chat.defaultAgent")
+	next, err := marshalConfigLike(old, root)
+	if err != nil {
+		return err
+	}
+	_, err = writeIfChanged(path, old, append(next, '\n'))
+	return err
 }

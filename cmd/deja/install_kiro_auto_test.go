@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -57,8 +58,10 @@ func TestInstallKiroAutoWritesAnAgentWithRecallHooks(t *testing.T) {
 	if row.name == "" {
 		t.Fatal("doctor has no auto-recall row for kiro")
 	}
-	if state, _ := autoWiringState(row); state != "wired" {
-		t.Errorf("doctor reads the fresh install as %q, want wired", state)
+	// kiro-cli starts kiro_default unless told otherwise, so an agent nobody
+	// starts is installed, not wired.
+	if state, _ := autoWiringState(row); state != "installed" {
+		t.Errorf("doctor reads the fresh install as %q, want installed", state)
 	}
 
 	if _, err := captureRun(t, "uninstall", "kiro-auto"); err != nil {
@@ -104,4 +107,50 @@ func TestInstallKiroAutoLeavesTheReadersOwnDejaAgent(t *testing.T) {
 func kiroTestDir(t *testing.T) string {
 	t.Helper()
 	return filepath.Join(os.Getenv("HOME"), ".kiro")
+}
+
+// The deja agent runs only when a chat starts in it. doctor says wired once it
+// is kiro-cli's default, and uninstall takes the default back when it named
+// deja's agent, so kiro-cli is not left pointing at a file that is gone.
+func TestKiroAutoDefaultAgent(t *testing.T) {
+	hermeticEnv(t)
+	if _, err := captureRun(t, "install", "kiro-auto", "--no-index"); err != nil {
+		t.Fatal(err)
+	}
+	var row autoWiring
+	for _, a := range autoWirings() {
+		if a.name == "kiro" {
+			row = a
+		}
+	}
+	var report bytes.Buffer
+	doctorAutoRecall(&report)
+	if !strings.Contains(report.String(), "kiro-cli agent set-default deja") {
+		t.Errorf("doctor does not say how to make the agent run:\n%s", report.String())
+	}
+	settings := filepath.Join(kiroTestDir(t), "settings", "cli.json")
+	writeFileMkdir(t, settings, "{\n  \"chat.defaultAgent\": \"deja\",\n  \"chat.enableThinking\": true\n}\n")
+	if state, _ := autoWiringState(row); state != "wired" {
+		t.Errorf("with deja as the default agent doctor says %q, want wired", state)
+	}
+	if _, err := captureRun(t, "uninstall", "kiro-auto"); err != nil {
+		t.Fatal(err)
+	}
+	got := readFile(t, settings)
+	if strings.Contains(got, "chat.defaultAgent") || !strings.Contains(got, "chat.enableThinking") {
+		t.Errorf("uninstall did not take back only the default agent:\n%s", got)
+	}
+
+	// A default of the reader's own stays.
+	if _, err := captureRun(t, "install", "kiro-auto", "--no-index"); err != nil {
+		t.Fatal(err)
+	}
+	mine := "{\n  \"chat.defaultAgent\": \"mine\"\n}\n"
+	writeFileMkdir(t, settings, mine)
+	if _, err := captureRun(t, "uninstall", "kiro-auto"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, settings); got != mine {
+		t.Errorf("uninstall changed a default that was not deja's:\n%s", got)
+	}
 }

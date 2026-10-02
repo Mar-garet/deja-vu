@@ -273,6 +273,10 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		state = "stale"
 	case a.name == "openclaw" && openclawPluginMissing():
 		state = "stale"
+	// Written, and nothing starts it: kiro-cli runs kiro_default unless the
+	// default agent is deja's or a chat names it (#4304).
+	case a.name == "kiro" && kiroDefaultAgent() != "deja":
+		state = "installed"
 	default:
 		state = "wired"
 	}
@@ -403,6 +407,8 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's hook is not under hooks.events with hooks.enabled on — `deja install zcode-auto`)\n", a.name, "stale", reportPath(path))
 		case a.name == "openclaw" && openclawPluginMissing():
 			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's plugin is not in %s — `openclaw agent --local` and `openclaw chat` get no recall; `deja install openclaw-auto`)\n", a.name, "stale", reportPath(path), reportPath(openclawPluginDir()))
+		case a.name == "kiro" && kiroDefaultAgent() != "deja":
+			fmt.Fprintf(w, "  %-12s %-11s %s  (runs only in `kiro-cli chat --agent deja`; `kiro-cli agent set-default deja` makes it every chat's)\n", a.name, "installed", reportPath(path))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
 			if off := autoWiringSwitchedOff(a.name); off != "" {
