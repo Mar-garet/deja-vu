@@ -122,6 +122,7 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 	// for the step that says how each ended. A step carries no call id, so
 	// it answers the call it follows (#4530).
 	var running []int
+	asked := 0
 	err := scanJSONLFromOffset(path, 0, func(m map[string]any) {
 		role := ""
 		source, _ := m["source"].(string)
@@ -155,6 +156,7 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 		s.Touch(t)
 		if str(m["type"]) == "PLANNER_RESPONSE" {
 			running = nil
+			asked = antigravityRunCalls(m["tool_calls"])
 			for i, c := range calls {
 				if c.Role == RoleCommand {
 					running = append(running, len(s.Messages)+i)
@@ -190,7 +192,7 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 				s.Messages = append(s.Messages, rec)
 			}
 			if code, ok := antigravityExitCode(str(m["type"]), text); ok {
-				running = antigravityStampExit(s.Messages, running, own, antigravityField(text, "Task Description:"), code)
+				running = antigravityStampExit(s.Messages, running, asked, own, antigravityField(text, "Task Description:"), code)
 			}
 			s.Messages = append(s.Messages, antigravityTakeCalls(calls, fromCalls)...)
 			return
@@ -322,7 +324,9 @@ func antigravityExitCode(kind, text string) (int, bool) {
 	}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "Output:" {
+		// The header ends where the output starts, "Output:" or the
+		// Stdout:/Stderr: pair; a line in the output is not the status.
+		if line == "Output:" || strings.HasPrefix(line, "Stdout:") || strings.HasPrefix(line, "Stderr:") {
 			break
 		}
 		if code, ok := statusCode(line, "The command exited with code ", "."); ok {
@@ -335,8 +339,9 @@ func antigravityExitCode(kind, text string) (int, bool) {
 // antigravityStampExit marks the command a step's exit belongs to: the one
 // the step itself recorded, else the planner's call it names, else the
 // planner's only call. With two calls and no name the code is left off
-// rather than guessed. Returns the calls still waiting.
-func antigravityStampExit(msgs []model.Message, running []int, own int, named string, code int) []int {
+// rather than guessed, counting a call too trivial to record: its step would
+// otherwise stamp the one that was. Returns the calls still waiting.
+func antigravityStampExit(msgs []model.Message, running []int, asked, own int, named string, code int) []int {
 	at := -1
 	switch {
 	case own >= 0:
@@ -349,13 +354,26 @@ func antigravityStampExit(msgs []model.Message, running []int, own int, named st
 				break
 			}
 		}
-	case len(running) == 1:
+	case len(running) == 1 && asked == 1:
 		at, running = running[0], nil
 	}
 	if at >= 0 && at < len(msgs) && !strings.Contains(msgs[at].Text, "  → exit ") {
 		msgs[at].Text += fmt.Sprintf("  → exit %d", code)
 	}
 	return running
+}
+
+// antigravityRunCalls counts a planner row's run_command calls, recorded or
+// not.
+func antigravityRunCalls(v any) int {
+	calls, _ := v.([]any)
+	n := 0
+	for _, c := range calls {
+		if call, _ := c.(map[string]any); str(call["name"]) == "run_command" {
+			n++
+		}
+	}
+	return n
 }
 
 // antigravityArg reads one call argument. On disk each value is JSON in its

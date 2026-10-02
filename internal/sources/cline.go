@@ -552,7 +552,12 @@ func clineJoinExits(msgs []model.Message, from int, raw json.RawMessage, d toolD
 // same way (#4530).
 func rooExitCode(text string) (int, bool) {
 	head, rest, _ := strings.Cut(text, "\n")
-	if !strings.HasPrefix(head, "Command executed in terminal within working directory '") && !strings.HasPrefix(head, "Command executed in '") {
+	// Kilo Code and older Roo builds put two spaces after "terminal".
+	if tail, ok := strings.CutPrefix(head, "Command executed in terminal "); ok {
+		if !strings.HasPrefix(strings.TrimLeft(tail, " "), "within working directory '") {
+			return 0, false
+		}
+	} else if !strings.HasPrefix(head, "Command executed in '") {
 		return 0, false
 	}
 	at := strings.LastIndex(head, "'. ")
