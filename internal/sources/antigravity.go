@@ -2,6 +2,7 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -117,6 +118,10 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 	// runs the call and names it again in its header is not a second run.
 	fromCalls := map[model.Message]int{}
 	cwd := ""
+	// The commands the latest planner row asked for, where they sit, waiting
+	// for the step that says how each ended. A step carries no call id, so
+	// it answers the call it follows (#4530).
+	var running []int
 	err := scanJSONLFromOffset(path, 0, func(m map[string]any) {
 		role := ""
 		source, _ := m["source"].(string)
@@ -148,6 +153,20 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 			return
 		}
 		s.Touch(t)
+		if str(m["type"]) == "PLANNER_RESPONSE" {
+			running = nil
+			for i, c := range calls {
+				if c.Role == RoleCommand {
+					running = append(running, len(s.Messages)+i)
+				}
+			}
+			// The speech, when there is any, goes in ahead of the calls.
+			if strings.TrimSpace(text) != "" {
+				for i := range running {
+					running[i]++
+				}
+			}
+		}
 		if strings.TrimSpace(text) == "" {
 			s.Messages = append(s.Messages, antigravityTakeCalls(calls, fromCalls)...)
 			return
@@ -158,13 +177,20 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 		// only the source made shell dumps into assistant speech: 333 of 369
 		// MODEL rows on this machine, 90%, ranked as things the agent said.
 		if role == "assistant" {
+			own := -1
 			for _, rec := range antigravityStep(str(m["type"]), text, t) {
 				key := model.Message{Role: rec.Role, Text: rec.Text}
 				if (rec.Role == RoleCommand || rec.Role == RoleFiles) && fromCalls[key] > 0 {
 					fromCalls[key]--
 					continue
 				}
+				if rec.Role == RoleCommand {
+					own = len(s.Messages)
+				}
 				s.Messages = append(s.Messages, rec)
+			}
+			if code, ok := antigravityExitCode(str(m["type"]), text); ok {
+				running = antigravityStampExit(s.Messages, running, own, antigravityField(text, "Task Description:"), code)
 			}
 			s.Messages = append(s.Messages, antigravityTakeCalls(calls, fromCalls)...)
 			return
@@ -286,6 +312,50 @@ func antigravityToolCalls(v any, t time.Time) ([]model.Message, string) {
 		}
 	}
 	return out, cwd
+}
+
+// antigravityExitCode reads how a command ended off the step that ran it: a
+// header line "The command exited with code N.", above the step's Output:.
+func antigravityExitCode(kind, text string) (int, bool) {
+	if kind != "GENERIC" && kind != "RUN_COMMAND" {
+		return 0, false
+	}
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "Output:" {
+			break
+		}
+		if code, ok := statusCode(line, "The command exited with code ", "."); ok {
+			return code, true
+		}
+	}
+	return 0, false
+}
+
+// antigravityStampExit marks the command a step's exit belongs to: the one
+// the step itself recorded, else the planner's call it names, else the
+// planner's only call. With two calls and no name the code is left off
+// rather than guessed. Returns the calls still waiting.
+func antigravityStampExit(msgs []model.Message, running []int, own int, named string, code int) []int {
+	at := -1
+	switch {
+	case own >= 0:
+		at = own
+	case named != "":
+		for k, i := range running {
+			if msgs[i].Text == "$ "+named {
+				at = i
+				running = append(running[:k:k], running[k+1:]...)
+				break
+			}
+		}
+	case len(running) == 1:
+		at, running = running[0], nil
+	}
+	if at >= 0 && at < len(msgs) && !strings.Contains(msgs[at].Text, "  → exit ") {
+		msgs[at].Text += fmt.Sprintf("  → exit %d", code)
+	}
+	return running
 }
 
 // antigravityArg reads one call argument. On disk each value is JSON in its

@@ -529,6 +529,9 @@ import (
 //
 // 60 also: a kiro-cli --v3 or Kiro IDE tool_call record becomes commands,
 // files, edit and wrote records (#4506).
+//
+// 60 also: a Roo, Kilo Code, Continue, Amp or Antigravity command carries the
+// `→ exit N` its result reports (#4530).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

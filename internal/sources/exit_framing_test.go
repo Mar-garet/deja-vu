@@ -1,0 +1,136 @@
+package sources
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/vshulcz/deja-vu/internal/model"
+)
+
+// exitRow is one client's store holding a single `go test ./...` and the
+// result that client writes for it, read through the registry kind.
+type exitRow struct {
+	name, kind string
+	fixture    func(t *testing.T, dir string) string
+	want       string
+}
+
+func writeExitFixture(t *testing.T, p, body string) string {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func commandsOf(ss []model.Session) []string {
+	var out []string
+	for _, s := range ss {
+		for _, m := range s.Messages {
+			if m.Role == RoleCommand {
+				out = append(out, m.Text)
+			}
+		}
+	}
+	return out
+}
+
+func runExitRows(t *testing.T, rows []exitRow) {
+	t.Helper()
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			got := commandsOf(parseKindForTest(t, r.kind, r.fixture(t, t.TempDir())))
+			if len(got) != 1 || got[0] != r.want {
+				t.Errorf("commands = %q, want [%q]", got, r.want)
+			}
+		})
+	}
+}
+
+// rooTask is a Roo (or Kilo Code) task directory whose one execute_command
+// came back with result.
+func rooExitTask(result string) func(*testing.T, string) string {
+	return func(t *testing.T, dir string) string {
+		task := filepath.Join(dir, "tasks", "1788845325718")
+		writeExitFixture(t, filepath.Join(task, "history_item.json"), `{"id":"1788845325718","ts":1788845325718,"task":"fix the retry loop","workspace":"/tmp/proj"}`)
+		return writeExitFixture(t, filepath.Join(task, "api_conversation_history.json"), `[
+ {"role":"user","content":[{"type":"text","text":"<task>\nfix the retry loop\n</task>"}]},
+ {"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"execute_command","input":{"command":"go test ./...","cwd":"/tmp/proj"}}]},
+ {"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":`+vocabJSON(result)+`}]}]`)
+	}
+}
+
+func continueExitStore(state string) func(*testing.T, string) string {
+	return func(t *testing.T, dir string) string {
+		return writeExitFixture(t, filepath.Join(dir, "sessions", "s1.json"), `{"sessionId":"s1","title":"fix the retry loop","workspaceDirectory":"/tmp/proj","history":[`+
+			`{"message":{"role":"user","content":"fix the retry loop"},"contextItems":[]},`+
+			`{"message":{"role":"assistant","content":"","toolCalls":[]},"contextItems":[],"toolCallStates":[`+state+`]}]}`)
+	}
+}
+
+func ampExitThread(run string) func(*testing.T, string) string {
+	return func(t *testing.T, dir string) string {
+		return writeExitFixture(t, filepath.Join(dir, "T-0f3c.json"), `{"v":7,"id":"T-0f3c","created":1774950000000,"title":"Fix the retry loop","env":{"initial":{"trees":[{"uri":"file:///tmp/proj"}]}},"messages":[`+
+			`{"role":"user","content":[{"type":"text","text":"fix the retry loop"}],"meta":{"sentAt":1774950001000}},`+
+			`{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"Bash","complete":true,"input":{"cmd":"go test ./...","cwd":"/tmp/proj"}}],"usage":{"timestamp":"2026-03-31T09:40:05Z"}},`+
+			`{"role":"user","content":[{"type":"tool_result","toolUseID":"toolu_01","run":`+run+`}]}]}`)
+	}
+}
+
+func antigravityExitTranscript(steps ...string) func(*testing.T, string) string {
+	return func(t *testing.T, dir string) string {
+		lines := `{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-09-30T10:00:00Z","content":"<USER_REQUEST>\nfix the retry loop\n</USER_REQUEST>"}` + "\n" +
+			`{"step_index":1,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-09-30T10:00:05Z","content":"","tool_calls":[{"name":"run_command","args":{"CommandLine":"\"go test ./...\"","Cwd":"\"/tmp/proj\""}}]}` + "\n"
+		for _, s := range steps {
+			lines += `{"step_index":2,"source":"MODEL","type":"GENERIC","status":"DONE","created_at":"2026-09-30T10:00:09Z","content":` + vocabJSON(s) + `}` + "\n"
+		}
+		return writeExitFixture(t, filepath.Join(dir, "brain", "b0c1d2e3", ".system_generated", "logs", "transcript.jsonl"), lines)
+	}
+}
+
+// Roo, Kilo Code, Continue, Amp and Antigravity each write how a command
+// ended, in their own words, and the command record never carried it (#4530).
+// A status is read only where the client frames it; output that merely says
+// "exit code" leaves the command as it was.
+func TestRooContinueAmpAntigravityKeepTheExitCode(t *testing.T) {
+	const roo = "Command executed in terminal within working directory '/tmp/proj'. "
+	cnBash := func(status, out string) string {
+		return `{"toolCall":{"id":"c1","type":"function","function":{"name":"Bash","arguments":"{\"command\":\"go test ./...\"}"}},"status":"` + status + `","parsedArgs":{"command":"go test ./..."},"output":[{"name":"Tool Result","description":"Tool output","content":` + vocabJSON(out) + `}]}`
+	}
+	ideRun := func(status string) string {
+		return `{"toolCall":{"id":"c1","type":"function","function":{"name":"run_terminal_command","arguments":"{\"command\":\"go test ./...\"}"}},"status":"done","parsedArgs":{"command":"go test ./...","waitForCompletion":true},"output":[{"name":"Terminal","description":"Terminal command output","content":"./retry.go:12:5: undefined: backoffJitter","status":` + vocabJSON(status) + `}]}`
+	}
+	runExitRows(t, []exitRow{
+		{"roo failed", "roo", rooExitTask(roo + "Command execution was not successful, inspect the cause and adjust as needed.\nExit code: 1\nOutput:\n./retry.go:12:5: undefined: backoffJitter"), "$ go test ./...  → exit 1"},
+		{"roo clean", "roo", rooExitTask(roo + "Exit code: 0\nOutput:\nok  \tproj\t0.01s"), "$ go test ./...  → exit 0"},
+		{"roo persisted output", "roo", rooExitTask("Command executed in '/tmp/proj'. Command execution was not successful, inspect the cause and adjust as needed.\nExit code: 2\n\nOutput (2.1MB) persisted. Artifact ID: a1"), "$ go test ./...  → exit 2"},
+		{"roo signal", "roo", rooExitTask(roo + "Process terminated by signal SIGKILL\nOutput:\n"), "$ go test ./..."},
+		{"roo output naming a code", "roo", rooExitTask("Exit code: 1\nOutput:\nfine"), "$ go test ./..."},
+		{"kilo code task", "kilocode-task", rooExitTask(roo + "Command execution was not successful, inspect the cause and adjust as needed.\nExit code: 1\nOutput:\nFAIL"), "$ go test ./...  → exit 1"},
+		{"continue cn failed", "continue", continueExitStore(cnBash("errored", "Error executing tool Bash: Error (exit code 1): ./retry.go:12:5: undefined: backoffJitter")), "$ go test ./...  → exit 1"},
+		// A cn Bash that exits non-zero with nothing on stderr resolves as
+		// done, so done says nothing about the code.
+		{"continue cn done", "continue", continueExitStore(cnBash("done", "ok  \tproj\t0.01s")), "$ go test ./..."},
+		{"continue cn other error", "continue", continueExitStore(cnBash("errored", "Error executing tool Bash: spawn sh ENOENT")), "$ go test ./..."},
+		{"continue ide failed", "continue", continueExitStore(ideRun("Command failed with exit code 1")), "$ go test ./...  → exit 1"},
+		{"continue ide failed, exec path", "continue", continueExitStore(ideRun("Command failed with: Command failed with exit code 2")), "$ go test ./...  → exit 2"},
+		{"continue ide completed", "continue", continueExitStore(ideRun("Command completed")), "$ go test ./..."},
+		{"amp failed", "amp", ampExitThread(`{"status":"done","result":{"output":"./retry.go:12:5: undefined: backoffJitter","exitCode":1}}`), "$ go test ./...  → exit 1"},
+		{"amp clean", "amp", ampExitThread(`{"status":"done","result":{"output":"ok","exitCode":0}}`), "$ go test ./...  → exit 0"},
+		{"amp unknown", "amp", ampExitThread(`{"status":"done","result":{"output":"","exitCode":-1}}`), "$ go test ./..."},
+		{"amp cancelled", "amp", ampExitThread(`{"status":"cancelled"}`), "$ go test ./..."},
+		{"antigravity failed", "antigravity", antigravityExitTranscript("Created At: 2026-09-30T10:00:05Z\nCompleted At: 2026-09-30T10:00:09Z\n\nThe command exited with code 1.\nOutput:\n./retry.go:12:5: undefined: backoffJitter"), "$ go test ./...  → exit 1"},
+		{"antigravity clean", "antigravity", antigravityExitTranscript("Created At: 2026-09-30T10:00:05Z\n\nThe command exited with code 0.\nOutput:\nok"), "$ go test ./...  → exit 0"},
+		{"antigravity planner speaking first", "antigravity", func(t *testing.T, dir string) string {
+			p := antigravityExitTranscript("The command exited with code 1.\nOutput:\nFAIL")(t, dir)
+			b, _ := os.ReadFile(p)
+			return writeExitFixture(t, p, strings.Replace(string(b), `"content":"","tool_calls"`, `"content":"Running the tests.","tool_calls"`, 1))
+		}, "$ go test ./...  → exit 1"},
+		{"antigravity output naming a code", "antigravity", antigravityExitTranscript("Created At: 2026-09-30T10:00:05Z\nOutput:\nThe command exited with code 1."), "$ go test ./..."},
+	})
+}
