@@ -535,6 +535,8 @@ import (
 //
 // 60 also: a Crush command carries its `→ exit N`, and an edit Crush refused
 // leaves no edit or wrote records (#4532).
+//
+// 60 also: a failed ZCode Bash run carries its `→ exit N` (#4536).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

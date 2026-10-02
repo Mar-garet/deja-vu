@@ -190,3 +190,37 @@ func TestCrushJoinsACallToItsResult(t *testing.T) {
 		}
 	}
 }
+
+// ZCode writes a failed Bash Claude's way, "Exit code N" as the first line of
+// the output, and leaves metadata.exit unset, which is all the reader looked
+// at (#4536). opencode's own parts, with metadata.exit, are read as before.
+func TestZCodeFailedBashKeepsItsExitCode(t *testing.T) {
+	part := func(id, output, meta string) string {
+		return "insert into part values ('" + id + "','m_" + id + "','" + strings.ReplaceAll(`{"type":"tool","tool":"Bash","callID":"`+id+`","state":{"status":"completed","input":{"command":"go vet ./retry"},"output":`+vocabJSON(output)+meta+`,"time":{"start":1790000002000}}}`, "'", "''") + "');\n" +
+			"insert into message values ('m_" + id + "','" + id + "',1790000001000,'{\"role\":\"assistant\",\"time\":{\"created\":1790000001000}}');\n" +
+			"insert into session values ('" + id + "','/tmp/proj',1790000000000,1790000100000);\n"
+	}
+	db := vocabSQL(t, `create table session(id text primary key, directory text, time_created integer, time_updated integer);
+create table message(id text, session_id text, time_created integer, data text);
+create table part(id text, message_id text, data text);
+`+part("failed", "Exit code 1\n./retry.go:12:5: undefined: backoffJitter", "")+
+		part("clean", "ok  retry 0.01s", "")+
+		part("quoting", "ok\nExit code 1", "")+
+		part("meta", "Exit code 1\n./retry.go:12:5: undefined: backoffJitter", `,"metadata":{"exit":2}`))
+	want := map[string][2]string{
+		"failed":  {"$ go vet ./retry  → exit 1", "./retry.go:12:5: undefined: backoffJitter"},
+		"clean":   {"$ go vet ./retry", "ok  retry 0.01s"},
+		"quoting": {"$ go vet ./retry", "ok\nExit code 1"},
+		"meta":    {"$ go vet ./retry  → exit 2", "Exit code 1\n./retry.go:12:5: undefined: backoffJitter"},
+	}
+	ss := parseKindForTest(t, "zcode-db", db)
+	if len(ss) != len(want) {
+		t.Fatalf("%d sessions, want %d", len(ss), len(want))
+	}
+	for _, s := range ss {
+		got := [2]string{strings.Join(rolesOf(s, RoleCommand), "|"), strings.Join(rolesOf(s, RoleToolOutput), "|")}
+		if got != want[s.ID] {
+			t.Errorf("%s: command, output = %q, want %q", s.ID, got, want[s.ID])
+		}
+	}
+}
