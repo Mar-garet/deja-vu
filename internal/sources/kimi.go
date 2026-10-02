@@ -122,6 +122,22 @@ func KimiSessionDir(path string) string {
 // timeout or an interrupt ends with its own message and carries no code.
 var kimiExit = regexp.MustCompile(`^Command failed with exit code: (\d+)\.`)
 
+// kimiResumes sends a wire.jsonl back for a whole read when its tail holds the
+// failed exit of a command called before it (#4443).
+var kimiResumes = resumesUnlessAnswering(`"tool.`, func(m map[string]any) ([]string, string) {
+	e, _ := m["event"].(map[string]any)
+	id, _ := e["toolCallId"].(string)
+	switch typ, _ := e["type"].(string); typ {
+	case "tool.call":
+		return []string{id}, ""
+	case "tool.result":
+		if r, _ := e["result"].(map[string]any); kimiExitCode(r) > 0 {
+			return nil, id
+		}
+	}
+	return nil, ""
+})
+
 // kimiExitCode reads the status off a Bash result: the footer on its last
 // line, ahead of the saved-output reference a truncated result carries, and
 // only on a result flagged isError, so a clean run whose output quotes the

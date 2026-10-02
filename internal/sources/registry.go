@@ -366,6 +366,7 @@ func allHarnesses() []Harness {
 				},
 				Parse:     fullParse(ParseKimiFile),
 				ParseFrom: offsetParse(ParseKimiFileFromOffset),
+				Resumes:   kimiResumes,
 			}},
 		},
 		{

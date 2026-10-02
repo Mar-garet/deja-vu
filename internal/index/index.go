@@ -450,8 +450,8 @@ import (
 // 60 also: a line written while a pass ran is held once, where the pass read
 // it and the next read it again (#4442); copies already held go on a rebuild.
 //
-// 60 also: a Codex, Copilot CLI or pi-shaped command whose result came a pass
-// after its call carries its exit, and a refused edit is dropped (#4443).
+// 60 also: a Codex, Copilot CLI, Kimi or pi-shaped command whose result came
+// a pass after its call carries its exit, and a refused edit is dropped (#4443).
 //
 // 60 also: a Codex session known only from history.jsonl is one session per
 // id, not per line, so a full build derives it from every prompt (#4449).

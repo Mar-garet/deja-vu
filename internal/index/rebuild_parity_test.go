@@ -245,6 +245,14 @@ func TestToolResultInTheNextPassSettlesItsCall(t *testing.T) {
 			res:  `{"type":"tool.execution_complete","timestamp":"2026-07-17T09:02:01Z","data":{"toolCallId":"tc1","success":true,"result":{"content":"vet: unreachable"},"toolTelemetry":{"metrics":{"exit_code":2}}}}` + "\n",
 		},
 		{
+			name: "kimi", env: "DEJA_KIMI_ROOT",
+			file: "sessions/wd_proj/session_t01/agents/main/wire.jsonl",
+			head: `{"type":"metadata","protocol_version":"1.4","created_at":1790870000000}` + "\n" +
+				`{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"fix the retry loop"}]},"time":1790870004000}` + "\n",
+			call: `{"type":"context.append_loop_event","event":{"type":"tool.call","toolCallId":"c1","name":"Bash","args":{"command":"go vet ./retry"}},"time":1790870004786}` + "\n",
+			res:  `{"type":"context.append_loop_event","event":{"type":"tool.result","toolCallId":"c1","result":{"output":"vet: unreachable\nCommand failed with exit code: 2.","isError":true}},"time":1790870004853}` + "\n",
+		},
+		{
 			name: "pi bash", env: "DEJA_PI_ROOT",
 			file: "--tmp-proj--/s-retry.jsonl",
 			head: `{"type":"session","version":3,"id":"s-retry","timestamp":"2026-09-01T09:00:00Z","cwd":"/tmp/proj"}` + "\n" +

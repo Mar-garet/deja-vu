@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `deja search` stops offering `deja how` for a command that no indexed session runs twice any more. An update that left the recurring-command table empty kept the old one until a rebuild (#4441).
 - A transcript line written while `deja index` ran is indexed once. The pass read on to the end of the file, past the size it recorded, and the next pass read the same lines again (#4442).
-- A Codex, Copilot CLI or pi-family command whose result lands in the pass after its call keeps its `→ exit N`, and an edit the result refused is dropped. The pass that read the result had no call to put it on (#4443).
+- A Codex, Copilot CLI, Kimi Code or pi-family command whose result lands in the pass after its call keeps its `→ exit N`, and an edit the result refused is dropped. The pass that read the result had no call to put it on (#4443).
 - `deja index --rebuild` keeps an opencode, Kilo or ZCode session deleted from its database, as the incremental pass already did (#4447).
 - A full build derives a Codex session known only from `history.jsonl` from all of its prompts, not the last one (#4449).
 - One appended turn no longer renames a session whose harness title is too short to use, such as a goose session called "retry loop"; it keeps the name its first turn gave it (#4452).
