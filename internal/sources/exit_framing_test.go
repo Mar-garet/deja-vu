@@ -224,3 +224,28 @@ create table part(id text, message_id text, data text);
 		}
 	}
 }
+
+// codeWhaleSaved is a saved CodeWhale session whose one bash call came back
+// with result.
+func codeWhaleSaved(result string) func(*testing.T, string) string {
+	return func(t *testing.T, dir string) string {
+		return writeExitFixture(t, filepath.Join(dir, "cw-1.json"), `{"schema_version":3,
+"metadata":{"id":"cw-1","title":"fix the retry loop","created_at":"2026-10-01T10:00:00Z","updated_at":"2026-10-01T10:05:00Z","workspace":"/tmp/proj"},
+"messages":[
+ {"role":"user","content":[{"type":"text","text":"fix the retry loop"}]},
+ {"role":"assistant","content":[{"type":"tool_use","id":"c1","name":"bash","input":{"command":"go test ./..."}}]},
+ {"role":"user","content":[{"type":"tool_result","tool_use_id":"c1",`+result+`}]}]}`)
+	}
+}
+
+// CodeWhale ends a failed bash result with "Command exited with code N" and
+// marks it is_error (tools/shell.rs contract_bash_error_status); the reader
+// never joined a result to its call (#4537).
+func TestCodeWhaleFailedBashKeepsItsExitCode(t *testing.T) {
+	runExitRows(t, []exitRow{
+		{"failed", "codewhale", codeWhaleSaved(`"is_error":true,"content":"Error: --- FAIL: TestRetry (0.00s)\n    retry_test.go:12: retried 0 times\nFAIL\n\nCommand exited with code 1"`), "$ go test ./...  → exit 1"},
+		{"clean", "codewhale", codeWhaleSaved(`"content":"ok  \tproj\t0.01s"`), "$ go test ./..."},
+		{"timed out", "codewhale", codeWhaleSaved(`"is_error":true,"content":"Error: Command timed out after 120 seconds"`), "$ go test ./..."},
+		{"not an error", "codewhale", codeWhaleSaved(`"content":"printed\nCommand exited with code 1"`), "$ go test ./..."},
+	})
+}
