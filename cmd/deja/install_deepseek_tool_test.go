@@ -1,0 +1,95 @@
+package main
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+// dsh runs a `tools/post-execute` waterfall on every tool result, and an
+// accept decision's additionalContexts reach the model on the next step. The
+// plugin puts hook-tool's line there after a read, edit or write, and
+// hook-tool-after's after a bash that exited non-zero, the way pi's extension
+// does on tool_result (#4293).
+func TestDeepSeekAutoNotesTheFileAndTheFailedCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stub deja is a shell script")
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is needed to run the plugin dsh would run")
+	}
+	home := t.TempDir()
+	stub := filepath.Join(home, "deja")
+	calls := filepath.Join(home, "calls")
+	script := "#!/bin/sh\nin=$(cat)\nprintf '%s %s %s\\n' \"$1\" \"$2\" \"$in\" >> " + calls + "\n" +
+		"case \"$1\" in hook-tool) printf 'NOTE about the file' ;; hook-tool-after) printf 'FIX seen before' ;; esac\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plugin := filepath.Join(home, "auto.js")
+	if err := os.WriteFile(plugin, []byte(dshAutoJS(stub)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	driver := `
+import plugin from "` + plugin + `";
+const listeners = {};
+plugin({ systemPrompt: { context: () => {} }, on: (name, fn) => { listeners[name] = fn } });
+const post = listeners["tools/post-execute"];
+if (!post) { console.log("NOLISTENER"); process.exit(0) }
+const agent = { sessionId: "sess-A", session: { header: { cwd: "/w/proj" }, events: [] } };
+const accept = async () => ({ kind: "accept" });
+const text = (t) => ({ content: [{ type: "text", text: t }] });
+const show = (d) => console.log(JSON.stringify((d.additionalContexts || []).map((m) => [m.role, m.source && m.source.kind, m.content.map((c) => c.text).join("")])));
+show(await post({ name: "read", arguments: { file_path: "/w/proj/retry.go" }, agent }, text("1\tpackage retry"), accept));
+show(await post({ name: "bash", arguments: { command: "go test ./..." }, agent }, text("FAIL retry\n[exit code: 1]"), accept));
+show(await post({ name: "bash", arguments: { command: "ls" }, agent }, text("retry.go"), accept));
+show(await post({ name: "edit", arguments: { file_path: "/w/proj/retry.go" }, agent }, text("ok"), async () => ({ kind: "block", feedback: [] })));
+`
+	run := filepath.Join(home, "drive.mjs")
+	if err := os.WriteFile(run, []byte(driver), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, run).CombinedOutput()
+	if err != nil {
+		t.Fatalf("driving the plugin: %v\n%s", err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if lines[0] == "NOLISTENER" {
+		t.Fatal("auto.js registers no tools/post-execute listener, so dsh hears nothing at the point of action")
+	}
+	if len(lines) != 4 {
+		t.Fatalf("driver said %q", out)
+	}
+	if lines[0] != `[["user","plugin","NOTE about the file"]]` {
+		t.Errorf("a read did not carry the file's note: %s", lines[0])
+	}
+	if lines[1] != `[["user","plugin","FIX seen before"]]` {
+		t.Errorf("a failed bash did not carry the earlier fix: %s", lines[1])
+	}
+	if lines[2] != `[]` {
+		t.Errorf("a bash that exited 0 was answered: %s", lines[2])
+	}
+	if lines[3] != `[]` {
+		t.Errorf("a blocked call got a note: %s", lines[3])
+	}
+	asked, err := os.ReadFile(calls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(asked)
+	for _, want := range []string{
+		`hook-tool --plain {"tool_name":"read","tool_input":{"file_path":"/w/proj/retry.go"},"session_id":"sess-A","cwd":"/w/proj"}`,
+		`hook-tool-after --plain {"tool_name":"bash","tool_input":{"command":"go test ./..."},"tool_response":"FAIL retry","session_id":"sess-A","cwd":"/w/proj"}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("deja was not asked %s\ncalls:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "hook-tool") != 2 {
+		t.Errorf("deja was asked for a call that needs nothing:\n%s", got)
+	}
+}
