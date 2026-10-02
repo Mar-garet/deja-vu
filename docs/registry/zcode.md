@@ -21,14 +21,14 @@ block, which deja has no use for and ignores.
   store the ZCode 3.14.4 runtime wrote, whose tool parts needed their own
   names read (#4428).
 - Wiring: `deja install zcode` writes the server into `mcp.servers` in
-  `~/.zcode/cli/config.json` — one level deeper than the `mcpServers` every
+  `~/.zcode/cli/setting.json` — one level deeper than the `mcpServers` every
   other client here uses — and `deja install zcode-auto` adds the hooks to the
-  same file, on `SessionStart` and `UserPromptSubmit`.
-- `deja resume` on a session from the CLI database prints
-  `cd '<dir>' && zcode --resume <sess_id>`, the directory from the session
-  row. The terminal client reopens the session from any directory; the `cd`
-  keeps the agent in the project. A JSONL transcript has no such command
-  (#4430).
+  same file, under `hooks.events.SessionStart` and
+  `hooks.events.UserPromptSubmit`. The runtime (3.14.4) writes that file on
+  its first launch and reads it from then on. deja used to write
+  `config.json`, which the runtime reads once, as the source of that
+  first-launch migration, so nothing reached the agent on a machine where
+  ZCode had run; an uninstall clears deja's entries from both (#4429).
 - **Three things decide whether that works, and all three are silent when
   wrong.** Config-file hooks do nothing without `hooks.enabled: true`. A
   config hook gets no template expansion, so the command carries an absolute
@@ -39,8 +39,14 @@ block, which deja has no use for and ignores.
   describe them. They come from volcengine/OpenViking's memory plugin, whose
   `examples/agent-hook-plugin/DESIGN.md` records the surface it established by
   inspecting a live install — seven hook events, the manifest probe order, the
-  strict schema — and ships an installer against it. Nothing here is verified
-  on the machine deja was written on.
+  strict schema — and ships an installer against it. The file and the
+  nesting have moved since; the three rules above held on the 3.14.4 runtime,
+  where the hooks fired and the digest reached the request (#4429).
+- `deja resume` on a session from the CLI database prints
+  `cd '<dir>' && zcode --resume <sess_id>`, the directory from the session
+  row. The terminal client reopens the session from any directory; the `cd`
+  keeps the agent in the project. A JSONL transcript has no such command
+  (#4430).
 
 ## The CLI database
 

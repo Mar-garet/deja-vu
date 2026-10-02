@@ -9,32 +9,63 @@ import (
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
-// ZCode keeps everything in one file — `~/.zcode/cli/config.json` — and both
-// halves of an install live in it: the server under `mcp.servers`, and the
-// hooks under `hooks`, which is Claude Code's shape down to the nesting
-// (`hooks.<Event>[].hooks[] = {type, command, timeout}`).
+// ZCode's runtime keeps everything in one file — `~/.zcode/cli/setting.json` —
+// and both halves of an install live in it: the server under `mcp.servers`,
+// and the hooks under `hooks.events`, each event in Claude Code's shape
+// (`hooks.events.<Event>[].hooks[] = {type, command, timeout}`).
 //
-// The shapes are not guessed. They are the surface volcengine/OpenViking's
-// memory plugin established by inspecting a live install and shipped an
-// installer against (examples/agent-hook-plugin/DESIGN.md and
-// hosts/zcode/{hooks.json,.mcp.json}): seven hook events, config-file hooks
-// requiring `hooks.enabled: true`, no template expansion in a config hook — so
-// the command carries an absolute path — and a strict output schema that
-// discards the whole response over one unrecognised key, which is what
-// `--strict` is for.
+// deja used to write `~/.zcode/cli/config.json`, with the events directly
+// under `hooks`: the shape volcengine/OpenViking's memory plugin recorded from
+// an older ZCode (examples/agent-hook-plugin/DESIGN.md). The 3.14.4 runtime
+// reads config.json once, as the source of a first-launch migration, so on any
+// machine where ZCode had run, nothing deja wrote reached the agent (#4429).
+// What still holds from that design: config-file hooks need
+// `hooks.enabled: true`, a config hook gets no template expansion — so the
+// command carries an absolute path — and the output schema discards the whole
+// response over one unrecognised key, which is what `--strict` is for.
 //
 // Two events are wired, the two deja has something to say at: SessionStart
 // puts the project's memory in front of the model before the first prompt, and
 // UserPromptSubmit answers the prompt that was just typed (#3651).
 func zcodeConfigPath() string {
+	return filepath.Join(sources.ZCodeConfigDir(), "cli", "setting.json")
+}
+
+// zcodeLegacyConfigPath is where deja wrote before #4429. An uninstall clears
+// it too, or ZCode's migration could bring a removed server back.
+func zcodeLegacyConfigPath() string {
 	return filepath.Join(sources.ZCodeConfigDir(), "cli", "config.json")
+}
+
+// zcodeAlsoLegacy runs an uninstall on the old file beside the one on the
+// current file, and reports the old one only when it changed.
+func zcodeAlsoLegacy(res installResult, uninstall bool, edit func(string, bool) (installResult, error)) (installResult, error) {
+	if !uninstall {
+		return res, nil
+	}
+	old, err := edit(zcodeLegacyConfigPath(), true)
+	if err != nil {
+		return installResult{}, err
+	}
+	if old.Action == "unchanged" {
+		return res, nil
+	}
+	return wroteAll(res, old), nil
 }
 
 // installZCode writes the server under `mcp.servers`, which is one level
 // deeper than the `mcpServers` every other client here uses, so the shared
 // installMCPJSON cannot be pointed at it.
 func installZCode(exe string, uninstall bool) (installResult, error) {
-	path := zcodeConfigPath()
+	edit := func(path string, uninstall bool) (installResult, error) { return zcodeServerAt(path, exe, uninstall) }
+	res, err := edit(zcodeConfigPath(), uninstall)
+	if err != nil {
+		return installResult{}, err
+	}
+	return zcodeAlsoLegacy(res, uninstall, edit)
+}
+
+func zcodeServerAt(path, exe string, uninstall bool) (installResult, error) {
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -133,7 +164,15 @@ func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
 	// config as a hooks.json, and one that names the build it was
 	// installed from stops working the day that build moves (#3682).
 	exe = hookExeFor(exe, uninstall)
-	path := zcodeConfigPath()
+	edit := func(path string, uninstall bool) (installResult, error) { return zcodeHooksAt(path, exe, uninstall) }
+	res, err := edit(zcodeConfigPath(), uninstall)
+	if err != nil {
+		return installResult{}, err
+	}
+	return zcodeAlsoLegacy(res, uninstall, edit)
+}
+
+func zcodeHooksAt(path, exe string, uninstall bool) (installResult, error) {
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -153,13 +192,9 @@ func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
 		noteBlockAdded(path, "hooks")
 	}
 	events, _ := hooks["events"].(map[string]any)
-	// The config has held both shapes: OpenViking's installer writes the
-	// events at the top of `hooks`, and its own verification step looks for
-	// `hooks.events`. Whichever is there is the one we edit, so an install
-	// beside theirs does not write a second block that never fires.
-	container := hooks
-	if events != nil {
-		container = events
+	if events == nil && !uninstall {
+		events = map[string]any{}
+		noteBlockAdded(path, "hooks.events")
 	}
 
 	wanted := map[string]map[string]any{
@@ -168,29 +203,54 @@ func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
 	}
 	changed := false
 	for event, entry := range wanted {
-		list, _ := container[event].([]any)
-		kept := make([]any, 0, len(list))
-		for _, item := range list {
-			if zcodeEntryIsOurs(item) {
+		// The old shape, events directly under `hooks`, is only ever taken
+		// out: the runtime does not look there.
+		if list, ok := hooks[event].([]any); ok {
+			kept := withoutZCodeHooks(list)
+			if len(kept) != len(list) {
 				changed = true
-				continue
+				if len(kept) == 0 {
+					delete(hooks, event)
+				} else {
+					hooks[event] = kept
+				}
 			}
-			kept = append(kept, item)
+		}
+		if events == nil {
+			continue
+		}
+		list, present := events[event].([]any)
+		kept := withoutZCodeHooks(list)
+		if len(kept) != len(list) {
+			changed = true
 		}
 		if uninstall {
-			if len(kept) == 0 {
-				delete(container, event)
-			} else {
-				container[event] = kept
+			switch {
+			case len(kept) == len(list):
+			case len(kept) == 0 && blockWasAdded(path, "hooks.events."+event):
+				delete(events, event)
+				forgetBlockAdded(path, "hooks.events."+event)
+			default:
+				// ZCode lists every event, empty, in the file it writes: an
+				// empty list it had stays.
+				events[event] = kept
 			}
 			continue
 		}
-		container[event] = append(kept, entry)
+		if !present {
+			noteBlockAdded(path, "hooks.events."+event)
+		}
+		events[event] = append(kept, entry)
 		changed = true
 	}
 	if uninstall {
 		if !changed {
 			return installResult{Path: path, Action: "unchanged"}, nil
+		}
+		if events != nil && len(events) == 0 && blockWasAdded(path, "hooks.events") {
+			delete(hooks, "events")
+			forgetBlockAdded(path, "hooks.events")
+			events = nil
 		}
 	} else {
 		// Config-file hooks do not run at all without this, and the plugin
@@ -201,7 +261,7 @@ func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
 		}
 	}
 	if events != nil {
-		hooks["events"] = container
+		hooks["events"] = events
 	}
 	root["hooks"] = hooks
 	// A `hooks` block deja added holds nothing but the switch deja turned on
@@ -227,6 +287,17 @@ func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
 		return installResult{}, err
 	}
 	return installResult{Path: path, Action: action}, nil
+}
+
+// withoutZCodeHooks is an event's list with deja's entries taken out.
+func withoutZCodeHooks(list []any) []any {
+	kept := make([]any, 0, len(list))
+	for _, item := range list {
+		if !zcodeEntryIsOurs(item) {
+			kept = append(kept, item)
+		}
+	}
+	return kept
 }
 
 // zcodeEntryIsOurs recognises a hook deja wrote, so a second install replaces

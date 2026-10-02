@@ -830,7 +830,7 @@
       "gaps": {
         "skill": {
           "state": "unknown",
-          "why": "Nothing found names a user-level skill directory for ZCode. Its extension surface, as inspected by the memory plugin that got there first, is the hook block and the server map in `~/.zcode/cli/config.json` plus a plugin manifest probe order; guidance therefore reaches the model through the MCP tool descriptions and the injected session block (#3651).",
+          "why": "Nothing found names a user-level skill directory for ZCode. Its extension surface, as inspected by the memory plugin that got there first, is the hook block and the server map in `~/.zcode/cli/setting.json` plus a plugin manifest probe order; guidance therefore reaches the model through the MCP tool descriptions and the injected session block (#3651).",
           "source": "https://github.com/volcengine/OpenViking/blob/main/examples/agent-hook-plugin/DESIGN.md"
         },
         "command": {

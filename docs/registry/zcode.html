@@ -60,16 +60,14 @@
 <ul>
 <li>Wiring: <code>deja install zcode</code> writes the server into <code>mcp.servers</code> in</li>
 </ul>
-<p><code>~/.zcode/cli/config.json</code> — one level deeper than the <code>mcpServers</code> every</p>
+<p><code>~/.zcode/cli/setting.json</code> — one level deeper than the <code>mcpServers</code> every</p>
 <p>other client here uses — and <code>deja install zcode-auto</code> adds the hooks to the</p>
-<p>same file, on <code>SessionStart</code> and <code>UserPromptSubmit</code>.</p>
-<ul>
-<li><code>deja resume</code> on a session from the CLI database prints</li>
-</ul>
-<p><code>cd &#39;&lt;dir&gt;&#39; &amp;&amp; zcode --resume &lt;sess_id&gt;</code>, the directory from the session</p>
-<p>row. The terminal client reopens the session from any directory; the <code>cd</code></p>
-<p>keeps the agent in the project. A JSONL transcript has no such command</p>
-<p>(#4430).</p>
+<p>same file, under <code>hooks.events.SessionStart</code> and</p>
+<p><code>hooks.events.UserPromptSubmit</code>. The runtime (3.14.4) writes that file on</p>
+<p>its first launch and reads it from then on. deja used to write</p>
+<p><code>config.json</code>, which the runtime reads once, as the source of that</p>
+<p>first-launch migration, so nothing reached the agent on a machine where</p>
+<p>ZCode had run; an uninstall clears deja&#39;s entries from both (#4429).</p>
 <ul>
 <li>**Three things decide whether that works, and all three are silent when</li>
 </ul>
@@ -84,8 +82,16 @@
 <p>describe them. They come from volcengine/OpenViking&#39;s memory plugin, whose</p>
 <p><code>examples/agent-hook-plugin/DESIGN.md</code> records the surface it established by</p>
 <p>inspecting a live install — seven hook events, the manifest probe order, the</p>
-<p>strict schema — and ships an installer against it. Nothing here is verified</p>
-<p>on the machine deja was written on.</p>
+<p>strict schema — and ships an installer against it. The file and the</p>
+<p>nesting have moved since; the three rules above held on the 3.14.4 runtime,</p>
+<p>where the hooks fired and the digest reached the request (#4429).</p>
+<ul>
+<li><code>deja resume</code> on a session from the CLI database prints</li>
+</ul>
+<p><code>cd &#39;&lt;dir&gt;&#39; &amp;&amp; zcode --resume &lt;sess_id&gt;</code>, the directory from the session</p>
+<p>row. The terminal client reopens the session from any directory; the <code>cd</code></p>
+<p>keeps the agent in the project. A JSONL transcript has no such command</p>
+<p>(#4430).</p>
 <h2 id="the-cli-database">The CLI database</h2>
 <p>It was left unread while nothing said what shape it was in. deja reads it</p>
 <p>now, on the shape attested by <code>zcode-stats</code> 0.8.0 — a read-only dashboard over the live database,</p>

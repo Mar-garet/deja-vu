@@ -26,8 +26,8 @@ import (
 // the schema, with Claude Code's tool names in the parts (#4428).
 
 // ZCodeConfigDir is ZCode's user directory: the project store, and under
-// `cli/config.json` everything it is configured with — the server map and the
-// hooks both live in that one file.
+// `cli/setting.json` everything the runtime is configured with — the server
+// map and the hooks both live in that one file (#4429).
 func ZCodeConfigDir() string { return filepath.Join(Home(), ".zcode") }
 
 // ZCodeRoot is the project store root. DEJA_ZCODE_ROOT replaces it.

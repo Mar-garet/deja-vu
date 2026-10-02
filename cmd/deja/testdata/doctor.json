@@ -480,7 +480,7 @@
     {
       "name": "zcode",
       "state": "config-missing",
-      "path": "<tmp>/home/.zcode/cli/config.json"
+      "path": "<tmp>/home/.zcode/cli/setting.json"
     },
     {
       "name": "commandcode",
@@ -607,7 +607,7 @@
     {
       "name": "zcode",
       "state": "missing",
-      "path": "<tmp>/home/.zcode/cli/config.json"
+      "path": "<tmp>/home/.zcode/cli/setting.json"
     },
     {
       "name": "commandcode",

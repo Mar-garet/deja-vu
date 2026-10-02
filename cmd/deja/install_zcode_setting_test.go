@@ -1,0 +1,195 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// zcodeDefaultSetting is the setting.json the ZCode 3.14.4 runtime writes on
+// its first launch (setting.example.json in zcode-app-cli 0.16.9): the server
+// map under mcp.servers, and the hooks off, with every event listed under
+// hooks.events.
+const zcodeDefaultSetting = `{
+  "modelStream": {
+    "idleTimeoutMs": 60000
+  },
+  "permission": {
+    "mode": "build",
+    "allowedTools": [],
+    "disallowedTools": [],
+    "autoApproveHighRisk": false,
+    "allowMediumRiskInAuto": false
+  },
+  "storage": {
+    "dir": "~/.zcode",
+    "sessionDbPath": "~/.zcode/cli/db/db.sqlite"
+  },
+  "network": {
+    "timeout": 180000
+  },
+  "features": {
+    "compact": true,
+    "rewind": true,
+    "subagent": true,
+    "skill": true,
+    "mcp": true
+  },
+  "subagents": {
+    "autoBackgroundMs": 1000
+  },
+  "memory": {
+    "autoConsolidate": true,
+    "summaryMaxBytes": 8192
+  },
+  "mcp": {
+    "servers": {}
+  },
+  "plugins": {
+    "enabled": true,
+    "dirs": [],
+    "enabledPlugins": {},
+    "options": {},
+    "suppressedBuiltins": []
+  },
+  "skills": {
+    "enabled": true,
+    "includeInstructions": true,
+    "metadataBudget": 20000,
+    "roots": []
+  },
+  "skill": {},
+  "command": {},
+  "logging": {
+    "level": "info",
+    "format": "text"
+  },
+  "ui": {
+    "theme": "auto",
+    "tuiMode": "regular",
+    "copyOnSelect": true,
+    "notifications": {
+      "method": "auto",
+      "condition": "unfocused"
+    }
+  },
+  "toolConcurrency": {
+    "maxConcurrency": 10
+  },
+  "modelAnomalyGuard": {
+    "repeatedToolCallWarningThreshold": 3,
+    "maxBudgetWarningsPerTurn": 3
+  },
+  "hooks": {
+    "enabled": false,
+    "timeoutMs": 60000,
+    "maxOutputBytes": 32768,
+    "events": {
+      "SessionStart": [],
+      "UserPromptSubmit": [],
+      "PreToolUse": [],
+      "PermissionRequest": [],
+      "PostToolUse": [],
+      "PostToolUseFailure": [],
+      "Stop": []
+    }
+  }
+}
+`
+
+// The runtime reads its servers and hooks from ~/.zcode/cli/setting.json, the
+// hooks under hooks.events. config.json is read once, as the source of a
+// first-launch migration, so on a machine where ZCode had run deja's install
+// reached nothing and doctor still said wired (#4429).
+func TestInstallZCodeWritesTheRuntimeSettingFile(t *testing.T) {
+	hermeticEnv(t)
+	home := os.Getenv("HOME")
+	dir := filepath.Join(home, ".zcode", "cli")
+	setting := filepath.Join(dir, "setting.json")
+	legacy := filepath.Join(dir, "config.json")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(setting, []byte(zcodeDefaultSetting), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureRun(t, "install", "zcode-auto", "--no-index"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if _, err := os.Stat(legacy); err == nil {
+		t.Errorf("install wrote %s, which the runtime does not load", legacy)
+	}
+	var cfg struct {
+		MCP struct {
+			Servers map[string]json.RawMessage `json:"servers"`
+		} `json:"mcp"`
+		Hooks struct {
+			Enabled bool                       `json:"enabled"`
+			Events  map[string]json.RawMessage `json:"events"`
+			Rest    map[string]json.RawMessage `json:"-"`
+		} `json:"hooks"`
+	}
+	b, err := os.ReadFile(setting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("setting.json is not JSON after install: %v", err)
+	}
+	if _, ok := cfg.MCP.Servers["deja"]; !ok {
+		t.Errorf("no deja server under mcp.servers in setting.json: %s", b)
+	}
+	if !cfg.Hooks.Enabled {
+		t.Errorf("hooks.enabled is off, so the hooks never run: %s", b)
+	}
+	for _, event := range []string{"SessionStart", "UserPromptSubmit"} {
+		if !strings.Contains(string(cfg.Hooks.Events[event]), "--strict") {
+			t.Errorf("hooks.events.%s = %s, want deja's hook", event, cfg.Hooks.Events[event])
+		}
+	}
+	var top map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(b, &top); err == nil {
+		if _, ok := top["hooks"]["SessionStart"]; ok {
+			t.Errorf("a hook directly under hooks, where the runtime does not look: %s", b)
+		}
+	}
+	out, err := captureRun(t, "doctor")
+	if err != nil {
+		t.Fatalf("doctor: %v", err)
+	}
+	if !strings.Contains(out, "setting.json") {
+		t.Errorf("doctor does not name setting.json:\n%s", out)
+	}
+}
+
+// An install from before this fix left deja's entries in config.json. The
+// uninstall takes them out of there too, so a later first-launch migration
+// cannot bring back a server deja was asked to remove.
+func TestUninstallZCodeClearsTheOldConfigFile(t *testing.T) {
+	hermeticEnv(t)
+	home := os.Getenv("HOME")
+	dir := filepath.Join(home, ".zcode", "cli")
+	legacy := filepath.Join(dir, "config.json")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"hooks":{"SessionStart":[{"hooks":[{"command":"/home/u/.config/deja/bin/deja-hook hook-context --strict","timeout":30,"type":"command"}]}],"PostToolUse":[{"hooks":[{"command":"/tmp/notify.sh","timeout":5,"type":"command"}]}],"enabled":true},"mcp":{"servers":{"deja":{"args":["mcp"],"command":"/usr/local/bin/deja","type":"stdio"},"docs":{"command":"docs-server"}}}}`
+	if err := os.WriteFile(legacy, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureRun(t, "uninstall", "zcode-auto"); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	b, err := os.ReadFile(legacy)
+	if err != nil {
+		t.Fatalf("the reader's config.json is gone: %v", err)
+	}
+	if strings.Contains(string(b), "deja") {
+		t.Errorf("deja's entries survived in config.json: %s", b)
+	}
+	if !strings.Contains(string(b), "notify.sh") || !strings.Contains(string(b), "docs-server") {
+		t.Errorf("uninstall took the reader's own entries: %s", b)
+	}
+}
