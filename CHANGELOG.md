@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An install and uninstall of `goose-auto` gives `~/.config/goose/AGENTS.md` back byte for byte instead of two newlines longer; install no longer says it created that file when it was there, and uninstall names its snapshot (#4269).
 - On Windows `deja install goose` writes to `%APPDATA%\Block\goose\config` even with `XDG_CONFIG_HOME` exported, which goose never reads there (#4286).
 - A relative `GOOSE_PATH_ROOT`, `XDG_CONFIG_HOME` or `XDG_DATA_HOME` is skipped for goose the way goose skips it, so `deja install goose` and the session reader no longer use a directory under wherever deja was run (#4285).
 - In Claude Code a failing command now gets the earlier fix. Claude fires `PostToolUseFailure` for a command that exits non-zero, which `deja install claude-auto` never wired, and it rejected the hook's reply as naming the wrong event. Existing installs pick the hook up on the next upgrade; Claude Code before 2.0.56, which would ignore the whole settings file over the unknown event, is left without it (#4488).

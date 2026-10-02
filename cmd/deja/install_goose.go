@@ -395,6 +395,22 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 		return res, err
 	}
 	path := gooseHintsPath()
+	// AGENTS.md is the reader's, so what happened to it is read off the file
+	// rather than borrowed from the hook: install said it created one that was
+	// there, and uninstall left its snapshot off the closing line (#4269).
+	hintsBefore, hintsErr := os.ReadFile(path)
+	hints := func() installResult {
+		after, err := os.ReadFile(path)
+		switch {
+		case hintsErr != nil && err == nil:
+			return installResult{Path: path, Action: "created"}
+		case hintsErr == nil && err != nil:
+			return installResult{Path: path, Action: "removed"}
+		case hintsErr == nil && !bytes.Equal(hintsBefore, after):
+			return installResult{Path: path, Action: "updated"}
+		}
+		return installResult{Path: path, Action: "unchanged"}
+	}
 	if uninstall {
 		// The hook lives in its own plugin directory; leaving it behind means
 		// Goose keeps running a command that no longer exists.
@@ -418,9 +434,9 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 		// went silently — where `uninstall codex-auto` says "also removed"
 		// about the same thing (#3208).
 		if removed {
-			return wroteAll(installResult{Path: gooseHookPath(), Action: "removed"}, res), nil
+			return wroteAll(installResult{Path: gooseHookPath(), Action: "removed"}, res, hints()), nil
 		}
-		return res, nil
+		return wroteAll(res, hints()), nil
 	}
 	if err := refreshGooseHints(); err != nil {
 		return installResult{}, err
@@ -441,8 +457,7 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 	// -auto adds, so `deja install goose` followed by `goose-auto` said
 	// "unchanged" three times while switching session-start recall on.
 	if action != "unchanged" {
-		return wroteAll(installResult{Path: gooseHookPath(), Action: action},
-			installResult{Path: gooseHintsPath(), Action: action},
+		return wroteAll(installResult{Path: gooseHookPath(), Action: action}, hints(),
 			installResult{Path: gooseRecipePath(), Action: action}), nil
 	}
 	return res, nil
@@ -659,14 +674,24 @@ func dropGooseRecallBlock(path string) error {
 	}
 	rest := string(old)[start:]
 	end := strings.Index(rest, gooseRecallEnd)
-	next := string(old)[:start]
+	before, after := string(old)[:start], ""
 	if end >= 0 {
-		next += rest[end+len(gooseRecallEnd):]
+		after = strings.TrimPrefix(rest[end+len(gooseRecallEnd):], "\n")
 	}
+	// The block went in after the reader's text and a blank line; the blank
+	// line leaves with it, or every round trip gave the file back two
+	// newlines longer (#4269).
+	if strings.HasSuffix(before, "\n\n") {
+		before = before[:len(before)-1]
+	}
+	next := before + after
 	if strings.TrimSpace(next) == "" {
 		return os.Remove(path)
 	}
-	_, err = writeIfChanged(path, old, []byte(strings.TrimLeft(next, "\n")))
+	if before == "" {
+		next = strings.TrimLeft(next, "\n")
+	}
+	_, err = writeIfChanged(path, old, []byte(next))
 	return err
 }
 
