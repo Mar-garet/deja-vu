@@ -1,10 +1,12 @@
 package sources
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vshulcz/deja-vu/internal/model"
 )
@@ -114,6 +116,15 @@ insert into messages(session_id,role,content_json,created_timestamp) values ('20
 		})
 	}
 
+	// Zed keeps the call and its result on one agent message.
+	t.Run("zed", func(t *testing.T) {
+		msg, _ := json.Marshal(map[string]any{"Agent": map[string]any{
+			"content": []any{map[string]any{"ToolUse": map[string]any{"id": "c1", "name": "terminal", "input": map[string]any{"command": "go test ./...", "cd": "/tmp/proj"}}}},
+			"tool_results": map[string]any{"c1": map[string]any{"tool_use_id": "c1", "tool_name": "terminal", "is_error": false,
+				"content": map[string]any{"Text": "Command \"go test ./...\" failed with exit code 1.\n\n```\n./retry.go:12:5: undefined: backoffJitter\n```"}}},
+		}})
+		assertCommand(t, []model.Session{{Messages: zedWork(msg, time.Unix(1790000000, 0))}}, want)
+	})
 }
 
 func assertCommand(t *testing.T, ss []model.Session, want string) {
