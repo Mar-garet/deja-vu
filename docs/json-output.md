@@ -554,6 +554,13 @@ start the server, and `switched_off` when the entry is turned off
 (`"disabled": true`, or opencode's `"enabled": false`), so the harness will not. The `deepseek` row carries `plugin_missing` when
 `cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh
 from starting at all.
+`cherrystudio` is read from the app's own database: `wired`
+with that database as `path` when one of its servers runs `deja mcp`, and
+`disabled` with the database as `path` when deja's server is there with its
+switch off, and `not-imported` with the import file as `path` when there is
+none. Where the database
+or sqlite3 is missing, the row falls back to the import file and carries the
+caveat in `note`.
 
 `commands` is the third thing an install writes: the `/deja` a user types, one
 row per harness. `state` is `written`, `missing`, `someone else's` for a file
