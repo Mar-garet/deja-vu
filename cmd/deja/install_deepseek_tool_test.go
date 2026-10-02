@@ -48,6 +48,8 @@ show(await post({ name: "read", arguments: { file_path: "/w/proj/retry.go" }, ag
 show(await post({ name: "bash", arguments: { command: "go test ./..." }, agent }, text("FAIL retry\n[exit code: 1]"), accept));
 show(await post({ name: "bash", arguments: { command: "ls" }, agent }, text("retry.go"), accept));
 show(await post({ name: "edit", arguments: { file_path: "/w/proj/retry.go" }, agent }, text("ok"), async () => ({ kind: "block", feedback: [] })));
+show(await post({ name: "bash", arguments: { command: "cat build.log" }, agent }, text("old run:\n[exit code: 1]\nall green now"), accept));
+show(await post({ name: "bash", arguments: { command: "make serve" }, agent }, text("listening\n[killed by signal: SIGKILL]"), accept));
 `
 	run := filepath.Join(home, "drive.mjs")
 	if err := os.WriteFile(run, []byte(driver), 0o644); err != nil {
@@ -61,7 +63,7 @@ show(await post({ name: "edit", arguments: { file_path: "/w/proj/retry.go" }, ag
 	if lines[0] == "NOLISTENER" {
 		t.Fatal("auto.js registers no tools/post-execute listener, so dsh hears nothing at the point of action")
 	}
-	if len(lines) != 4 {
+	if len(lines) != 6 {
 		t.Fatalf("driver said %q", out)
 	}
 	if lines[0] != `[["user","plugin","NOTE about the file"]]` {
@@ -76,6 +78,15 @@ show(await post({ name: "edit", arguments: { file_path: "/w/proj/retry.go" }, ag
 	if lines[3] != `[]` {
 		t.Errorf("a blocked call got a note: %s", lines[3])
 	}
+	// The marker is dsh's only when it ends the result, as dsh's own
+	// parser reads it (dsh-shell parseExitStatus): a log that quotes one
+	// mid-text passed.
+	if lines[4] != `[]` {
+		t.Errorf("a command that exited 0 with a marker in its output was answered: %s", lines[4])
+	}
+	if lines[5] != `[["user","plugin","FIX seen before"]]` {
+		t.Errorf("a command killed by a signal did not carry the earlier fix: %s", lines[5])
+	}
 	asked, err := os.ReadFile(calls)
 	if err != nil {
 		t.Fatal(err)
@@ -84,12 +95,13 @@ show(await post({ name: "edit", arguments: { file_path: "/w/proj/retry.go" }, ag
 	for _, want := range []string{
 		`hook-tool --plain {"tool_name":"read","tool_input":{"file_path":"/w/proj/retry.go"},"session_id":"sess-A","cwd":"/w/proj"}`,
 		`hook-tool-after --plain {"tool_name":"bash","tool_input":{"command":"go test ./..."},"tool_response":"FAIL retry","session_id":"sess-A","cwd":"/w/proj"}`,
+		`hook-tool-after --plain {"tool_name":"bash","tool_input":{"command":"make serve"},"tool_response":"listening","session_id":"sess-A","cwd":"/w/proj"}`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("deja was not asked %s\ncalls:\n%s", want, got)
 		}
 	}
-	if strings.Count(got, "hook-tool") != 2 {
+	if strings.Count(got, "hook-tool") != 3 {
 		t.Errorf("deja was asked for a call that needs nothing:\n%s", got)
 	}
 }

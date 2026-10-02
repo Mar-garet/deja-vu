@@ -284,6 +284,14 @@ function resultText(result) {
     .join("\n");
 }
 
+function exitStatus(text) {
+  const signal = /\n\[killed by signal: [^\]\n]+\]$/.exec(text);
+  if (signal) return { body: text.slice(0, signal.index), failed: true };
+  const exit = /\n\[exit code: (\d+)\]$/.exec(text);
+  if (exit) return { body: text.slice(0, exit.index), failed: exit[1] !== "0" };
+  return { body: text, failed: false };
+}
+
 function toolNote(exec, result) {
   const args = exec.arguments || {};
   const base = { session_id: sessionId(exec.agent), cwd: sessionCwd(exec.agent) };
@@ -295,15 +303,16 @@ function toolNote(exec, result) {
     });
   }
   if (exec.name === "bash") {
-    // dsh reports a non-zero exit in the text, not as an error result.
+    // dsh reports how a command ended in the text, not as an error result: a
+    // last line of "[exit code: N]" for a non-zero exit, or "[killed by
+    // signal: X]". Read only there, the way dsh's own parseExitStatus reads
+    // it, since output may quote a marker anywhere else.
     const output = resultText(result);
-    if (!(result && result.isError) && !/\[exit code: [1-9][0-9]*\]/.test(output)) return "";
+    const status = exitStatus(output);
+    if (!(result && result.isError) && !status.failed) return "";
     // The marker goes before the lookup, as the index drops it: an error
     // whose last line is "[exit code: 1]" matches nothing on file.
-    const response = output
-      .split("\n")
-      .filter((line) => !/^\[exit code: -?[0-9]+\]$/.test(line.trim()))
-      .join("\n");
+    const response = status.body;
     return ask(["hook-tool-after", "--plain"], {
       tool_name: "bash",
       tool_input: { command: String(args.command || "") },

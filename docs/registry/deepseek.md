@@ -72,7 +72,8 @@ harness falls back to the first prompt.
   about a pool size that only the injected block carried.
   The same plugin listens on `tools/post-execute`, which runs on every tool
   result: after a `read`, `edit` or `write` it adds `deja hook-tool`'s line about
-  the file, and after a `bash` whose result ends in `[exit code: N]` it adds
+  the file, and after a `bash` whose result ends in `[exit code: N]` or `[killed by signal: X]`
+  (the last line only, as dsh's own parser reads it) it adds
   `deja hook-tool-after`'s earlier fix for that error, both as
   `additionalContexts`, which dsh hands the model on the next step. The marker
   is dropped before the lookup, as the index drops it. Measured on dsh
