@@ -118,7 +118,7 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 	fromCalls := map[model.Message]int{}
 	// What a write_to_file call is about to write, by file, until the step
 	// that ran it says it did (#4528).
-	pendingWrites := map[string][]string{}
+	pendingWrites := map[string]string{}
 	cwd := ""
 	err := scanJSONLFromOffset(path, 0, func(m map[string]any) {
 		role := ""
@@ -296,11 +296,11 @@ func antigravityToolCalls(v any, t time.Time) ([]model.Message, string) {
 	return out, cwd
 }
 
-// antigravityNoteWrites keeps the content of each write_to_file call by the
-// file it names, in call order. The CODE_ACTION step that runs the call says "Created file"
-// and carries no diff block — 1 of 50 did on the store this was read off — so
+// antigravityNoteWrites keeps the content of the latest write_to_file call
+// for each file it names. The CODE_ACTION step that runs the call says
+// "Created file" and carries no diff block — 1 of 50 did on the store this was read off — so
 // CodeContent is the only record of what the file was given (#4528).
-func antigravityNoteWrites(v any, pending map[string][]string) {
+func antigravityNoteWrites(v any, pending map[string]string) {
 	calls, _ := v.([]any)
 	for _, c := range calls {
 		call, _ := c.(map[string]any)
@@ -310,7 +310,7 @@ func antigravityNoteWrites(v any, pending map[string][]string) {
 		}
 		p := decodeURIPath(strings.TrimPrefix(antigravityArg(args, "TargetFile"), "file://"))
 		if p != "" {
-			pending[p] = append(pending[p], antigravityArg(args, "CodeContent"))
+			pending[p] = antigravityArg(args, "CodeContent")
 		}
 	}
 }
@@ -318,17 +318,16 @@ func antigravityNoteWrites(v any, pending map[string][]string) {
 // antigravityTakeWrite is the wrote record of a write_to_file call, once a
 // finished CODE_ACTION step names its file. A step that failed names none, so
 // a write that never happened is not recorded; one whose step had a diff
-// block already gave its written side.
-func antigravityTakeWrite(text string, step []model.Message, pending map[string][]string, t time.Time) []model.Message {
+// block already gave its written side. The step answers the latest call for
+// its file: an earlier one still waiting is a call whose step failed, and
+// its content never reached the file.
+func antigravityTakeWrite(text string, step []model.Message, pending map[string]string, t time.Time) []model.Message {
 	p := antigravityPath(text)
-	queue := pending[p]
-	if len(queue) == 0 {
+	content, ok := pending[p]
+	if !ok {
 		return nil
 	}
-	content := queue[0]
-	if pending[p] = queue[1:]; len(pending[p]) == 0 {
-		delete(pending, p)
-	}
+	delete(pending, p)
 	for _, rec := range step {
 		if rec.Role == RoleWrote {
 			return nil

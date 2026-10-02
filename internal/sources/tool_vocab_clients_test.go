@@ -102,6 +102,33 @@ func TestAntigravityWriteToFileWrote(t *testing.T) {
 	})
 }
 
+// A write_to_file whose step failed, retried on the same file: the step that
+// finishes is the retry's, so the failed call's content is not what the file
+// was given (#4528).
+func TestAntigravityWriteToFileRetryAfterError(t *testing.T) {
+	q := func(s string) string { return vocabJSON(s) }
+	planner := func(content string) string {
+		return vocabJSON(map[string]any{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "created_at": "2026-09-30T10:00:05Z", "content": "",
+			"tool_calls": []any{map[string]any{"name": "write_to_file", "args": map[string]any{"TargetFile": q("/tmp/proj/jitter.go"), "CodeContent": q(content)}}}})
+	}
+	step := func(status, content string) string {
+		return vocabJSON(map[string]any{"source": "MODEL", "type": "CODE_ACTION", "status": status, "created_at": "2026-09-30T10:00:09Z", "content": content})
+	}
+	failed := "func firstAttemptNeverLanded() error { return nil }"
+	p := vocabWrite(t, filepath.Join(t.TempDir(), "brain", "b0c1d2e4", ".system_generated", "logs", "transcript.jsonl"),
+		`{"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-09-30T10:00:00Z","content":"<USER_REQUEST>\nadd jitter\n</USER_REQUEST>"}`,
+		planner(failed),
+		step("ERROR", "Created At: now\nCompleted At: now\n\nEncountered error in step execution: error executing cascade"),
+		planner(jitter),
+		step("DONE", "Created At: now\nCompleted At: now\n\nCreated file file:///tmp/proj/jitter.go"),
+	)
+	vocabCheck(t, vocabParse(t, ParseAntigravityFile, p), []string{
+		vocabWrote("/tmp/proj/jitter.go", jitter),
+	}, []string{
+		vocabWrote("/tmp/proj/jitter.go", failed),
+	})
+}
+
 // Continue's IDE agent edits with edit_existing_file {filepath, changes}: the
 // new code with the untouched stretches elided. The elision lines are not
 // written lines, and a canceled call wrote nothing (#4529).
