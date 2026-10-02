@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja install` keeps an MCP entry you switched off switched off for prime, Zed, ZCode, goose, Hermes, Codex, Grok and dsh, and says so, the way it already did for Cursor and the rest. It used to write the entry back on (#4467).
 - On Windows, a DeepSeek TUI or Codex tool path such as `/tmp/proj/retry.go` is kept as written instead of being joined onto the session's directory as `\tmp\proj\tmp\proj\retry.go`, and `deja doctor` keeps the drive of a `file://C:/…` dsh plugin it reports missing (#4438).
 - `deja resume` on a Roo CLI task whose workspace has a space or a Windows 8.3 `~` in its path quotes the workspace after `-w` instead of leaving `-w` off, which sent the CLI to the wrong store; `--exec` passes the quoted path as one argument (#4455).
 - `deja search` stops offering `deja how` for a command that no indexed session runs twice any more. An update that left the recurring-command table empty kept the old one until a rebuild (#4441).
