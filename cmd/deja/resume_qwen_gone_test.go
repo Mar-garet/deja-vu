@@ -46,7 +46,7 @@ func TestResumeQwenRefusesWhenItsDirectoryIsGone(t *testing.T) {
 
 	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "555a7310", Path: path})
 	if err == nil {
-		t.Fatalf("printed %q (dir %q) for a session whose directory is gone", formatResumeCommand(dir, cmd), dir)
+		t.Fatalf("printed %q (dir %q) for a session whose directory is gone", resumeCmdLine(dir, cmd), dir)
 	}
 	for _, want := range []string{gone, "gone", "deja show 555a7310"} {
 		if !strings.Contains(err.Error(), want) {
@@ -96,7 +96,7 @@ func TestResumeQwenTrustsTheRecordedDirectoryOverTheFolderName(t *testing.T) {
 
 	dir, cmd, err := resumeCommand(model.Session{Harness: "qwen", ID: "555a7310", Path: path})
 	if err == nil {
-		t.Fatalf("printed %q for a session whose recorded directory is gone", formatResumeCommand(dir, cmd))
+		t.Fatalf("printed %q for a session whose recorded directory is gone", resumeCmdLine(dir, cmd))
 	}
 	if !strings.Contains(err.Error(), gone) {
 		t.Errorf("refusal %q does not name the recorded directory %q", err, gone)

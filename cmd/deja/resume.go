@@ -74,7 +74,11 @@ func runResume(dir string, args []string, stdout io.Writer) error {
 			// answer, the caveat is for the person reading.
 			fmt.Fprintf(os.Stderr, "deja: %s\n", note)
 		}
-		fmt.Fprintln(stdout, formatResumeCommand(dir, cmdline))
+		line, ok := resumeLine(runtime.GOOS, dir, cmdline)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "deja: run it from %q — the directory's name has characters the printed line cannot carry, so it leaves out the cd\n", dir)
+		}
+		fmt.Fprintln(stdout, line)
 		return nil
 	}
 	parts, err := resumeArgv(cmdline)
@@ -160,16 +164,44 @@ var resumeCaveats = map[string]string{
 	"continue": "continue forks rather than continues: the history comes back under a new session id",
 }
 
-func formatResumeCommand(dir, cmdline string) string {
+// resumeLine is the printed command: a cd into dir, then cmdline. ok is false
+// when dir holds a character no quoting carries into the shell the line is
+// pasted into; the line is then cmdline alone and the caller says where to
+// run it (#4591).
+//
+// Windows wraps the line in powershell.exe so it runs from cmd and PowerShell
+// alike. The PowerShell it is pasted into expands $ and backtick escapes in
+// the outer double-quoted -Command and ends it on " and its curly forms, and
+// neither shell's escaping works in the other, so those leave the cd out. The
+// inner path is single-quoted, and PowerShell ends that on any of ' and
+// U+2018 to U+201B, each read literally when doubled.
+//
+// fish reads \' and \\ inside single quotes as escapes where sh, bash and zsh
+// keep both bytes, so a backslash in a POSIX path has no form all of them
+// read alike: `a\'\';echo hi;#` ran echo in fish.
+func resumeLine(goos, dir, cmdline string) (string, bool) {
 	if dir == "" {
-		return cmdline
+		return cmdline, true
 	}
-	if runtime.GOOS == "windows" {
-		dir = "'" + strings.ReplaceAll(dir, "'", "''") + "'"
-		return fmt.Sprintf(`powershell.exe -NoProfile -Command "Set-Location -LiteralPath %s -ErrorAction Stop; %s"`, dir, cmdline)
+	for _, r := range dir {
+		if actsOnATerminal(r) {
+			return cmdline, false
+		}
 	}
-	return fmt.Sprintf("cd %s && %s", shellQuote(dir), cmdline)
+	if goos == "windows" {
+		if strings.ContainsAny(dir, "\"$`\u201c\u201d\u201e") {
+			return cmdline, false
+		}
+		dir = "'" + psSingleQuoted.Replace(dir) + "'"
+		return fmt.Sprintf(`powershell.exe -NoProfile -Command "Set-Location -LiteralPath %s -ErrorAction Stop; %s"`, dir, cmdline), true
+	}
+	if strings.Contains(dir, `\`) {
+		return cmdline, false
+	}
+	return fmt.Sprintf("cd %s && %s", shellQuote(dir), cmdline), true
 }
+
+var psSingleQuoted = strings.NewReplacer("'", "''", "\u2018", "\u2018\u2018", "\u2019", "\u2019\u2019", "\u201a", "\u201a\u201a", "\u201b", "\u201b\u201b")
 
 // resumeIDPattern matches every supported harness's session identifiers
 // (UUIDs, ses_... ids, hex prefixes). Anything else — whitespace, shell
