@@ -195,8 +195,7 @@ func setOpenClawPluginLoadPath(dir string, on bool) (string, error) {
 		kept = append(kept, dir)
 	}
 	if configIsJSONC(old) {
-		// Comments stay where they are; the list is written whole.
-		text, err := openclawLoadPathsJSONC(string(old), kept, len(load), len(plugins), paths != nil)
+		text, err := openclawLoadPathsJSONC(string(old), dir, on, len(kept), len(load), len(plugins), paths != nil)
 		if err != nil {
 			return "", configParseError(path, err)
 		}
@@ -229,11 +228,13 @@ func setOpenClawPluginLoadPath(dir string, on bool) (string, error) {
 	return writeIfChanged(path, old, append(next, '\n'))
 }
 
-// openclawLoadPathsJSONC writes kept as plugins.load.paths into a config
-// carrying comments, or takes the key out, with the blocks it was the only
-// thing in, when kept is empty.
-func openclawLoadPathsJSONC(text string, kept []any, loadKeys, pluginKeys int, had bool) (string, error) {
-	if len(kept) == 0 {
+// openclawLoadPathsJSONC adds dir to plugins.load.paths in a config carrying
+// comments, or takes it out. Only deja's element is written or cut, so the
+// user's own entries keep their comments and commas, and an uninstall gives
+// back the bytes the install found. A list left empty goes, with the blocks it
+// was the only thing in.
+func openclawLoadPathsJSONC(text, dir string, on bool, kept, loadKeys, pluginKeys int, haveKey bool) (string, error) {
+	if !on && kept == 0 {
 		dropFrom := 2
 		if loadKeys == 1 {
 			dropFrom = 1
@@ -243,12 +244,12 @@ func openclawLoadPathsJSONC(text string, kept []any, loadKeys, pluginKeys int, h
 		}
 		return jsoncRemoveKey(text, "plugins.load", "paths", dropFrom)
 	}
-	list, err := json.Marshal(kept)
+	elem, err := json.Marshal(dir)
 	if err != nil {
 		return "", err
 	}
-	if !had {
-		return jsoncSetEntry(text, "plugins.load", "paths", string(list), false, 2)
+	if !haveKey {
+		return jsoncSetEntry(text, "plugins.load", "paths", "["+string(elem)+"]", false, 2)
 	}
 	open := zedTopLevelOpen(text)
 	if open < 0 {
@@ -262,7 +263,73 @@ func openclawLoadPathsJSONC(text string, kept []any, loadKeys, pluginKeys int, h
 	if at == nil {
 		return "", fmt.Errorf("plugins.load.paths is not where it parsed")
 	}
-	return text[:at[0]] + string(list) + text[at[1]:], nil
+	blank := stripJSONComments(text)
+	// The last thing in the list that is not space or a comment.
+	prevSig := func(i int) int {
+		for i--; i > at[0]; i-- {
+			if c := blank[i]; c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+				break
+			}
+		}
+		return i
+	}
+	if on {
+		last := prevSig(at[1] - 1)
+		switch blank[last] {
+		case '[':
+			return text[:last+1] + string(elem) + text[last+1:], nil
+		case ',':
+			// A trailing comma stays trailing.
+			return text[:last+1] + " " + string(elem) + "," + text[last+1:], nil
+		}
+		return text[:last+1] + ", " + string(elem) + text[last+1:], nil
+	}
+	// The strings at the list's own level that name dir, last first so the
+	// offsets of the ones before stay good.
+	var hits [][2]int
+	depth := 0
+	for i := at[0] + 1; i < at[1]-1; i++ {
+		switch blank[i] {
+		case '[', '{':
+			depth++
+		case ']', '}':
+			depth--
+		case '"':
+			end := zedStringEnd(text, i)
+			if end < 0 {
+				return "", fmt.Errorf("plugins.load.paths has an open string")
+			}
+			var s string
+			if depth == 0 && json.Unmarshal([]byte(text[i:end]), &s) == nil && openclawSamePath(s, dir) {
+				hits = append(hits, [2]int{i, end})
+			}
+			i = end - 1
+		}
+	}
+	for k := len(hits) - 1; k >= 0; k-- {
+		from, to := hits[k][0], hits[k][1]
+		if p := prevSig(from); blank[p] == ',' {
+			// The comma before it, and the space between.
+			from = p
+		} else {
+			// The first element: the comma after it, and the space up to the
+			// next one.
+			j := to
+			for j < at[1]-1 && (blank[j] == ' ' || blank[j] == '\t' || blank[j] == '\n' || blank[j] == '\r') {
+				j++
+			}
+			if blank[j] == ',' {
+				to = j + 1
+				for to < at[1]-1 && (blank[to] == ' ' || blank[to] == '\t') {
+					to++
+				}
+			}
+		}
+		text = text[:from] + text[to:]
+		blank = stripJSONComments(text)
+		at[1] -= to - from
+	}
+	return text, nil
 }
 
 // openclawSamePath reports whether a load path names dir, in the spellings

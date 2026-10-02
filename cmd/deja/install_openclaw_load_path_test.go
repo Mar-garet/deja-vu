@@ -116,3 +116,40 @@ func TestOpenClawPluginUninstallDropsLastBlockCleanly(t *testing.T) {
 		t.Errorf("their gateway block is gone:\n%s", after)
 	}
 }
+
+// The user's load paths are theirs, comments in the list included: install
+// adds deja's path beside them and uninstall takes only that back out.
+func TestOpenClawPluginLoadPathKeepsACommentInTheList(t *testing.T) {
+	for _, before := range []string{
+		"{\n  // mine\n  \"plugins\": {\n    \"load\": {\n      \"paths\": [\n        // the work plugin\n        \"/opt/theirs\"\n      ]\n    }\n  }\n}\n",
+		"{\n  // mine\n  \"plugins\": {\"load\": {\"paths\": [\"/opt/theirs\" /* keep */]}}\n}\n",
+	} {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		state := sources.OpenClawStateDir()
+		if err := os.MkdirAll(state, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cfg := filepath.Join(state, "openclaw.json")
+		if err := os.WriteFile(cfg, []byte(before), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := installOpenClawPlugin("/bin/deja", false); err != nil {
+			t.Fatalf("install: %v", err)
+		}
+		mid, _ := os.ReadFile(cfg)
+		if !strings.Contains(string(mid), "the work plugin") && !strings.Contains(string(mid), "/* keep */") {
+			t.Errorf("install dropped the comment in their load paths:\n%s", mid)
+		}
+		if paths := openclawLoadPathsIn(t, cfg); !slices.Contains(paths, filepath.Join(state, "extensions", openclawPluginID)) || !slices.Contains(paths, "/opt/theirs") {
+			t.Errorf("load paths after install: %v", paths)
+		}
+		if _, err := installOpenClawPlugin("/bin/deja", true); err != nil {
+			t.Fatalf("uninstall: %v", err)
+		}
+		if after, _ := os.ReadFile(cfg); string(after) != before {
+			t.Errorf("uninstall did not give the file back:\n%s\nwant:\n%s", after, before)
+		}
+	}
+}
