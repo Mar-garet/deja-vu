@@ -128,3 +128,63 @@ func TestClaudeWiringWithoutTheFailureEventIsRefreshed(t *testing.T) {
 		t.Fatalf("after the upgrade refresh PostToolUseFailure = %q", got)
 	}
 }
+
+// Claude Code before 2.0.56 has no PostToolUseFailure, and its settings schema
+// is a closed list of events: one key it does not know fails the whole of
+// ~/.claude/settings.json — "Found invalid settings files … They will be
+// ignored" — the user's permissions and model with it. So install leaves the
+// event out for a claude that old, takes out one it finds, and doctor does not
+// ask for it.
+func TestClaudeAutoLeavesTheFailureEventOutForAnOldClaude(t *testing.T) {
+	withStatsStores(t)
+	t.Cleanup(func() { claudeVersion = claudeVersionReal })
+	claudeVersion = func() ([3]int, bool) { return [3]int{2, 0, 55}, true }
+	writeClaudeSettings(t, "SessionStart", "PreCompact", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "SessionEnd")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installClaudeHook(exe, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := claudeHookCommands(t, "PostToolUseFailure"); len(got) != 0 {
+		t.Errorf("Claude Code 2.0.55 got PostToolUseFailure = %q; it would ignore the whole settings.json", got)
+	}
+	if got := claudeHookCommands(t, "PostToolUse"); len(got) != 1 {
+		t.Errorf("PostToolUse = %q, want it kept", got)
+	}
+	var out bytes.Buffer
+	doctorHooks(&out)
+	if strings.Contains(out.String(), "PostToolUseFailure") || !strings.Contains(out.String(), "wired") {
+		t.Errorf("doctor asks an old Claude Code for an event it cannot load:\n%s", out.String())
+	}
+
+	claudeVersion = func() ([3]int, bool) { return [3]int{2, 0, 56}, true }
+	if _, err := installClaudeHook(exe, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := claudeHookCommands(t, "PostToolUseFailure"); len(got) != 1 {
+		t.Errorf("Claude Code 2.0.56 got PostToolUseFailure = %q, want it wired", got)
+	}
+}
+
+// The plugin manifest goes through the same closed list: on Claude Code 2.0.55
+// `claude plugin validate` fails it with "hooks: Invalid input" and the plugin
+// does not load. hooks/hooks.json is read on its own, and a file that fails
+// there is skipped with the manifest's hooks still loaded, so an event newer
+// than that lives in hooks.json.
+func TestPluginManifestHooksOnlyEventsOldClaudeKnows(t *testing.T) {
+	// The event list of Claude Code 2.0.55's settings schema.
+	known := map[string]bool{"PreToolUse": true, "PostToolUse": true, "Notification": true,
+		"UserPromptSubmit": true, "SessionStart": true, "SessionEnd": true, "Stop": true,
+		"SubagentStart": true, "SubagentStop": true, "PreCompact": true, "PermissionRequest": true}
+	for event := range hookMatchers(t, repoFile(t, "claude-plugin/.claude-plugin/plugin.json"), "deja.sh") {
+		if !known[event] {
+			t.Errorf("plugin.json hooks %s, which Claude Code 2.0.55 rejects along with the whole plugin; put it in hooks/hooks.json", event)
+		}
+	}
+	extra := hookMatchers(t, repoFile(t, "claude-plugin/hooks/hooks.json"), "deja.sh")
+	if extra["PostToolUseFailure"] != "Bash" {
+		t.Errorf("hooks/hooks.json = %v, want PostToolUseFailure on Bash", extra)
+	}
+}

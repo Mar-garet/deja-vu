@@ -1875,8 +1875,16 @@ func installClaudeHook(exe string, uninstall bool) (installResult, error) {
 		return installResult{}, configParseError(path, err)
 	}
 	nextRoot := root
+	// An event the installed Claude Code would reject is taken out, not
+	// written: one it does not know fails the whole file (#4488).
+	keep := map[string]bool{}
+	if !uninstall {
+		for _, h := range claudeWiring() {
+			keep[h.Event] = true
+		}
+	}
 	for _, h := range claudeHookWiring {
-		nextRoot = updateClaudeHook(nextRoot, h.Event, hookRun(exe, h.Sub), h.Matcher, uninstall)
+		nextRoot = updateClaudeHook(nextRoot, h.Event, hookRun(exe, h.Sub), h.Matcher, uninstall || !keep[h.Event])
 	}
 	// In the shape the reader wrote it, like every other JSON writer: this was
 	// the last one still marshalling straight, so an install that added hooks
