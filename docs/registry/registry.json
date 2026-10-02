@@ -42,7 +42,7 @@
         },
         "resume": {
           "state": "impossible",
-          "why": "aider has no notion of resuming one past session: `--chat-history-file` points at a transcript file it appends to, not a session it reopens, so there is no id to hand back. Restoring one conversation out of that file is not something the CLI offers.",
+          "why": "aider has no notion of resuming one past session: `--chat-history-file` points at a transcript file it appends to, not a session it reopens, so there is no id to hand back. Restoring one conversation out of that file is not something the CLI offers: `--restore-chat-history` loads the whole file, every session in it, so `deja resume` prints that and points at `deja show` for the one session.",
           "source": "aider 0.86.2 --help"
         }
       }
