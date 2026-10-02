@@ -1,7 +1,9 @@
 package sources
 
 import (
+	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -304,9 +306,8 @@ func underAnyRoot(p string, roots []string) bool {
 }
 
 // ParseCherryStudioFileFromOffset is the incremental read. A collapse spanning
-// the watermark cannot see the earlier snapshots, so the longest text in the
-// tail wins and the ingest de-duplicator drops what repeats — the same
-// behaviour the appended-transcript path already relies on.
+// the watermark cannot see the earlier snapshots, so it is only used when
+// CherryStudioResumes says the tail starts a new call.
 func ParseCherryStudioFileFromOffset(path string, offset int64) ([]model.Session, error) {
 	return parseClaudeTypedWithOptions(path, func(fn func([]byte)) error {
 		return scanJSONLBytes(path, offset, fn)
@@ -330,4 +331,90 @@ func CherryStudioUnderRoot(p string) bool {
 
 func LoadCherryStudio() []model.Session {
 	return parseFiles(CherryStudioSessionFiles(), ParseCherryStudioFile)
+}
+
+// CherryStudioResumes reports whether the tail from offset can be appended to
+// what is stored. An index that ran mid-stream stored the reply as far as it
+// had got; when the tail carries more snapshots of that same call, appending
+// kept the half reply next to the full one, and nothing de-duplicates a prefix
+// against its completion (#4346). Then the file is read whole and the run
+// collapses as it does on a first read.
+func CherryStudioResumes(path string, offset int64) bool {
+	if offset <= 0 {
+		return true
+	}
+	key := cherrySnapshotKey(lastLineBefore(path, offset))
+	if key == "" {
+		return true
+	}
+	// Only as far as the first line that names a call: a stream's snapshots
+	// run back to back, so if that line starts another call the stored one is
+	// finished. Scanning the whole tail cost a search the read the inline
+	// append cap exists to spare it.
+	f, err := os.Open(path)
+	if err != nil {
+		return true
+	}
+	defer func() { _ = f.Close() }()
+	r := bufio.NewReader(io.NewSectionReader(f, offset, 1<<62))
+	for {
+		line, err := r.ReadBytes('\n')
+		if k := cherrySnapshotKey(trimJSONSpace(line)); k != "" {
+			return k != key
+		}
+		if err != nil {
+			return true
+		}
+	}
+}
+
+// cherrySnapshotKey is the call a line reports on, by requestId or message id
+// only: a uuid changes with every snapshot, so it never joins a run.
+func cherrySnapshotKey(line []byte) string {
+	var v struct {
+		RequestID string `json:"requestId"`
+		Message   *struct {
+			ID string `json:"id"`
+		} `json:"message"`
+	}
+	if len(line) == 0 || json.Unmarshal(line, &v) != nil {
+		return ""
+	}
+	if v.RequestID != "" {
+		return "req:" + v.RequestID
+	}
+	if v.Message != nil && v.Message.ID != "" {
+		return "msg:" + v.Message.ID
+	}
+	return ""
+}
+
+// lastLineBefore returns the last complete line ending at end, read backwards
+// so a long transcript is not read from its first byte.
+func lastLineBefore(path string, end int64) []byte {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	var line []byte
+	pos := end - 1 // the newline that ends the line
+	for pos > 0 {
+		n := int64(64 << 10)
+		if n > pos {
+			n = pos
+		}
+		buf := make([]byte, n)
+		if _, err := f.ReadAt(buf, pos-n); err != nil && err != io.EOF {
+			return nil
+		}
+		for i := len(buf) - 1; i >= 0; i-- {
+			if buf[i] == '\n' {
+				return append(buf[i+1:], line...)
+			}
+		}
+		line = append(buf, line...)
+		pos -= n
+	}
+	return line
 }

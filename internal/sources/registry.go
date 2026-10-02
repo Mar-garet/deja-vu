@@ -33,6 +33,10 @@ type FileKind struct {
 	// ParseFrom resumes an incremental parse: offset for append-only text logs,
 	// sinceNano for db-backed kinds. nil means the kind is not incremental.
 	ParseFrom func(path string, offset, sinceNano int64) ([]model.Session, error)
+	// Resumes reports whether the bytes from offset can be read on their own
+	// and added to what is stored. nil means always. A kind whose new lines can
+	// rewrite a record already stored says no, and the file is read whole.
+	Resumes func(path string, offset int64) bool
 }
 
 func sinceTime(nano int64) time.Time { return time.Unix(0, nano) }
@@ -366,6 +370,7 @@ func allHarnesses() []Harness {
 					},
 					Parse:     fullParse(ParseCherryStudioFile),
 					ParseFrom: offsetParse(ParseCherryStudioFileFromOffset),
+					Resumes:   CherryStudioResumes,
 				},
 				{
 					Name:      "cherrystudio-pi",
