@@ -634,6 +634,10 @@ func readableStrictJSON(paths ...string) error {
 		if err != nil {
 			return err
 		}
+		// And one it cannot write, for the same reason (#4558).
+		if err := configWritable(path); err != nil {
+			return err
+		}
 		if len(bytes.TrimSpace(b)) == 0 {
 			continue
 		}

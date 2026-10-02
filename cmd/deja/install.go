@@ -1607,6 +1607,34 @@ func fileStartsWithBOM(path string) bool {
 	return n == len(utf8BOM) && bytes.Equal(head[:], utf8BOM)
 }
 
+// readOnlyConfigError is the refusal for a config its owner made read-only.
+// It is a permission error underneath, so the run's remedy names permissions.
+type readOnlyConfigError struct{ path string }
+
+func (e readOnlyConfigError) Error() string {
+	return e.path + " is read-only, so deja left it as it was"
+}
+
+func (e readOnlyConfigError) Is(target error) bool { return target == fs.ErrPermission }
+
+// configWritable refuses a config that is there and cannot be opened for
+// writing. writeIfChanged replaces a file by renaming a temp file over it, which
+// only the directory's mode governs: `chmod 444` on the file stopped the
+// reader's own editor and not deja, and the result kept the 0444 (#4558).
+// Asked by opening the file for writing, without truncating it, so whatever
+// the platform enforces — a mode, an ACL, Windows' read-only attribute — is
+// what decides.
+func configWritable(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err == nil {
+		return f.Close()
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		return readOnlyConfigError{path}
+	}
+	return nil
+}
+
 func writeIfChanged(path string, old, next []byte) (string, error) {
 	// The last guard for a file deja could not read: the writers go through
 	// readConfig now, but this also covers the ones that write a file they
@@ -1646,6 +1674,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 		return "unchanged", nil
 	}
 	if err := yamlWriteBreaks(path, old, next); err != nil {
+		return "", err
+	}
+	if err := configWritable(path); err != nil {
 		return "", err
 	}
 	// Removing something must not leave more behind than it found. A file that
