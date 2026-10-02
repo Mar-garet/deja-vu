@@ -71,6 +71,7 @@ func installGrokAuto(exe string, uninstall bool) (installResult, error) {
 		for _, ev := range [][2]string{
 			{"SessionStart", "hook-context"}, {"PreCompact", "hook-precompact"},
 			{"UserPromptSubmit", "hook-prompt"}, {"PreToolUse", "hook-tool"},
+			{"PostToolUse", "hook-tool-after"},
 		} {
 			root = updateClaudeHook(root, ev[0], hookRun(exe, ev[1]), "", true)
 		}
@@ -109,6 +110,10 @@ func installGrokAuto(exe string, uninstall bool) (installResult, error) {
 	// run_terminal_command, `Write` reaches write and `Agent` reaches
 	// spawn_subagent — the one of them whose reply grok acts on.
 	root = updateClaudeHook(root, "PreToolUse", hookRun(exe, "hook-tool"), "Bash|Edit|Write|MultiEdit|NotebookEdit|Task|Agent", false)
+	// Grok fires PostToolUse for a run_terminal_command that exited non-zero
+	// and hands the hook's context to the model with the result, so a failure
+	// gets the earlier fix the way claude's does (#4499).
+	root = updateClaudeHook(root, "PostToolUse", hookRun(exe, "hook-tool-after"), "Bash", false)
 	next, err := marshalConfigLike(old, root)
 	if err != nil {
 		return installResult{}, err
