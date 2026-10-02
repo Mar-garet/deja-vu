@@ -10,7 +10,7 @@
 
 ## Discovery
 
-pi stores session transcripts under `~/.pi/agent/sessions/`. Each project directory uses the same `--`-encoded path scheme as Claude Code, e.g. `--Users-max-code-deja-vu--` for `/Users/max/code/deja-vu`. Within each project directory, session files are named `<ISO-timestamp>_<UUID>.jsonl`.
+pi stores session transcripts under `~/.pi/agent/sessions/`. Each project directory uses the same `--`-encoded path scheme as Claude Code, e.g. `--Users-max-code-deja-vu--` for `/Users/max/code/deja-vu`. Within each project directory, session files are named `<ISO-timestamp>_<UUID>.jsonl`. The encoding is lossy (`my-app` and `my/app` give the same name), so the header's `cwd` names the project and the directory is the fallback for a header without one (#4427).
 
 ## File layout
 

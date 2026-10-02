@@ -266,7 +266,8 @@
       "state": "missing",
       "paths": [
         "<tmp>/home/.zcode/projects",
-        "<tmp>/home/.zcode/cli/db/db.sqlite"
+        "<tmp>/home/.zcode/cli/db/db.sqlite",
+        "<tmp>/home/.zcode/v2/sessions"
       ],
       "files": 0,
       "indexed_sessions": 0
@@ -481,7 +482,7 @@
     {
       "name": "zcode",
       "state": "config-missing",
-      "path": "<tmp>/home/.zcode/cli/config.json"
+      "path": "<tmp>/home/.zcode/cli/setting.json"
     },
     {
       "name": "commandcode",
@@ -608,7 +609,7 @@
     {
       "name": "zcode",
       "state": "missing",
-      "path": "<tmp>/home/.zcode/cli/config.json"
+      "path": "<tmp>/home/.zcode/cli/setting.json"
     },
     {
       "name": "commandcode",

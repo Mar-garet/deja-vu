@@ -18,9 +18,9 @@ import (
 //	Senpi:  ${SENPI_CODING_AGENT_DIR:-~/.senpi/agent}/sessions/<encoded-cwd>/*.jsonl
 //	Kimchi: ${KIMCHI_CODING_AGENT_DIR:-~/.config/kimchi/harness}/sessions/--<encoded-cwd>--/*.jsonl
 //
-// Both keep the encoded project directory pi has, so that names the project; a
-// Kimchi file directly under the root has none, and the header line's cwd names
-// it there — the choice omp and prime-agent already make for the same reason.
+// Both keep the encoded project directory pi has, but the header line's cwd
+// names the project: the folder name is lossy, and a Kimchi file directly under
+// the root has none — the choice omp and prime-agent already make.
 
 // SenpiConfigDir is the agent directory. SENPI_CODING_AGENT_DIR moves it, and
 // moves it for deja: a machine that has said where its sessions are should not
@@ -54,10 +54,14 @@ func ParseSenpiFile(path string) ([]model.Session, error) {
 
 // ParseSenpiFileFromOffset is the incremental read.
 func ParseSenpiFileFromOffset(path string, offset int64) ([]model.Session, error) {
-	return parsePiShaped(path, offset, "senpi", senpiProject(path), false)
+	// The header's cwd names the project, the folder only when it has none:
+	// Senpi folds every / into a -, so /tmp/my-app and /tmp/my/app share a
+	// folder name (#4427).
+	return parsePiShaped(path, offset, "senpi", senpiProject(path), true)
 }
 
-// senpiProject reads the name out of the encoded directory, the way pi's does.
+// senpiProject reads the name out of the encoded directory, for a header that
+// records no cwd.
 func senpiProject(path string) string {
 	dir := projectDir(SenpiRoot(), path)
 	if dir == "" || dir == SenpiRoot() {

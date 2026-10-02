@@ -410,6 +410,14 @@ import (
 // 60 also: pi, omp, OpenClaw, gjc, prime, senpi and Kimchi sessions carry
 // their tool calls as files, commands and edits (#4113); a finished
 // transcript is not re-read, so a rebuild.
+// 60 also: a Senpi eval cell's commands, reads and edits are indexed, and its
+// result text is unwrapped (#4425).
+// 60 also: a pi, Senpi, omp, OpenClaw, gjc, prime or Kimchi session takes its
+// project from the header's cwd as it is, not decoded from the folder (#4427).
+// 60 also: a ZCode CLI session keeps its Bash, Read, Edit and Write calls
+// (#4428).
+// 60 also: ZCode's legacy snapshots under ~/.zcode/v2/sessions are read
+// (#4432).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
