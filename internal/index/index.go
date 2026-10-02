@@ -446,6 +446,9 @@ import (
 // 60 also: Roo, Kilo and legacy Cline tasks from the XML tool era read their
 // calls into command, files and edit records and their results as tool
 // output (#4424).
+//
+// 60 also: a grok, kiro-cli or Kimi reply streamed across an index pass is
+// one message, not two (#4445).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

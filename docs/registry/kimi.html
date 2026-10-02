@@ -48,7 +48,9 @@
 <p>timestamps. User turns arrive as <code>context.append_message</code>; streamed assistant</p>
 <p>turns are reconstructed from <code>step.begin</code> → <code>content.part</code> (type <code>text</code> only;</p>
 <p><code>think</code> parts are skipped) → <code>step.end</code>, with an end-of-file flush so a</p>
-<p>response that is mid-stream when indexing runs is not lost. <code>tool.result</code></p>
+<p>response that is mid-stream when indexing runs is not lost; the next pass</p>
+<p>reads the file whole when the stream goes on, so the reply is stored once</p>
+<p>(#4445). <code>tool.result</code></p>
 <p>events keep their <code>output</code> text under the <code>tool-output</code> role, error results</p>
 <p>included. Sub-agent histories under <code>agents/agent-*</code> and media are out of</p>
 <p>scope.</p>

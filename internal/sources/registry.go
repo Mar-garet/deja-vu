@@ -244,6 +244,7 @@ func allHarnesses() []Harness {
 				},
 				Parse:     fullParse(ParseGrokFile),
 				ParseFrom: offsetParse(ParseGrokFileFromOffset),
+				Resumes:   GrokResumes,
 			}, {
 				// The maintained CLI writes no session files at all: one
 				// SQLite store beside the config, like opencode's.
@@ -326,6 +327,7 @@ func allHarnesses() []Harness {
 				},
 				Parse:     fullParse(ParseKimiFile),
 				ParseFrom: offsetParse(ParseKimiFileFromOffset),
+				Resumes:   KimiResumes,
 			}},
 		},
 		{
@@ -457,6 +459,7 @@ func allHarnesses() []Harness {
 				Match:     KiroUnderCLI,
 				Parse:     fullParse(ParseKiroCLIFile),
 				ParseFrom: offsetParse(ParseKiroCLIFileFromOffset),
+				Resumes:   KiroCLIResumes,
 			}, {
 				Name:      "kiro-ide",
 				Match:     KiroUnderIDE,

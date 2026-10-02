@@ -11,7 +11,9 @@ Tool calls are `tool.call` events with `name` and `args`: `path` for the file to
 timestamps. User turns arrive as `context.append_message`; streamed assistant
 turns are reconstructed from `step.begin` → `content.part` (type `text` only;
 `think` parts are skipped) → `step.end`, with an end-of-file flush so a
-response that is mid-stream when indexing runs is not lost. `tool.result`
+response that is mid-stream when indexing runs is not lost; the next pass
+reads the file whole when the stream goes on, so the reply is stored once
+(#4445). `tool.result`
 events keep their `output` text under the `tool-output` role, error results
 included. Sub-agent histories under `agents/agent-*` and media are out of
 scope.

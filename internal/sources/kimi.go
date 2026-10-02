@@ -316,6 +316,83 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 	return []model.Session{s}, err
 }
 
+// KimiResumes reports whether the tail of wire.jsonl can be appended to what
+// is stored. A reply's content.part events are joined until the step ends, and
+// a pass mid-step flushes what has arrived; when the tail goes on with that
+// step, the file is read whole (#4445). A tool event can sit inside the
+// stream, so one on either side of the offset counts as the stream going on,
+// and so does a user turn after it, which a whole read places ahead of the
+// reply it interrupted.
+func KimiResumes(path string, offset int64) bool {
+	if offset <= 0 {
+		return true
+	}
+	open := false
+	eachLineBefore(path, offset, func(line []byte) bool {
+		switch kimiStreamEvent(line) {
+		case kimiStreamGoesOn:
+			open = true
+			return false
+		case kimiStreamEnds:
+			return false
+		}
+		return true
+	})
+	if !open {
+		return true
+	}
+	resumes := true
+	eachLineFrom(path, offset, func(line []byte) bool {
+		switch kimiStreamEvent(line) {
+		case kimiStreamGoesOn, kimiUserTurn:
+			resumes = false
+			return false
+		case kimiStreamEnds:
+			return false
+		}
+		return true
+	})
+	return resumes
+}
+
+const (
+	kimiStreamOther = iota
+	kimiStreamGoesOn
+	kimiStreamEnds
+	kimiUserTurn
+)
+
+// kimiStreamEvent says what a wire.jsonl line does to a reply being streamed.
+func kimiStreamEvent(line []byte) int {
+	m := decodeJSONLine(line)
+	switch m["type"] {
+	case "context.append_message":
+		msg, _ := m["message"].(map[string]any)
+		switch {
+		case msg == nil:
+		case msg["role"] == "assistant":
+			return kimiStreamEnds
+		case msg["role"] == "user":
+			return kimiUserTurn
+		}
+	case "context.append_loop_event":
+		e, _ := m["event"].(map[string]any)
+		switch e["type"] {
+		case "step.begin", "step.end":
+			return kimiStreamEnds
+		case "tool.call", "tool.result":
+			return kimiStreamGoesOn
+		case "content.part":
+			if p, _ := e["part"].(map[string]any); p != nil && p["type"] == "text" {
+				if text, _ := p["text"].(string); text != "" {
+					return kimiStreamGoesOn
+				}
+			}
+		}
+	}
+	return kimiStreamOther
+}
+
 // kimiText joins the text parts of an append_message content array.
 func kimiText(v any) string {
 	parts, ok := v.([]any)

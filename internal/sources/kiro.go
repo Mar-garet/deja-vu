@@ -170,6 +170,31 @@ func ParseKiroCLIFileFromOffset(path string, offset int64) ([]model.Session, err
 	return []model.Session{s}, err
 }
 
+// KiroCLIResumes reports whether a CLI transcript's tail can be appended to
+// what is stored. A reply streams in as AssistantMessage records under one
+// message_id, joined as they are read; when the tail continues the reply the
+// stored part ended on, it is read whole (#4445).
+func KiroCLIResumes(path string, offset int64) bool {
+	return resumesUnlessJoined(path, offset, func(line []byte) (string, bool) {
+		m := decodeJSONLine(line)
+		data, _ := m["data"].(map[string]any)
+		if data == nil {
+			return "", false
+		}
+		if text, _, _ := kiroContent(data["content"]); text == "" {
+			return "", false
+		}
+		switch m["kind"] {
+		case "Prompt":
+			return "", true
+		case "AssistantMessage":
+			id, _ := data["message_id"].(string)
+			return id, true
+		}
+		return "", false
+	})
+}
+
 // applyKiroCLIHeader reads identity out of the header file beside the
 // transcript: the session's own id and the directory it ran in.
 func applyKiroCLIHeader(s *model.Session, path string) {
