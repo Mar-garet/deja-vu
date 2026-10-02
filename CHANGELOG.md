@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The `opencode-deja` npm package asks for the session digest with the session id and directory, as the plugin `deja install opencode-auto` writes does, so its session is no longer handed its own work back (#4273).
 - Recall no longer prints an empty bullet for a message that was only deja's own credit line, or quotes that credit back as the answer under it (#4247).
 - `deja doctor` names a missing hook launcher once under the row, not a second time as the binary the hook runs (#4245).
 - `deja doctor` finds the Hermes 0.17 store, one `state.db` under `~/.hermes` with no `profiles/` directory, instead of calling it missing while it is indexed and `--json` says ok (#4244).

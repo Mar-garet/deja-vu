@@ -259,7 +259,11 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
     try {
       const key = input?.sessionID || "default"
       if (!digests.has(key)) {
-        const { context, receipt } = contextText(await ask(["hook-context"], undefined, 30000))
+        // The session id, as the plugin `deja install opencode-auto` writes
+        // sends it: without it deja hands the session its own work back and
+        // never reads the digest cached for it (#4273).
+        const payload = JSON.stringify({ session_id: input?.sessionID || "", cwd })
+        const { context, receipt } = contextText(await ask(["hook-context"], payload, 30000))
         digests.set(key, context)
         // The receipt is the only sign the user gets that memory arrived. Once
         // per session: repeating it every turn is wallpaper. The hook's own

@@ -212,6 +212,26 @@ test("the session digest joins the first system message instead of adding one", 
   })
 })
 
+// hook-context reads the session from stdin, as the plugin `deja install
+// opencode-auto` writes sends it. Without it deja cannot tell the session it is
+// answering from the rest, hands it its own session back and never reads the
+// cached digest (#4273).
+test("the session digest is asked for with the session id", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "deja-oc-"))
+  const bin = join(dir, "deja")
+  const log = join(dir, "stdin.log")
+  writeFileSync(
+    bin,
+    `#!/bin/sh\nif [ "$1" = hook-context ]; then cat > '${log}'; echo '{}'; else echo 0.0.0; fi\n`,
+    { mode: 0o755 },
+  )
+  await withConfigHome(dir, async () => {
+    const hooks = await DejaPlugin({ client: quietClient(), directory: dir }, { bin })
+    await hooks["experimental.chat.system.transform"]({ sessionID: "ses_abc123" }, { system: [] })
+    assert.deepEqual(JSON.parse(readFileSync(log, "utf8")), { session_id: "ses_abc123", cwd: dir })
+  })
+})
+
 // The registration decision itself, since the hook tests above cannot see the
 // tools: registering those needs opencode's own plugin package, which the host
 // provides and the test environment does not.
