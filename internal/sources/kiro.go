@@ -126,8 +126,10 @@ func ParseKiroCLIFileFromOffset(path string, offset int64) ([]model.Session, err
 	lastAt := -1
 	// kiro-cli 2.22.0 stamps only the Prompt; a reply and its tool calls take
 	// the prompt's time, or a file the agent wrote sits at no time at all and
-	// `deja files` cannot place it near anything that was said.
-	var at time.Time
+	// `deja files` cannot place it near anything that was said. On a resumed
+	// read that Prompt is behind the offset, and what was appended after a
+	// pass landed at 0001-01-01 (#4444).
+	at := kiroCLITimeBefore(path, offset)
 	err := scanJSONLFromOffset(path, offset, func(m map[string]any) {
 		kind, _ := m["kind"].(string)
 		data, _ := m["data"].(map[string]any)
@@ -168,6 +170,47 @@ func ParseKiroCLIFileFromOffset(path string, offset int64) ([]model.Session, err
 		return nil, err
 	}
 	return []model.Session{s}, err
+}
+
+// kiroCLITimeBefore is the time of the last stamped record before offset,
+// the one a record after it takes when it carries none.
+func kiroCLITimeBefore(path string, offset int64) time.Time {
+	var at time.Time
+	if offset <= 0 {
+		return at
+	}
+	eachLineBefore(path, offset, func(line []byte) bool {
+		if data, _ := decodeJSONLine(line)["data"].(map[string]any); data != nil {
+			at = parseTimeAny(kiroMetaTimestamp(data))
+		}
+		return at.IsZero()
+	})
+	return at
+}
+
+// KiroCLIResumes reports whether a CLI transcript's tail can be appended to
+// what is stored. A reply streams in as AssistantMessage records under one
+// message_id, joined as they are read; when the tail continues the reply the
+// stored part ended on, it is read whole (#4445).
+func KiroCLIResumes(path string, offset int64) bool {
+	return resumesUnlessJoined(path, offset, func(line []byte) (string, bool) {
+		m := decodeJSONLine(line)
+		data, _ := m["data"].(map[string]any)
+		if data == nil {
+			return "", false
+		}
+		if text, _, _ := kiroContent(data["content"]); text == "" {
+			return "", false
+		}
+		switch m["kind"] {
+		case "Prompt":
+			return "", true
+		case "AssistantMessage":
+			id, _ := data["message_id"].(string)
+			return id, true
+		}
+		return "", false
+	})
 }
 
 // applyKiroCLIHeader reads identity out of the header file beside the

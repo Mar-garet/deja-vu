@@ -64,7 +64,8 @@
 <p>host added context or cut a result for the model, and that is what is indexed.</p>
 <p>Beside each transcript sits <code>&lt;id&gt;.jsonl.meta</code>, which carries <code>created_at</code>,</p>
 <p><code>updated_at</code>, <code>workspace_root</code> and the titles (<code>custom_title</code>, <code>topic_title</code>,</p>
-<p><code>name</code>). The session&#39;s clock and project come from there.</p>
+<p><code>name</code>). The session&#39;s clock and project come from there, and a rename that</p>
+<p>rewrites only this file re-reads the session (#4446).</p>
 <h2 id="1-x-session-directories">1.x session directories</h2>
 <p>Reasonix 1.x (npm <code>reasonix</code> 1.x, branch <code>main-v2</code>) keeps each session as a</p>
 <p>directory: <code>manifest.json</code> (<code>sessionId</code>, <code>createdAt</code>, <code>codec</code></p>

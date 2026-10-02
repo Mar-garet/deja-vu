@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/vshulcz/deja-vu/internal/digest"
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -76,13 +77,80 @@ func runResume(dir string, args []string, stdout io.Writer) error {
 		fmt.Fprintln(stdout, formatResumeCommand(dir, cmdline))
 		return nil
 	}
-	parts := strings.Fields(cmdline)
+	parts, err := resumeArgv(cmdline)
+	if err != nil {
+		return err
+	}
 	c := exec.Command(parts[0], parts[1:]...)
 	if dir != "" {
 		c.Dir = dir
 	}
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return c.Run()
+}
+
+// resumeWord puts a path on a resume command as one word. Anything outside
+// the set no shell acts on is single-quoted, which bash, zsh and PowerShell
+// (the -Command a Windows cd wraps the line in) all read literally, so a
+// Windows path with its backslashes, an 8.3 ~ or a space goes on too (#4455).
+// A quote, $, backtick or control character has no form all of them read
+// alike, and ok is false. So do the curly quotes PowerShell closes a string
+// on, a trailing \ (fish reads \' as a quote, which turned the next quoted
+// word inside out), a leading - (an option to roo, not its value) and a byte
+// that is not UTF-8 (--exec would read it back as U+FFFD). The bare set has
+// no , or @: PowerShell reads a,b as two arguments and @x as a splat.
+func resumeWord(s string) (word string, ok bool) {
+	if s == "" || !utf8.ValidString(s) || strings.ContainsAny(s, "'\"$`‘’‚‛“”„") ||
+		strings.HasPrefix(s, "-") || strings.HasSuffix(s, `\`) {
+		return "", false
+	}
+	bare := true
+	for _, r := range s {
+		if actsOnATerminal(r) {
+			return "", false
+		}
+		if !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+:./-", r) {
+			bare = false
+		}
+	}
+	if bare {
+		return s, true
+	}
+	return "'" + s + "'", true
+}
+
+// resumeArgv splits a resume command for --exec. Words are separated by
+// spaces, and a word resumeWord quoted is read back whole without its quotes,
+// where strings.Fields cut it at its space.
+func resumeArgv(cmdline string) ([]string, error) {
+	var out []string
+	var cur strings.Builder
+	quoted, inWord := false, false
+	for _, r := range cmdline {
+		switch {
+		case r == '\'':
+			quoted, inWord = !quoted, true
+		case r == ' ' && !quoted:
+			if inWord {
+				out = append(out, cur.String())
+				cur.Reset()
+				inWord = false
+			}
+		default:
+			cur.WriteRune(r)
+			inWord = true
+		}
+	}
+	if quoted {
+		return nil, fmt.Errorf("resume: unbalanced quote in %q", cmdline)
+	}
+	if inWord {
+		out = append(out, cur.String())
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("resume: empty command")
+	}
+	return out, nil
 }
 
 // resumeCaveats names what a printed command does that "resume" does not
@@ -332,10 +400,12 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// no -w that is the real path of its cwd. A task created with -w
 		// through a symlink (/tmp on macOS) recorded the link, so a plain cd
 		// answered "Session not found" (#4422). The path goes on the command
-		// as one word, so one that would need quoting keeps the cd alone.
+		// as one word, quoted when it needs it, so a Windows workspace under
+		// an 8.3 or spaced name keeps its -w (#4455); only one no quoting
+		// carries keeps the cd alone.
 		if id, ws := sources.RooCLITask(s.Path); id != "" {
-			if ws != "" && reasonixPathPattern.MatchString(ws) {
-				return ws, "roo -w " + ws + " --session-id " + id, nil
+			if w, ok := resumeWord(ws); ok {
+				return ws, "roo -w " + w + " --session-id " + id, nil
 			}
 			return ws, "roo --session-id " + id, nil
 		}

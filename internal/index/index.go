@@ -446,6 +446,35 @@ import (
 // 60 also: Roo, Kilo and legacy Cline tasks from the XML tool era read their
 // calls into command, files and edit records and their results as tool
 // output (#4424).
+//
+// 60 also: a rooted DeepSeek TUI, Codex or pi-family tool path from the other
+// OS's convention is no longer joined onto the session's cwd, a relative one
+// under a slash-rooted cwd keeps slashes on Windows, and a Roo path with one
+// leading `\` stays as written (#4438).
+//
+// 60 also: a line written while a pass ran is held once, where the pass read
+// it and the next read it again (#4442); copies already held go on a rebuild.
+//
+// 60 also: a Codex, Copilot CLI, Kimi or pi-shaped command whose result came
+// a pass after its call carries its exit, and a refused edit is dropped (#4443).
+//
+// 60 also: a Codex session known only from history.jsonl is one session per
+// id, not per line, so a full build derives it from every prompt (#4449).
+//
+// 60 also: a grok, kiro-cli or Kimi reply streamed across an index pass is
+// one message, not two (#4445).
+//
+// 60 also: a kiro-cli reply or tool call appended after a pass takes the
+// prompt's time, not 0001-01-01 (#4444).
+//
+// 60 also: a Roo, Kilo, Cline VS Code, Reasonix or Kimi session whose title or
+// workspace file changed alone is read again (#4446).
+//
+// 60 also: a ZCode snapshot restored into the CLI database leaves its turns
+// to the database's on the next pass (#4448).
+//
+// 60 also: a Cursor chat continued or renamed after a pass is read whole, so
+// its title, words, asked and touched match a rebuild (#4450, #4451).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

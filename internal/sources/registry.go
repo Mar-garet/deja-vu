@@ -1,6 +1,8 @@
 package sources
 
 import (
+	"bytes"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"time"
@@ -37,6 +39,12 @@ type FileKind struct {
 	// and added to what is stored. nil means always. A kind whose new lines can
 	// rewrite a record already stored says no, and the file is read whole.
 	Resumes func(path string, offset int64) bool
+	// Sidecar fingerprints the files beside a transcript that the reader takes
+	// the session's title, workspace or clock from. The agent writes them
+	// without touching the transcript, late or on a rename, so the fingerprint
+	// is part of the file state and a change re-reads the session (#4319,
+	// #4446). nil when the transcript holds it all.
+	Sidecar func(path string) (size, stamp int64)
 }
 
 func sinceTime(nano int64) time.Time { return time.Unix(0, nano) }
@@ -68,6 +76,43 @@ func dbParseFrom(full func(string) ([]model.Session, error), since func(string, 
 			return since(p, sinceTime(nano))
 		}
 		return full(p)
+	}
+}
+
+// resumesUnlessAnswering is the Resumes of a format that files a tool call and
+// its result as two lines joined by an id. A tail that answers a call made
+// before it cannot be read on its own: the call is stored already, without the
+// exit status or the refusal its result carries, and only a read that holds
+// both marks it (#4443). hint is a substring every call and result line holds,
+// so the rest of the tail is not decoded; answers gives the ids of the calls a
+// line makes and the id of the call it answers, when the answer changes what
+// the call recorded.
+func resumesUnlessAnswering(hint string, answers func(m map[string]any) (calls []string, answered string)) func(string, int64) bool {
+	return func(path string, offset int64) bool {
+		if offset <= 0 {
+			return true
+		}
+		made := map[string]bool{}
+		ok := true
+		_ = scanJSONLBytes(path, offset, func(line []byte) {
+			if !ok || !bytes.Contains(line, []byte(hint)) {
+				return
+			}
+			var m map[string]any
+			d := json.NewDecoder(bytes.NewReader(line))
+			d.UseNumber()
+			if d.Decode(&m) != nil {
+				return
+			}
+			calls, answered := answers(m)
+			for _, id := range calls {
+				made[id] = true
+			}
+			if answered != "" && !made[answered] {
+				ok = false
+			}
+		})
+		return ok
 	}
 }
 
@@ -133,6 +178,7 @@ func allHarnesses() []Harness {
 					},
 					Parse:     fullParse(ParseCodexRollout),
 					ParseFrom: offsetParse(ParseCodexRolloutFromOffset),
+					Resumes:   codexResumes,
 				},
 			},
 		},
@@ -244,6 +290,8 @@ func allHarnesses() []Harness {
 				},
 				Parse:     fullParse(ParseGrokFile),
 				ParseFrom: offsetParse(ParseGrokFileFromOffset),
+				Resumes:   GrokResumes,
+				Sidecar:   besideSidecar("summary.json"),
 			}, {
 				// The maintained CLI writes no session files at all: one
 				// SQLite store beside the config, like opencode's.
@@ -326,6 +374,8 @@ func allHarnesses() []Harness {
 				},
 				Parse:     fullParse(ParseKimiFile),
 				ParseFrom: offsetParse(ParseKimiFileFromOffset),
+				Resumes:   kimiTailResumes,
+				Sidecar:   kimiSidecar,
 			}},
 		},
 		{
@@ -335,7 +385,8 @@ func allHarnesses() []Harness {
 				Match: func(p string) bool {
 					return strings.HasSuffix(p, ".messages.json") && strings.HasPrefix(p, ClineSessionsDir())
 				},
-				Parse: fullParse(ParseClineFile),
+				Parse:   fullParse(ParseClineFile),
+				Sidecar: clineSDKSidecar,
 			}, {
 				Name: "cline-vscode",
 				Match: func(p string) bool {
@@ -352,7 +403,8 @@ func allHarnesses() []Harness {
 					}
 					return false
 				},
-				Parse: fullParse(ParseClineFile),
+				Parse:   fullParse(ParseClineFile),
+				Sidecar: clineVSCodeSidecar,
 			}},
 		},
 		{
@@ -377,6 +429,7 @@ func allHarnesses() []Harness {
 					Match:     cherryStudioPiFile,
 					Parse:     fullParse(ParseCherryStudioFile),
 					ParseFrom: offsetParse(ParseCherryStudioPiFileFromOffset),
+					Resumes:   piResumes,
 				},
 				{
 					Name:  "cherrystudio-dsh",
@@ -394,6 +447,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return underRoot(p, SenpiRoot(), ".jsonl") },
 				Parse:     fullParse(ParseSenpiFile),
 				ParseFrom: offsetParse(ParseSenpiFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -403,6 +457,7 @@ func allHarnesses() []Harness {
 				Match:     GjcUnderRoot,
 				Parse:     fullParse(ParseGjcFile),
 				ParseFrom: offsetParse(ParseGjcFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -412,6 +467,7 @@ func allHarnesses() []Harness {
 				Match:     KimchiUnderRoot,
 				Parse:     fullParse(ParseKimchiFile),
 				ParseFrom: offsetParse(ParseKimchiFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -442,9 +498,10 @@ func allHarnesses() []Harness {
 			}, {
 				// The snapshots an older ZCode kept, one JSON file a
 				// conversation, read whole (#4432).
-				Name:  "zcode-legacy",
-				Match: ZCodeLegacyUnderRoot,
-				Parse: fullParse(ParseZCodeLegacyFile),
+				Name:    "zcode-legacy",
+				Match:   ZCodeLegacyUnderRoot,
+				Parse:   fullParse(ParseZCodeLegacyFile),
+				Sidecar: zcodeLegacySidecar,
 			}},
 		},
 		{
@@ -457,6 +514,7 @@ func allHarnesses() []Harness {
 				Match:     KiroUnderCLI,
 				Parse:     fullParse(ParseKiroCLIFile),
 				ParseFrom: offsetParse(ParseKiroCLIFileFromOffset),
+				Resumes:   KiroCLIResumes,
 			}, {
 				Name:      "kiro-ide",
 				Match:     KiroUnderIDE,
@@ -480,7 +538,8 @@ func allHarnesses() []Harness {
 				Match: func(p string) bool {
 					return hasBase(p, "api_conversation_history.json") && kiloUnderTasks(p)
 				},
-				Parse: fullParse(ParseKiloTask),
+				Parse:   fullParse(ParseKiloTask),
+				Sidecar: besideSidecar("history_item.json"),
 			}, {
 				Name:      "kilocode-db",
 				Match:     func(p string) bool { return p == KiloDB() },
@@ -503,7 +562,8 @@ func allHarnesses() []Harness {
 					}
 					return false
 				},
-				Parse: fullParse(ParseRooTask),
+				Parse:   fullParse(ParseRooTask),
+				Sidecar: besideSidecar("history_item.json"),
 			}},
 		},
 		{
@@ -542,6 +602,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return strings.HasSuffix(p, ".jsonl") && strings.HasPrefix(p, PiRoot()) },
 				Parse:     fullParse(ParsePiFile),
 				ParseFrom: offsetParse(ParsePiFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -551,6 +612,7 @@ func allHarnesses() []Harness {
 				Match:     isPrimeFile,
 				Parse:     fullParse(ParsePrimeFile),
 				ParseFrom: offsetParse(ParsePrimeFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -560,6 +622,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return strings.HasSuffix(p, ".jsonl") && underOmpRoot(p) },
 				Parse:     fullParse(ParseOmpFile),
 				ParseFrom: offsetParse(ParseOmpFileFromOffset),
+				Resumes:   piResumes,
 			}},
 		},
 		{
@@ -569,6 +632,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return openclawTranscript(OpenClawRoot(), p) },
 				Parse:     fullParse(ParseOpenClawFile),
 				ParseFrom: offsetParse(ParseOpenClawFileFromOffset),
+				Resumes:   piResumes,
 			}, {
 				// The per-agent SQLite store the 2026.8 flip made canonical;
 				// the JSONL kind above is what older installs and archives hold.
@@ -587,6 +651,7 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return hasBase(p, "events.jsonl") && strings.HasPrefix(p, CopilotRoot()) },
 				Parse:     fullParse(ParseCopilotFile),
 				ParseFrom: offsetParse(ParseCopilotFileFromOffset),
+				Resumes:   copilotResumes,
 			}},
 		},
 		{
@@ -616,9 +681,10 @@ func allHarnesses() []Harness {
 			// upsert or a history replace rewrites what came before.
 			Name: "reasonix", Load: LoadReasonix, Files: ReasonixSessionFiles,
 			Kinds: []FileKind{{
-				Name:  "reasonix",
-				Match: IsReasonixSession,
-				Parse: fullParse(ParseReasonixFile),
+				Name:    "reasonix",
+				Match:   IsReasonixSession,
+				Parse:   fullParse(ParseReasonixFile),
+				Sidecar: reasonixSidecar,
 			}},
 		},
 		{

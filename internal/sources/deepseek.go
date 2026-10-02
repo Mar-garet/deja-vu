@@ -344,8 +344,8 @@ func deepSeekWorkRecords(data map[string]any, cwd string, t time.Time) ([]model.
 	}
 	// dsh resolves a relative path against the session's directory, and so
 	// does this: "retry.go" alone is out of reach of restore and blame.
-	if p, _ := args["file_path"].(string); p != "" && cwd != "" && !filepath.IsAbs(p) {
-		args["file_path"] = filepath.Join(cwd, p)
+	if p, _ := args["file_path"].(string); p != "" {
+		args["file_path"] = resolveToolPath(p, cwd)
 	}
 	calls := []any{map[string]any{"type": "tool_use", "name": name, "input": args}}
 	var now []model.Message

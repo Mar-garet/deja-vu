@@ -322,6 +322,57 @@ func leadingJSONLHeader(path string, offset int64, lookahead int, isHeader func(
 	return nil
 }
 
+// readEnds is how far a read of each path may go while an index pass holds
+// it. The pass records a file's size from a stat taken before it parses, and
+// the next pass resumes from there; a parser that read on to EOF also took the
+// lines the client wrote in between, and the next pass read them again (#4442).
+var (
+	readEndsMu sync.Mutex
+	readEnds   = map[string]readEnd{}
+)
+
+// readEnd counts its holders: a pass that falls back to a rebuild holds the
+// same files again, and the inner release must not lift the outer bound.
+type readEnd struct {
+	size  int64
+	holds int
+}
+
+// LimitReads holds every transcript read of these paths to the size given
+// for each, until the returned func is called.
+func LimitReads(ends map[string]int64) (release func()) {
+	readEndsMu.Lock()
+	for p, n := range ends {
+		e := readEnds[p]
+		readEnds[p] = readEnd{size: n, holds: e.holds + 1}
+	}
+	readEndsMu.Unlock()
+	return func() {
+		readEndsMu.Lock()
+		defer readEndsMu.Unlock()
+		for p := range ends {
+			if e := readEnds[p]; e.holds > 1 {
+				e.holds--
+				readEnds[p] = e
+			} else {
+				delete(readEnds, p)
+			}
+		}
+	}
+}
+
+// boundedFrom is f read from offset, stopping at the end LimitReads holds
+// for path.
+func boundedFrom(path string, f *os.File, offset int64) io.Reader {
+	readEndsMu.Lock()
+	e, ok := readEnds[path]
+	readEndsMu.Unlock()
+	if !ok {
+		return f
+	}
+	return io.LimitReader(f, max(e.size-offset, 0))
+}
+
 func scanJSONLFromOffset(path string, offset int64, fn func(map[string]any)) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -333,7 +384,7 @@ func scanJSONLFromOffset(path string, offset int64, fn func(map[string]any)) err
 			return err
 		}
 	}
-	r := bufio.NewReaderSize(f, 1024*1024)
+	r := bufio.NewReaderSize(boundedFrom(path, f, offset), 1024*1024)
 	for {
 		line, err := r.ReadBytes('\n')
 		// A UTF-8 BOM on the first line would fail the JSON decode below, so the

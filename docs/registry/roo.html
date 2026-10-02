@@ -41,7 +41,7 @@
 <li><strong>ID</strong>: <code>roo</code></li>
 <li><strong>Store</strong>: VS Code-host globalStorage <code>rooveterinaryinc.roo-cline/tasks/&lt;taskId&gt;/api_conversation_history.json</code>; per-task metadata in <code>history_item.json</code> (id, ts, task, workspace). Code, Code Insiders, VSCodium, Cursor and Windsurf host roots are probed, and a <code>roo-cline.customStoragePath</code> set in a host&#39;s <code>User/settings.json</code> is followed. The Roo CLI writes the same tree under <code>~/.vscode-mock/global-storage</code>.</li>
 <li><strong>Read override</strong>: <code>DEJA_ROO_ROOTS</code> (path list); <code>DEJA_ROO_CLI_ROOT</code> for the CLI&#39;s storage base</li>
-<li><strong>Format</strong>: whole-file JSON rewritten on change; full re-parse per pass</li>
+<li><strong>Format</strong>: whole-file JSON rewritten on change; full re-parse per pass. A change to <code>history_item.json</code> alone re-reads the task too (#4446)</li>
 </ul>
 <p>The transcript shape matches Cline&#39;s legacy store (Roo is a Cline fork), so</p>
 <p>the same text-block extraction and <code>&lt;task&gt;</code> envelope unwrapping apply.</p>

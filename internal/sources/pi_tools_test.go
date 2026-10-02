@@ -82,7 +82,7 @@ func TestPiShapedToolCallsAreIndexed(t *testing.T) {
 	}
 	s := ss[0]
 	files := strings.Join(rolesOf(s, RoleFiles), "\n")
-	cfg := filepath.Join("/work/app", "retry.cfg")
+	cfg := "/work/app/retry.cfg"
 	for _, want := range []string{cfg, "/work/app/NOTES.md"} {
 		if !strings.Contains(files, want) {
 			t.Errorf("files rows %q do not name %s", files, want)
@@ -130,7 +130,7 @@ func TestPiShapedToolCallsFromOffset(t *testing.T) {
 	if err != nil || len(ss) != 1 {
 		t.Fatalf("parse: %v, %d sessions", err, len(ss))
 	}
-	if edits := rolesOf(ss[0], RoleEdit); len(edits) != 1 || !strings.HasPrefix(edits[0], filepath.Join("/work/app", "retry.cfg")+"\n") {
+	if edits := rolesOf(ss[0], RoleEdit); len(edits) != 1 || !strings.HasPrefix(edits[0], "/work/app/retry.cfg"+"\n") {
 		t.Errorf("edit spans from offset = %q", edits)
 	}
 }
@@ -150,7 +150,7 @@ func TestGjcHashlineEditsAreIndexed(t *testing.T) {
 		t.Fatalf("parse: %v, %d sessions", err, len(ss))
 	}
 	s := ss[0]
-	cfg := filepath.Join("/work/app", "retry.cfg")
+	cfg := "/work/app/retry.cfg"
 	if files := rolesOf(s, RoleFiles); len(files) != 1 || files[0] != cfg {
 		t.Errorf("files rows = %q, want the one file the hashline edit named", files)
 	}
@@ -160,5 +160,84 @@ func TestGjcHashlineEditsAreIndexed(t *testing.T) {
 	}
 	if !wroteHas(t, rolesOf(s, RoleWrote), cfg, "max_retry_attempts_before_giving_up = 5") {
 		t.Errorf("the hashline payload is not recorded as written: %q", rolesOf(s, RoleWrote))
+	}
+}
+
+// A shell call whose result lands a pass later sends the file back for a whole
+// read only when the result is a failure. A clean result is every command the
+// agent runs while an index pass is going, deja's own included (#4443).
+func TestPiResumesPastACleanCommandResult(t *testing.T) {
+	head := `{"type":"session","version":3,"id":"s","timestamp":"2026-09-01T09:00:00Z","cwd":"/tmp/proj"}
+{"type":"message","id":"a1","timestamp":"2026-09-01T09:02:00Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"bash","arguments":{"command":"deja search retry"}}]}}
+`
+	for _, tc := range []struct {
+		name, res string
+		resumes   bool
+	}{
+		{"clean", `"details":{"exitCode":0},"isError":false`, true},
+		{"clean without a code", `"isError":false`, true},
+		{"failed", `"details":{"exitCode":2},"isError":true`, false},
+		{"nonzero code", `"details":{"exitCode":1},"isError":false`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "s.jsonl")
+			body := head + `{"type":"message","id":"r1","timestamp":"2026-09-01T09:02:01Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"ok"}],` + tc.res + "}}\n"
+			if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := piResumes(p, int64(len(head))); got != tc.resumes {
+				t.Errorf("piResumes = %v, want %v", got, tc.resumes)
+			}
+		})
+	}
+}
+
+// An edit result answers a call stored already: its refusal is what drops the
+// edit, so the file goes back for a whole read. A read's result changes
+// nothing, and a call made in the tail is known when its answer arrives.
+func TestPiResumesOnAnEditResultForAStoredCall(t *testing.T) {
+	call := func(id, name string) string {
+		return `{"type":"message","id":"a-` + id + `","timestamp":"2026-09-01T09:02:00Z","message":{"role":"assistant","content":[{"type":"text","text":"on it"},{"type":"toolCall","id":"` + id + `","name":"` + name + `","arguments":{"path":"retry.cfg"}}]}}` + "\n"
+	}
+	result := func(id, name string) string {
+		return `{"type":"message","id":"r-` + id + `","timestamp":"2026-09-01T09:02:01Z","message":{"role":"toolResult","toolCallId":"` + id + `","toolName":"` + name + `","content":[{"type":"text","text":"Could not find the exact text"}],"isError":true}}` + "\n"
+	}
+	head := `{"type":"session","version":3,"id":"s","timestamp":"2026-09-01T09:00:00Z","cwd":"/tmp/proj"}` + "\n"
+	for _, c := range []struct {
+		name, before, after string
+		want                bool
+	}{
+		{"edit refused a pass later", call("e1", "edit"), result("e1", "edit"), false},
+		{"result without a tool name", call("e1", "edit"), result("e1", ""), false},
+		{"read result", call("r1", "read"), result("r1", "read"), true},
+		{"edit and refusal in the tail", "", call("e2", "edit") + result("e2", "edit"), true},
+		{"a user turn", "", `{"type":"message","id":"u","timestamp":"2026-09-01T09:03:00Z","message":{"role":"user","content":[{"type":"text","text":"toolCall"}]}}` + "\n", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p, off := tailFile(t, "s.jsonl", head+c.before, c.after)
+			if got := piResumes(p, off); got != c.want {
+				t.Errorf("piResumes = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// A pi-family session read on the other OS keeps its paths in the convention
+// it was written in. filepath.Join put a relative path under /work/app as
+// \work\app\retry.cfg on Windows, and joined a drive-letter path onto the cwd
+// everywhere else (#4438).
+func TestPiPathsResolveTheSameOnEveryHost(t *testing.T) {
+	for _, c := range []struct{ p, cwd, want string }{
+		{"retry.cfg", "/work/app", "/work/app/retry.cfg"},
+		{"./sub/retry.cfg", "/work/app", "/work/app/sub/retry.cfg"},
+		{"/work/app/retry.cfg", "/work/app", "/work/app/retry.cfg"},
+		{`C:\app\retry.cfg`, "/work/app", `C:\app\retry.cfg`},
+		{`\app\retry.cfg`, "/work/app", `\app\retry.cfg`},
+		{"retry.cfg", "", "retry.cfg"},
+	} {
+		r := &piReader{cwd: c.cwd}
+		if got := r.abs(c.p); got != c.want {
+			t.Errorf("abs(%q) under %q = %q, want %q", c.p, c.cwd, got, c.want)
+		}
 	}
 }

@@ -2,7 +2,6 @@ package sources
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -80,12 +79,9 @@ func (r *piReader) finish() {
 // abs resolves a path the agent gave relative to the session's directory, the
 // way the files of every other harness are recorded.
 func (r *piReader) abs(p string) string {
-	// A leading slash is absolute however the machine reading it spells
-	// paths: the session may have been written on another one.
-	if p == "" || r.cwd == "" || filepath.IsAbs(p) || strings.HasPrefix(p, "/") {
-		return p
-	}
-	return filepath.Join(r.cwd, p)
+	// The session may have been written on another machine, so both the path
+	// and the cwd are read in either convention, not the host's (#4438).
+	return resolveToolPath(p, r.cwd)
 }
 
 // toolCalls records the calls in one assistant message through the shared
@@ -285,6 +281,52 @@ func (r *piReader) toolResult(msg map[string]any, t time.Time) {
 		}
 		r.add(RoleEdit, path+"\n"+span, t)
 	}
+}
+
+// piResumes sends a pi-shaped transcript back for a whole read when its tail
+// holds the result of a shell, edit or write call made before it: the result
+// is what marks the command's exit and keeps or drops the edit (#4443).
+//
+// A shell result counts only when the command failed. A clean one is every
+// command still running when a pass reads the call, deja's own run from the
+// agent's shell among them, and re-reading for each sent most passes of such
+// a session through the replacement path; the split call keeps no
+// "→ exit 0", as Codex never writes one.
+var piResumes = resumesUnlessAnswering(`"toolCall`, func(m map[string]any) ([]string, string) {
+	msg, _ := m["message"].(map[string]any)
+	switch role, _ := msg["role"].(string); role {
+	case "assistant":
+		var ids []string
+		items, _ := msg["content"].([]any)
+		for _, it := range items {
+			if c, ok := it.(map[string]any); ok && c["type"] == "toolCall" {
+				if id, _ := c["id"].(string); id != "" {
+					ids = append(ids, id)
+				}
+			}
+		}
+		return ids, ""
+	case "toolResult":
+		name, _ := msg["toolName"].(string)
+		if piDialect.shellTools[name] && !piCommandFailed(msg) {
+			return nil, ""
+		}
+		if name == "" || piDialect.shellTools[name] || piDialect.editTools[name] {
+			id, _ := msg["toolCallId"].(string)
+			return nil, id
+		}
+	}
+	return nil, ""
+})
+
+// piCommandFailed reports whether a shell result says the command failed.
+func piCommandFailed(msg map[string]any) bool {
+	if failed, _ := msg["isError"].(bool); failed {
+		return true
+	}
+	details, _ := msg["details"].(map[string]any)
+	code, ok := piExitCode(details["exitCode"])
+	return ok && code != 0
 }
 
 func piExitCode(v any) (int, bool) {

@@ -491,13 +491,29 @@ func antigravityProject(id string) string {
 }
 
 // isAbsolutePath accepts both conventions, not the host's. A synced store
-// holds whatever the machine that wrote it used.
+// holds whatever the machine that wrote it used. A leading `\` is rooted too:
+// Windows reads \tmp\x against the current drive, never against a cwd.
 func isAbsolutePath(p string) bool {
-	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\\`) {
+	if strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\`) {
 		return true
 	}
 	// C:\src or C:/src
 	return len(p) > 2 && p[1] == ':' && (p[2] == '\\' || p[2] == '/')
+}
+
+// resolveToolPath puts a tool call's path relative to the session's cwd onto
+// that cwd, and leaves a rooted one as written. filepath.IsAbs is the host's
+// rule, and on Windows it is false for /tmp/proj/retry.go, which then became
+// \tmp\proj\tmp\proj\retry.go (#4438). A slash-rooted cwd is joined with
+// slashes so the record reads the same whichever host indexed it.
+func resolveToolPath(p, cwd string) string {
+	if p == "" || cwd == "" || isAbsolutePath(p) {
+		return p
+	}
+	if strings.HasPrefix(cwd, "/") {
+		return path.Join(cwd, p)
+	}
+	return filepath.Join(cwd, p)
 }
 
 // slashed puts a path in one convention so the segment arithmetic below reads
