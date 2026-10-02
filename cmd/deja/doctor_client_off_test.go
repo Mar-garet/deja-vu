@@ -97,7 +97,7 @@ func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
 		var pins strings.Builder
 		hooks := filepath.Join(sources.CodexHome(), "hooks.json")
 		for _, h := range codexHookWiring {
-			pins.WriteString("\n[hooks.state.\"" + hooks + ":" + codexEventKey(h.Event) + ":0:0\"]\ntrusted_hash = \"sha256:abc\"\n")
+			pins.WriteString(codexTrustPin(hooks, h.Event))
 		}
 		appendTo(codexToml, pins.String())(t)
 	}
@@ -209,7 +209,7 @@ func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
 		{name: "gemini extension", target: "gemini-auto", section: "auto_recall", row: "gemini", key: "extension-enablement.json",
 			off: func(t *testing.T) {
 				setJSON(filepath.Join(sources.GeminiHome(), "extensions", "extension-enablement.json"),
-					[]string{"deja", "overrides"}, []any{"!" + filepath.ToSlash(cwd) + "/*"})(t)
+					[]string{"deja", "overrides"}, []any{"!" + geminiWorkspaceRule(cwd) + "*"})(t)
 			}},
 		{name: "openclaw hook entry", target: "openclaw-auto", section: "auto_recall", row: "openclaw", key: "hooks.internal.entries.deja-recall.enabled",
 			off: func(t *testing.T) {
@@ -221,7 +221,9 @@ func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
 			}},
 		{name: "goose plugin", target: "goose-auto", section: "auto_recall", row: "goose", key: "disabledPlugins",
 			off: func(t *testing.T) {
-				setJSON(filepath.Join(gooseConfigDir(), "settings.json"), []string{"disabledPlugins"}, []any{"deja"})(t)
+				// ~/.config/goose on every OS, Windows included, where
+				// config.yaml is under %APPDATA% (discovery.rs user_settings_path).
+				setJSON(filepath.Join(sources.Home(), ".config", "goose", "settings.json"), []string{"disabledPlugins"}, []any{"deja"})(t)
 			}},
 		{name: "copilot hooks", target: "copilot-auto", section: "auto_recall", row: "copilot", key: "disableAllHooks",
 			off: func(t *testing.T) {
@@ -643,7 +645,7 @@ func TestPerProjectListsAreReadForTheDirectoryTheClientKeys(t *testing.T) {
 		if err := os.Symlink(main, link); err != nil {
 			t.Skip(err)
 		}
-		b, _ := json.Marshal(map[string]any{"deja": map[string]any{"overrides": []string{"!" + main + "/*"}}})
+		b, _ := json.Marshal(map[string]any{"deja": map[string]any{"overrides": []string{"!" + geminiWorkspaceRule(main) + "*"}}})
 		write(t, filepath.Join(sources.GeminiHome(), "extensions", "extension-enablement.json"), string(b))
 		t.Chdir(link)
 		if clientHooksOff("gemini") == "" {
@@ -727,4 +729,44 @@ func TestCodexLegacyHooksKeyAndVSCodeRegistryAccess(t *testing.T) {
 			t.Errorf("`all` reads as off: %q", note)
 		}
 	})
+}
+
+// geminiWorkspaceRule is the rule `gemini extensions disable` writes for dir:
+// every `\` made `/`, a `/` at both ends (extensionEnablement.ts
+// ensureLeadingAndTrailingSlash). Gemini reads a rule from the file as it
+// stands, so `C:/x/*` or `C:\x/*` disables nothing there, and the fixtures
+// that wrote those failed on Windows (#4509).
+func geminiWorkspaceRule(dir string) string {
+	dir = strings.ReplaceAll(dir, `\`, "/")
+	if !strings.HasPrefix(dir, "/") {
+		dir = "/" + dir
+	}
+	if !strings.HasSuffix(dir, "/") {
+		dir += "/"
+	}
+	return dir
+}
+
+// codexTrustPin is a trust pin for deja's hook under event, keyed the way
+// codex writes it: a literal '…' key for a path with a backslash, which a
+// basic "…" string would read as escapes (#4509).
+func codexTrustPin(hooks, event string) string {
+	key := hooks + ":" + codexEventKey(event) + ":0:0"
+	return "\n[hooks.state." + quoteTOMLKey(key, strings.Contains(key, `\`)) + "]\ntrusted_hash = \"sha256:abc\"\n"
+}
+
+// The fixtures above stand in for what gemini and codex write on Windows;
+// these pin that a Windows path survives them, which macOS and Linux runs
+// would not otherwise check (#4509).
+func TestOffSwitchFixturesHoldAWindowsPath(t *testing.T) {
+	dir := `C:\Users\x\app`
+	if geminiExtensionEnabled([]string{"!" + geminiWorkspaceRule(dir) + "*"}, dir+`\pkg`) {
+		t.Errorf("gemini's own rule for %s did not reach a subdirectory: %q", dir, geminiWorkspaceRule(dir))
+	}
+	hooks := `C:\Users\x\.codex\hooks.json`
+	pin := strings.TrimSpace(codexTrustPin(hooks, "SessionStart"))
+	key, _, _, _, ok := codexTrustKey(strings.SplitN(pin, "\n", 2)[0])
+	if !ok || !strings.HasPrefix(key, hooks+":") {
+		t.Errorf("the pin's key does not read back as %s: %q -> %q, %v", hooks, pin, key, ok)
+	}
 }

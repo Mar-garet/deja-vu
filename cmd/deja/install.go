@@ -217,6 +217,12 @@ func runInstall(dir string, args []string, uninstall bool) error {
 		refused = append(refused, fmt.Sprintf("%s: %v", t, err))
 		refusedErrs = append(refusedErrs, err)
 	}
+	// Install builds the index itself once the targets are written. goose-auto
+	// reads recall on the way to write its block, and that read started a
+	// detached build: install then waited on it, built nothing and printed
+	// "index: built (0 sessions, 0 messages)" over a full store (#4268).
+	installBuildsIndex = !uninstall && !noIndex
+	defer func() { installBuildsIndex = false }()
 	for _, t := range targets {
 		r, err := installTarget(t, exe, uninstall)
 		if err != nil {
@@ -462,6 +468,23 @@ func indexBuiltLine(b index.BuildSummary) string {
 	return line + ")\n"
 }
 
+// installBuiltLine is indexBuiltLine for what install's Ensure did. When
+// another deja built the store while this one waited on the lock, this process
+// counted nothing, and the line said the store was empty; it names what the
+// store holds instead (#4268).
+func installBuiltLine(dir string) string {
+	if b := index.LastBuild; b.Sessions == 0 && b.Messages == 0 {
+		if n, err := index.SessionCount(dir); err == nil && n > 0 {
+			return fmt.Sprintf("index: built (%d session%s)\n", n, pluralS(n))
+		}
+	}
+	return indexBuiltLine(index.LastBuild)
+}
+
+// installBuildsIndex is set while an install that builds the index after its
+// targets runs them, so nothing on the way asks for a build of its own.
+var installBuildsIndex bool
+
 func installIndexWarmup(dir string, mcp, hooks, guidance int, summary bool) {
 	built := false
 	detected := 0
@@ -482,13 +505,13 @@ func installIndexWarmup(dir string, mcp, hooks, guidance int, summary bool) {
 	}
 	if !summary {
 		if built {
-			fmt.Fprint(os.Stderr, indexBuiltLine(index.LastBuild))
+			fmt.Fprint(os.Stderr, installBuiltLine(dir))
 		}
 		return
 	}
 	fmt.Fprintf(os.Stderr, "installed: %d MCP, %d hooks, %d guidance files\n", mcp, hooks, guidance)
 	if built {
-		fmt.Fprint(os.Stderr, indexBuiltLine(index.LastBuild))
+		fmt.Fprint(os.Stderr, installBuiltLine(dir))
 	} else if !index.HasManifest(dir) && detected > 0 {
 		fmt.Fprintln(os.Stderr, "next: run `deja index` to finish building memory")
 	} else if n := deniedStoreCount(); !index.HasManifest(dir) && n > 0 {
@@ -3274,9 +3297,17 @@ func installCursor(exe string, uninstall bool) (installResult, error) {
 	return installMCPJSON(filepath.Join(sources.CursorCLIHome(), "mcp.json"), exe, uninstall)
 }
 
+// copilotMCPConfigPath is where Copilot CLI reads its MCP servers. Doctor reads
+// the same file install writes; it used to read the guidance skill instead and
+// said wired with no server registered (#4232).
+func copilotMCPConfigPath() string {
+	return filepath.Join(sources.CopilotHome(), "mcp-config.json")
+}
+
 // installCopilotMCP wires deja into GitHub Copilot CLI's MCP registry
-// (~/.copilot/mcp-config.json, or under COPILOT_HOME). Copilot's schema differs from the common
-// mcpServers shape: entries carry a type and an enabled-tools list.
+// (mcp-config.json under $COPILOT_HOME, or ~/.copilot). Copilot's schema
+// differs from the common mcpServers shape: entries carry a type and an
+// enabled-tools list.
 func installCopilotMCP(exe string, uninstall bool) (installResult, error) {
 	path := copilotMCPConfigPath()
 	old, err := readConfig(path)
@@ -4777,7 +4808,7 @@ func existingTargetChecks() map[string]string {
 		"cursor":      sources.CursorCLIHome(),
 		"gemini":      filepath.Join(sources.GeminiHome(), "settings.json"),
 		"antigravity": antigravityConfigHome(),
-		"copilot":     copilotHome(),
+		"copilot":     sources.CopilotHome(),
 		"grok":        sources.GrokRoot(),
 		"qwen":        sources.QwenConfigDir(),
 		"kimi":        sources.KimiConfigDir(),

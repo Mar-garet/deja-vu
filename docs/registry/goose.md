@@ -21,7 +21,8 @@ seconds) and `content` blocks (`type: text` only for v1). SQLite: `sessions` joi
 - **Command**: Goose declares commands in the same config rather than a
   commands directory, so `/deja` is a recipe entry there.
 - **Auto-recall**: `SessionStart` and `UserPromptSubmit` hooks in
-  `~/.agents/plugins/deja/hooks/hooks.json`. Goose discards what a hook prints,
+  `~/.agents/plugins/deja/hooks/hooks.json` (`$GOOSE_PATH_ROOT/.agents/plugins`
+  when that is set). Goose discards what a hook prints,
   so neither answers on stdout: they write the file Goose re-reads, which is a
   marked block in `~/.config/goose/AGENTS.md` at session start and the MOIM file
   per prompt. `.goosehints` is where the block used to go; what deja wrote there

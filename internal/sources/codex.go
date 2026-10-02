@@ -337,9 +337,11 @@ func parseCodexRolloutPath(path string, offset int64, id, project string) ([]mod
 	// lands in the second half, undoing #635 for exactly the sessions someone
 	// is still talking in. One line re-read is cheaper than carrying state.
 	head := ""
+	headID := ""
 	if offset > 0 {
-		if id, cwd := codexRolloutHead(path); id != "" {
-			s.ID = id
+		if id, cwd, payload := codexRolloutHead(path); id != "" {
+			s.ID, headID = id, id
+			s.Kind, s.Parent = codexLineage(payload)
 			if cwd != "" {
 				s.Project = projectName(cwd)
 				// And carried into the parse: a patch names its files relative
@@ -352,9 +354,15 @@ func parseCodexRolloutPath(path string, offset int64, id, project string) ([]mod
 	// An append is parsed from an offset, so the head above already settled the
 	// identity; a parent's session_meta sitting in the new bytes must not take
 	// it over (#3933).
-	return parseCodexRolloutWithScanner(s, offset > 0, head, func(fn func(map[string]any)) error {
+	ss, err := parseCodexRolloutWithScanner(s, offset > 0, head, func(fn func(map[string]any)) error {
 		return scanJSONLFromOffset(path, offset, fn)
 	})
+	// A tail with no message carries only its time (below). Without the head's
+	// id it would land on a row named after the file, which holds nothing.
+	if len(ss) == 1 && len(ss[0].Messages) == 0 && headID == "" {
+		return nil, err
+	}
+	return ss, err
 }
 
 // parseCodexRolloutWithScanner normalizes a rollout supplied by the ordinary
@@ -421,6 +429,7 @@ func parseCodexRolloutWithScanner(s model.Session, idSettled bool, knownCWD stri
 				cwd = c
 				s.Project = projectName(c)
 			}
+			s.Kind, s.Parent = codexLineage(payload)
 			return
 		}
 		switch pt, _ := payload["type"].(string); pt {
@@ -483,6 +492,13 @@ func parseCodexRolloutWithScanner(s model.Session, idSettled bool, knownCWD stri
 		s.Messages = events
 	}
 	if len(s.Messages) == 0 {
+		// An appended tail of records with a time and no message, such as
+		// thread_settings_applied, still moves Updated: a full read touches
+		// every record, and returning nothing left the row behind a rebuild
+		// of the same file (#4166).
+		if idSettled && !s.Updated.IsZero() {
+			return []model.Session{s}, err
+		}
 		return nil, err
 	}
 	return []model.Session{s}, err
@@ -647,10 +663,10 @@ func codexPatch(s *model.Session, payload map[string]any, cwd string, t time.Tim
 }
 
 // codexRolloutHead reads the identity a rollout declares in its first record.
-func codexRolloutHead(path string) (id, cwd string) {
+func codexRolloutHead(path string) (id, cwd string, payload map[string]any) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", ""
+		return "", "", nil
 	}
 	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
@@ -659,20 +675,36 @@ func codexRolloutHead(path string) (id, cwd string) {
 	// lines of slack costs nothing and covers a format that adds a preamble.
 	for i := 0; i < 8 && sc.Scan(); i++ {
 		var rec struct {
-			Type    string `json:"type"`
-			Payload struct {
-				ID        string `json:"id"`
-				SessionID string `json:"session_id"`
-				CWD       string `json:"cwd"`
-			} `json:"payload"`
+			Type    string         `json:"type"`
+			Payload map[string]any `json:"payload"`
 		}
 		if json.Unmarshal(sc.Bytes(), &rec) != nil || rec.Type != "session_meta" {
 			continue
 		}
-		if rec.Payload.ID != "" {
-			return rec.Payload.ID, rec.Payload.CWD
+		cwd, _ = rec.Payload["cwd"].(string)
+		if id, _ = rec.Payload["id"].(string); id == "" {
+			id, _ = rec.Payload["session_id"].(string)
 		}
-		return rec.Payload.SessionID, rec.Payload.CWD
+		return id, cwd, rec.Payload
+	}
+	return "", "", nil
+}
+
+// codexLineage is what a rollout's own session_meta says about where the thread
+// came from. A sub-agent's names the thread that spawned it, as
+// source.subagent.thread_spawn.parent_thread_id on codex 0.149.0; recall reads
+// the edge to leave a live session's sub-agents out of it (#4547). A fork's
+// names the thread it was forked from, as forked_from_id, and a fork is not
+// told about its own source as if it were earlier work (#4549).
+func codexLineage(payload map[string]any) (kind, parent string) {
+	src, _ := payload["source"].(map[string]any)
+	sub, _ := src["subagent"].(map[string]any)
+	spawn, _ := sub["thread_spawn"].(map[string]any)
+	if p, _ := spawn["parent_thread_id"].(string); p != "" {
+		return "subagent", p
+	}
+	if p, _ := payload["forked_from_id"].(string); p != "" {
+		return "fork", p
 	}
 	return "", ""
 }

@@ -13,14 +13,6 @@ import (
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
-// copilotHome is Copilot CLI's own directory, $COPILOT_HOME or ~/.copilot.
-func copilotHome() string { return sources.CopilotHome() }
-
-// copilotMCPConfigPath is where Copilot CLI reads its MCP servers. Doctor reads
-// the same file install writes; it used to read the guidance skill instead and
-// said wired with no server registered (#4232).
-func copilotMCPConfigPath() string { return filepath.Join(copilotHome(), "mcp-config.json") }
-
 // copilotManagedHeader is what Copilot CLI 1.0.79 writes at the top of the
 // config.json it manages. Every config.json it has started on carries it, so
 // refusing a file over its comments refused every real one.
@@ -35,7 +27,7 @@ const copilotManagedHeader = "// User settings belong in settings.json.\n// This
 // reader's hooks are still in config.json, an entry deja put in settings.json
 // is gone after one launch; written beside theirs, it moves with them.
 func copilotHooksPath() string {
-	config := filepath.Join(copilotHome(), "config.json")
+	config := filepath.Join(sources.CopilotHome(), "config.json")
 	if b, err := os.ReadFile(config); err == nil {
 		var root map[string]any
 		if json.Unmarshal([]byte(jsoncToJSON(string(bytes.TrimPrefix(b, utf8BOM)))), &root) == nil {
@@ -44,7 +36,7 @@ func copilotHooksPath() string {
 			}
 		}
 	}
-	return filepath.Join(copilotHome(), "settings.json")
+	return filepath.Join(sources.CopilotHome(), "settings.json")
 }
 
 // copilotHooks is every event deja wires in Copilot CLI. --copilot makes
@@ -72,7 +64,7 @@ var copilotHooks = []struct {
 // session as `sessionId`, and `source` is "resume" when an old one is reopened.
 func installCopilotAuto(exe string, uninstall bool) (installResult, error) {
 	target := copilotHooksPath()
-	paths := []string{filepath.Join(copilotHome(), "settings.json"), filepath.Join(copilotHome(), "config.json")}
+	paths := []string{filepath.Join(sources.CopilotHome(), "settings.json"), filepath.Join(sources.CopilotHome(), "config.json")}
 	// Both hook edits are worked out before anything is written, and the MCP
 	// entry after them: a file deja has to refuse used to be found only once
 	// mcp-config.json and settings.json had already been written.
@@ -289,7 +281,7 @@ func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool, arg
 // nothing.
 func copilotHooksOffIn() string {
 	for _, name := range []string{"settings.json", "config.json"} {
-		p := filepath.Join(copilotHome(), name)
+		p := filepath.Join(sources.CopilotHome(), name)
 		if readJSONConfig(p)["disableAllHooks"] == true {
 			return p
 		}

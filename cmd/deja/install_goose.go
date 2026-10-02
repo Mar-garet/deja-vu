@@ -250,6 +250,73 @@ func removeGooseExtension(s string) string {
 	return strings.Replace(s, "\nextensions:\n\n", "\n\n", 1)
 }
 
+// dropGoosePluginEntryIn takes deja's plugin out of the `plugins:` map in
+// goose's config.yaml. goose adds an entry for each plugin it finds on its first
+// start, keyed by the plugin's directory (plugins/discovery.rs
+// filter_by_config), so uninstall removing only the directory left a key
+// pointing at nothing (#4270).
+func dropGoosePluginEntryIn(plugin string) (bool, error) {
+	path := filepath.Join(gooseConfigDir(), "config.yaml")
+	old, err := readConfig(path)
+	if err != nil || len(old) == 0 {
+		return false, err
+	}
+	body, crlf := normaliseNewlines(string(old))
+	next := dropGoosePluginEntry(body, plugin)
+	if next == body {
+		return false, nil
+	}
+	next = keepTrailingNewline(body, next)
+	if crlf {
+		next = strings.ReplaceAll(next, "\n", "\r\n")
+	}
+	_, err = writeIfChanged(path, old, []byte(next))
+	return err == nil, err
+}
+
+// dropGoosePluginEntry removes the entry keyed by plugin from the top-level
+// `plugins:` map, and the map with it when nothing else is under it. The key
+// is read plain or quoted, the ways a YAML writer can spell a path.
+func dropGoosePluginEntry(s, plugin string) string {
+	lines := strings.Split(s, "\n")
+	top := -1
+	for i, l := range lines {
+		if yamlIndentWidth(l) == 0 && yamlKeyLine(l, "plugins:") {
+			top = i
+			break
+		}
+	}
+	if top < 0 {
+		return s
+	}
+	for i := top + 1; i < len(lines); i++ {
+		l := lines[i]
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		w := yamlIndentWidth(l)
+		if w == 0 {
+			break
+		}
+		key, _, ok := strings.Cut(stripYAMLComment(t)+" ", ": ")
+		if !ok || filepath.Clean(yamlScalar(key)) != filepath.Clean(plugin) {
+			continue
+		}
+		j := i + 1
+		for j < len(lines) && (strings.TrimSpace(lines[j]) == "" || yamlIndentWidth(lines[j]) > w) {
+			j++
+		}
+		// Blank lines after the entry belong to whatever follows it.
+		for j > i+1 && strings.TrimSpace(lines[j-1]) == "" {
+			j--
+		}
+		lines = append(lines[:i], lines[j:]...)
+		return dropEmptyYAMLKey(strings.Join(lines, "\n"), "plugins:")
+	}
+	return s
+}
+
 // gooseExtensionsBlock returns the text after the extensions key, or "" when
 // there is no block form of it to read an indent from.
 func gooseExtensionsBlock(s string) string {
@@ -305,19 +372,31 @@ func yamlBlockIndent(block string) string {
 }
 
 func gooseConfigDir() string {
+	return gooseConfigDirFor(runtime.GOOS)
+}
+
+// gooseConfigDirFor is gooseConfigDir on goos. goose takes GOOSE_PATH_ROOT and
+// XDG_CONFIG_HOME only when absolute and falls back to its default otherwise;
+// deja read a relative one against wherever it ran (#4285).
+func gooseConfigDirFor(goos string) string {
 	// Checked before XDG: Goose gives GOOSE_PATH_ROOT precedence over both.
-	if root := os.Getenv("GOOSE_PATH_ROOT"); root != "" {
+	if root := os.Getenv("GOOSE_PATH_ROOT"); filepath.IsAbs(root) {
 		return filepath.Join(root, "config")
 	}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "goose")
-	}
 	// Goose is one of the few that does not use ~/.config on Windows: its
-	// config, data and state all sit under the Block vendor directory.
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "Block", "goose", "config")
+	// config, data and state all sit under the Block vendor directory, and
+	// etcetera's Windows strategy never reads XDG_CONFIG_HOME — which Git Bash
+	// and scoop setups export, so checking it first wired a config goose
+	// never opens (#4286).
+	if goos == "windows" {
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			appData = filepath.Join(homeDir(), "AppData", "Roaming")
 		}
+		return filepath.Join(appData, "Block", "goose", "config")
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(xdg) {
+		return filepath.Join(xdg, "goose")
 	}
 	return filepath.Join(homeDir(), ".config", "goose")
 }
@@ -383,12 +462,33 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 		return res, err
 	}
 	path := gooseHintsPath()
+	// AGENTS.md is the reader's, so what happened to it is read off the file
+	// rather than borrowed from the hook: install said it created one that was
+	// there, and uninstall left its snapshot off the closing line (#4269).
+	hintsBefore, hintsErr := os.ReadFile(path)
+	hints := func() installResult {
+		after, err := os.ReadFile(path)
+		switch {
+		case hintsErr != nil && err == nil:
+			return installResult{Path: path, Action: "created"}
+		case hintsErr == nil && err != nil:
+			return installResult{Path: path, Action: "removed"}
+		case hintsErr == nil && !bytes.Equal(hintsBefore, after):
+			return installResult{Path: path, Action: "updated"}
+		}
+		return installResult{Path: path, Action: "unchanged"}
+	}
 	if uninstall {
 		// The hook lives in its own plugin directory; leaving it behind means
 		// Goose keeps running a command that no longer exists.
 		plugin := filepath.Dir(filepath.Dir(gooseHookPath()))
 		removed := isRealDir(plugin)
 		_ = os.RemoveAll(plugin)
+		if dropped, err := dropGoosePluginEntryIn(plugin); err != nil {
+			return installResult{}, err
+		} else if dropped && res.Action == "unchanged" {
+			res.Action = "updated"
+		}
 		// And the directories deja made above it (#3698).
 		pruneCreatedDir(filepath.Dir(plugin))
 		// The recall now lives in the reader's own AGENTS.md, so uninstall
@@ -406,9 +506,9 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 		// went silently — where `uninstall codex-auto` says "also removed"
 		// about the same thing (#3208).
 		if removed {
-			return wroteAll(installResult{Path: gooseHookPath(), Action: "removed"}, res), nil
+			return wroteAll(installResult{Path: gooseHookPath(), Action: "removed"}, res, hints()), nil
 		}
-		return res, nil
+		return wroteAll(res, hints()), nil
 	}
 	if err := refreshGooseHints(); err != nil {
 		return installResult{}, err
@@ -429,8 +529,7 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 	// -auto adds, so `deja install goose` followed by `goose-auto` said
 	// "unchanged" three times while switching session-start recall on.
 	if action != "unchanged" {
-		return wroteAll(installResult{Path: gooseHookPath(), Action: action},
-			installResult{Path: gooseHintsPath(), Action: action},
+		return wroteAll(installResult{Path: gooseHookPath(), Action: action}, hints(),
 			installResult{Path: gooseRecipePath(), Action: action}), nil
 	}
 	return res, nil
@@ -439,8 +538,16 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 // Hooks belong to a plugin: ~/.agents/plugins/<name>/hooks/hooks.json. The
 // matcher field is a regex, and an invalid one makes Goose skip the rule
 // silently, so SessionStart carries none.
+//
+// An absolute GOOSE_PATH_ROOT moves goose's user plugins to
+// $GOOSE_PATH_ROOT/.agents/plugins (config/paths.rs get_dir), and a hook
+// under the home directory then never ran (#4569).
 func gooseHookPath() string {
-	return filepath.Join(homeDir(), ".agents", "plugins", "deja", "hooks", "hooks.json")
+	base := homeDir()
+	if root := os.Getenv("GOOSE_PATH_ROOT"); filepath.IsAbs(root) {
+		base = root
+	}
+	return filepath.Join(base, ".agents", "plugins", "deja", "hooks", "hooks.json")
 }
 
 func writeGooseHook(exe string) (string, error) {
@@ -647,14 +754,26 @@ func dropGooseRecallBlock(path string) error {
 	}
 	rest := string(old)[start:]
 	end := strings.Index(rest, gooseRecallEnd)
-	next := string(old)[:start]
+	before, after := string(old)[:start], ""
 	if end >= 0 {
-		next += rest[end+len(gooseRecallEnd):]
+		after = strings.TrimLeft(rest[end+len(gooseRecallEnd):], "\n")
 	}
+	// The block went in after the reader's text and a blank line; at the end
+	// of the file that blank line leaves with it, or every round trip gave the
+	// file back two newlines longer (#4269). With the reader's text after the
+	// block it stays: a refresh drops the blank line below the block, and
+	// taking the one above as well joined two paragraphs into one.
+	if after == "" && strings.HasSuffix(before, "\n\n") {
+		before = before[:len(before)-1]
+	}
+	next := before + after
 	if strings.TrimSpace(next) == "" {
 		return os.Remove(path)
 	}
-	_, err = writeIfChanged(path, old, []byte(strings.TrimLeft(next, "\n")))
+	if before == "" {
+		next = strings.TrimLeft(next, "\n")
+	}
+	_, err = writeIfChanged(path, old, []byte(next))
 	return err
 }
 

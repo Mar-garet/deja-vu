@@ -13,18 +13,11 @@ import (
 	"github.com/vshulcz/deja-vu/internal/model"
 )
 
-// CopilotHome is Copilot CLI's own directory: $COPILOT_HOME when it is set,
-// ~/.copilot otherwise. Copilot keeps its config, skills, MCP servers and
-// sessions there, and resolves a relative COPILOT_HOME against the directory
-// it runs in, so deja does the same (#4240).
+// CopilotHome is where Copilot CLI keeps its config and state: COPILOT_HOME
+// when set, ~/.copilot otherwise. Install, doctor and the session root all
+// follow it (#4240).
 func CopilotHome() string {
-	if h := os.Getenv("COPILOT_HOME"); h != "" {
-		if abs, err := filepath.Abs(h); err == nil {
-			return abs
-		}
-		return h
-	}
-	return filepath.Join(Home(), ".copilot")
+	return EnvPath("COPILOT_HOME", filepath.Join(Home(), ".copilot"))
 }
 
 // CopilotRoot returns the GitHub Copilot CLI session-state root, overridable

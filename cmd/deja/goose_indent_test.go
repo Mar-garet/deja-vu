@@ -12,12 +12,7 @@ import (
 // two, which made the user's own extension a key inside ours, and the uninstall
 // that followed removed both (#2614).
 func TestInstallGooseFollowsTheIndentTheBlockUses(t *testing.T) {
-	home := t.TempDir()
-	cfg := filepath.Join(home, "cfg")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv("XDG_CONFIG_HOME", cfg)
-	dir := filepath.Join(cfg, "goose")
+	dir := gooseHomeForTest(t)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +24,7 @@ func TestInstallGooseFollowsTheIndentTheBlockUses(t *testing.T) {
 	if _, err := installGoose("/bin/deja", false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	conf := gooseConf(t, cfg)
+	conf := gooseConf(t, dir)
 	if !strings.Contains(conf, "\n    deja:\n") {
 		t.Fatalf("our entry is not at the indent the block uses, so the extension after it is nested in ours:\n%s", conf)
 	}
@@ -39,7 +34,7 @@ func TestInstallGooseFollowsTheIndentTheBlockUses(t *testing.T) {
 	if _, err := installGoose("/bin/deja", true); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
-	conf = gooseConf(t, cfg)
+	conf = gooseConf(t, dir)
 	if strings.Contains(conf, "deja") {
 		t.Fatalf("uninstall left our entry:\n%s", conf)
 	}

@@ -2,6 +2,7 @@ package sources
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,8 +17,10 @@ func QwenConfigDir() string { return filepath.Join(Home(), ".qwen") }
 func QwenRoot() string { return EnvPath("DEJA_QWEN_ROOT", QwenConfigDir()) }
 
 func QwenSessionFiles() []string {
+	subagents := os.Getenv("DEJA_INCLUDE_SUBAGENTS") == "1"
 	return walkFiles(filepath.Join(QwenRoot(), "projects"), func(p string) bool {
-		return strings.HasSuffix(p, ".jsonl") && filepath.Base(filepath.Dir(p)) == "chats"
+		return strings.HasSuffix(p, ".jsonl") && filepath.Base(filepath.Dir(p)) == "chats" ||
+			subagents && QwenSubagentFile(p)
 	})
 }
 
@@ -50,7 +53,8 @@ func QwenSidecarFiles() []string {
 
 // QwenSubagentFile reports whether p is a sub-agent's log,
 // projects/<project>/subagents/<session>/agent-<id>.jsonl. The reader takes
-// only chats/, so doctor counts these as skipped, not unread (#4475).
+// only chats/ unless DEJA_INCLUDE_SUBAGENTS=1 (#4483), so doctor counts these
+// as skipped, not unread (#4475).
 func QwenSubagentFile(p string) bool {
 	return strings.HasSuffix(p, ".jsonl") && qwenUnder(p, "subagents")
 }
@@ -136,6 +140,17 @@ func parseQwenFileFromOffset(path string, offset int64) ([]model.Session, error)
 		Project: project,
 		Path:    path,
 	}
+	// A sub-agent's log sits under the session that spawned it, and its
+	// records may carry that session's id: it keeps an id of its own so it is
+	// not read as a second copy of the parent (#4483). The agent's name
+	// leads, so the parent's id is not a prefix of it: a whole id opens the
+	// newest session it prefixes.
+	child := QwenSubagentFile(path)
+	if child {
+		s.Kind = "subagent"
+		s.Parent = filepath.Base(filepath.Dir(path))
+		s.ID += "-" + s.Parent
+	}
 	// A shell call and its result are separate records; the call id carries
 	// the command over to the result its exit status is read from (#4255).
 	shellAt := map[string]int{}
@@ -158,7 +173,7 @@ func parseQwenFileFromOffset(path string, offset int64) ([]model.Session, error)
 		if typ != "user" && typ != "assistant" {
 			return
 		}
-		if id, _ := m["sessionId"].(string); id != "" {
+		if id, _ := m["sessionId"].(string); id != "" && !child {
 			s.ID = id
 		}
 		t := parseTimeAny(m["timestamp"])

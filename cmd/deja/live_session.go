@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/vshulcz/deja-vu/internal/atomicfile"
+	"github.com/vshulcz/deja-vu/internal/index"
 	"github.com/vshulcz/deja-vu/internal/model"
+	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
 // An agent's own transcript is in the index while it is still being written, so
@@ -82,8 +84,8 @@ func endSessionLive(dir, id string) {
 	writeLiveSessions(dir, rows)
 }
 
-// runHookSessionEnd is the SessionEnd hook of Claude Code, Gemini CLI and Qwen
-// Code. It says nothing back — none of them reads a reply to it — and it runs even
+// runHookSessionEnd is the SessionEnd hook of Claude Code, Codex, Cursor CLI,
+// Gemini CLI and Qwen Code. It says nothing back — none of them reads a reply to it — and it runs even
 // with recall off: clearing a stamp never hands anyone anything.
 func runHookSessionEnd(dir string, stdin io.Reader) {
 	var input precompactHookInput
@@ -188,6 +190,73 @@ func liveSessionIDs(dir string) map[string]bool {
 	return out
 }
 
+// liveLineage is the live sessions and every session that counts as one of
+// them: a sub-agent a live session spawned is being written too, under an id
+// no hook stamps, since its hooks fire under the parent's (#4547).
+func liveLineage(dir string) map[string]bool {
+	return index.Lineage(dir, liveSessionIDs(dir))
+}
+
+// askerLineage is the session a hook speaks for and every session that counts
+// as it. A spawn recalls under a reader of its own, task:<parent>:<hash>, and
+// its parent is the session asking through it; a host that knows the parent
+// of the session asking names it in the payload (#4548). A fork's source
+// counts too (#4549).
+//
+// asker is the session the payload names and transcript its transcript, when
+// the host sends one. An asker the index does not hold yet is read off its own
+// store: a fork's first prompts come before any build has seen it, and they
+// were the ones answered with the fork's source.
+func askerLineage(dir, asker, transcript string, ids ...string) map[string]bool {
+	set := map[string]bool{}
+	for _, id := range append([]string{asker}, ids...) {
+		if id = strings.TrimSpace(id); id == "" {
+			continue
+		}
+		set[id] = true
+		if p := spawnParent(id); p != "" {
+			set[p] = true
+		}
+	}
+	var heads []model.Session
+	if asker = strings.TrimSpace(asker); asker != "" && !isSpawnedReader(asker) && !index.HasSession(dir, asker) {
+		if h, ok := askerHead(asker, transcript); ok {
+			heads = append(heads, h)
+		}
+	}
+	return index.Lineage(dir, set, heads...)
+}
+
+// askerHead is the session read off its own store: the first records of the
+// transcript the payload names, or opencode's database, which the plugin's
+// payload does not name a file in.
+func askerHead(id, transcript string) (model.Session, bool) {
+	if transcript != "" {
+		s, err := sources.TranscriptHead(transcript, id)
+		return s, err == nil
+	}
+	if strings.HasPrefix(id, "ses_") {
+		for _, s := range sources.LoadOpencodePrefix(id) {
+			if s.ID == id {
+				return s, true
+			}
+		}
+	}
+	return model.Session{}, false
+}
+
+// spawnParent is the session a spawn reader recalls for, or "".
+func spawnParent(sid string) string {
+	if !isSpawnedReader(sid) {
+		return ""
+	}
+	rest := strings.TrimPrefix(sid, spawnReaderPrefix)
+	if i := strings.LastIndex(rest, ":"); i > 0 {
+		return rest[:i]
+	}
+	return ""
+}
+
 // withoutLiveSessions drops the sessions an agent is inside from a result.
 //
 // Only the MCP surfaces use it. On the CLI the reader is a person who may well
@@ -200,7 +269,7 @@ func liveSessionIDs(dir string) map[string]bool {
 // question ranks first by wording however it is weighted, so demotion left it
 // on a page of five (#3945).
 func withoutLiveSessions(dir string, ss []model.Session) []model.Session {
-	live := liveSessionIDs(dir)
+	live := liveLineage(dir)
 	if len(live) == 0 {
 		return ss
 	}

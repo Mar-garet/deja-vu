@@ -36,9 +36,12 @@ func OpenClawRoot() string {
 var openclawCheckpointRE = regexp.MustCompile(`(?i)\.checkpoint\.[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.jsonl$`)
 
 // openclawArchiveRE matches what a reset or a delete renames a transcript to.
-// The timestamp is whatever OpenClaw stamped it with, and the .zst is the
-// compressed form an explicit delete writes since the SQLite flip.
-var openclawArchiveRE = regexp.MustCompile(`\.jsonl\.(reset|deleted)\.[0-9]+(\.zst)?$`)
+// The timestamp is whatever OpenClaw stamped it with: 2026.7 writes
+// toISOString() with ":" turned to "-" (ARCHIVE_TIMESTAMP_RE in
+// src/config/sessions/artifacts.ts), and the digit form is kept for builds
+// that wrote one (#4482). The .zst is the compressed form an explicit delete
+// writes since the SQLite flip.
+var openclawArchiveRE = regexp.MustCompile(`\.jsonl\.(reset|deleted)\.([0-9]+|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}(\.[0-9]{3})?Z)(\.zst)?$`)
 
 // openclawTranscript reports whether p is a live transcript directly inside
 // an agent's sessions dir (agents/<id>/sessions/<file>.jsonl).

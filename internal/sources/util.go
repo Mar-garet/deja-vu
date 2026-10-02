@@ -400,7 +400,9 @@ func scanJSONLFromOffset(path string, offset int64, fn func(map[string]any)) err
 			d.UseNumber()
 			if d.Decode(&m) == nil {
 				fn(m)
-			} else {
+			} else if err == nil {
+				// A last line with no newline yet is the client still
+				// writing it; the next pass reads it whole (#4276).
 				diagMalformedLine(path)
 			}
 		}
