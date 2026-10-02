@@ -449,6 +449,9 @@ import (
 //
 // 60 also: a grok, kiro-cli or Kimi reply streamed across an index pass is
 // one message, not two (#4445).
+//
+// 60 also: a kiro-cli reply or tool call appended after a pass takes the
+// Prompt's time, not 0001-01-01 (#4444).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

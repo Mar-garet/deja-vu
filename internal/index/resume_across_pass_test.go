@@ -28,6 +28,25 @@ func kiroCLISession(t *testing.T) (dir, transcript string) {
 	return filepath.Join(tmp, "index.db"), transcript
 }
 
+// A reply or tool call takes the time of the Prompt before it. On a read
+// resumed after a pass that Prompt was behind the offset, and what was
+// appended landed at 0001-01-01 (#4444).
+func TestKiroCLIRecordAppendedAfterAPassKeepsThePromptsTime(t *testing.T) {
+	dir, transcript := kiroCLISession(t)
+	writeAt(t, transcript, kiroPrompt("p1", 1785600100, "fix the retry loop"), time.Now())
+	indexPass(t, dir)
+
+	appendTo(t, transcript, `{"version":"v1","kind":"AssistantMessage","data":{"message_id":"m4","content":[{"kind":"text","data":"vetting it"},{"kind":"toolUse","data":{"toolUseId":"t3","name":"shell","input":{"command":"go vet ./retry"}}}]}}`+"\n")
+	indexPass(t, dir)
+	matchesRebuild(t, dir, "kiro", "s-retry")
+	s, _, _ := FindByIdentity(dir, "kiro", "s-retry")
+	for _, m := range s.Messages {
+		if m.Time.IsZero() {
+			t.Errorf("%s %q has no time", m.Role, m.Text)
+		}
+	}
+}
+
 // A reply streams in as records sharing a message id. A pass between two of
 // them stored the halves as two replies; a rebuild joins them (#4445).
 func TestKiroCLIReplyStreamedAcrossAPassIsOneMessage(t *testing.T) {
