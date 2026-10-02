@@ -162,3 +162,32 @@ func TestGjcHashlineEditsAreIndexed(t *testing.T) {
 		t.Errorf("the hashline payload is not recorded as written: %q", rolesOf(s, RoleWrote))
 	}
 }
+
+// A shell call whose result lands a pass later sends the file back for a whole
+// read only when the result is a failure. A clean result is every command the
+// agent runs while an index pass is going, deja's own included (#4443).
+func TestPiResumesPastACleanCommandResult(t *testing.T) {
+	head := `{"type":"session","version":3,"id":"s","timestamp":"2026-09-01T09:00:00Z","cwd":"/tmp/proj"}
+{"type":"message","id":"a1","timestamp":"2026-09-01T09:02:00Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"bash","arguments":{"command":"deja search retry"}}]}}
+`
+	for _, tc := range []struct {
+		name, res string
+		resumes   bool
+	}{
+		{"clean", `"details":{"exitCode":0},"isError":false`, true},
+		{"clean without a code", `"isError":false`, true},
+		{"failed", `"details":{"exitCode":2},"isError":true`, false},
+		{"nonzero code", `"details":{"exitCode":1},"isError":false`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "s.jsonl")
+			body := head + `{"type":"message","id":"r1","timestamp":"2026-09-01T09:02:01Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"ok"}],` + tc.res + "}}\n"
+			if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := piResumes(p, int64(len(head))); got != tc.resumes {
+				t.Errorf("piResumes = %v, want %v", got, tc.resumes)
+			}
+		})
+	}
+}

@@ -290,6 +290,12 @@ func (r *piReader) toolResult(msg map[string]any, t time.Time) {
 // piResumes sends a pi-shaped transcript back for a whole read when its tail
 // holds the result of a shell, edit or write call made before it: the result
 // is what marks the command's exit and keeps or drops the edit (#4443).
+//
+// A shell result counts only when the command failed. A clean one is every
+// command still running when a pass reads the call, deja's own run from the
+// agent's shell among them, and re-reading for each sent most passes of such
+// a session through the replacement path; the split call keeps no
+// "→ exit 0", as Codex never writes one.
 var piResumes = resumesUnlessAnswering(`"toolCall`, func(m map[string]any) ([]string, string) {
 	msg, _ := m["message"].(map[string]any)
 	switch role, _ := msg["role"].(string); role {
@@ -306,6 +312,9 @@ var piResumes = resumesUnlessAnswering(`"toolCall`, func(m map[string]any) ([]st
 		return ids, ""
 	case "toolResult":
 		name, _ := msg["toolName"].(string)
+		if piDialect.shellTools[name] && !piCommandFailed(msg) {
+			return nil, ""
+		}
 		if name == "" || piDialect.shellTools[name] || piDialect.editTools[name] {
 			id, _ := msg["toolCallId"].(string)
 			return nil, id
@@ -313,6 +322,16 @@ var piResumes = resumesUnlessAnswering(`"toolCall`, func(m map[string]any) ([]st
 	}
 	return nil, ""
 })
+
+// piCommandFailed reports whether a shell result says the command failed.
+func piCommandFailed(msg map[string]any) bool {
+	if failed, _ := msg["isError"].(bool); failed {
+		return true
+	}
+	details, _ := msg["details"].(map[string]any)
+	code, ok := piExitCode(details["exitCode"])
+	return ok && code != 0
+}
 
 func piExitCode(v any) (int, bool) {
 	switch n := v.(type) {
