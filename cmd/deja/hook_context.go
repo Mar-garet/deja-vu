@@ -164,6 +164,29 @@ func withoutSubagentRuns(ss []model.Session) []model.Session {
 	return out
 }
 
+// codexThreadHasDigest reports whether a Codex thread starting now already
+// carries a start digest. Codex keeps the context a hook added in the thread
+// and replays it on resume, so every `codex resume` put the same digest in
+// front of the model once more, and a fork, which copies its source's history,
+// one more again (#4550). Claude Code drops the old one on resume and is not
+// asked. Read off what deja told the thread, or the thread it was forked from:
+// a thread whose ledger rows have rotated out gets one more, which is the old
+// behaviour.
+func codexThreadHasDigest(dir, source, sessionID, transcript string) bool {
+	if transcript == "" || sessionID == "" || source == "compact" || source == "clear" {
+		return false
+	}
+	head, err := sources.TranscriptHead(transcript, sessionID)
+	if err != nil || head.Harness != "codex" {
+		return false
+	}
+	told := func(id string) bool { return len(alreadyInjected(dir, sessionStartKeyPrefix+id)) > 0 }
+	if source == "resume" && told(sessionID) {
+		return true
+	}
+	return head.Kind == "fork" && head.Parent != "" && told(head.Parent)
+}
+
 // sessionHadDigest reports whether this session has already had its one
 // session-start attempt, for a host that fires that event every turn. Antigravity
 // keeps the same record under a key of its own; this one is for hosts that come
@@ -408,6 +431,9 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// turns, the digest that opened it among them. A second one led with the
 	// source itself, the fork's own opening under another id (#4549).
 	if input.Source == "fork" {
+		return nil
+	}
+	if codexThreadHasDigest(dir, input.Source, input.SessionID, input.TranscriptPath) {
 		return nil
 	}
 	input.WorkspaceRoots = adoptGrokRoots(input.WorkspaceRoots, input.WorkspaceRoot)
