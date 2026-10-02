@@ -4172,8 +4172,10 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		return err
 	}
 	carrySidecars(dir, tmp)
-	// After carrying, not instead of it: both of these write only when they
-	// have something to say, and the carried file is what a quiet update leaves.
+	// After carrying, not instead of it: the fixes merge writes only when it
+	// has something to say, and the carried file is what a quiet update leaves.
+	// The command table is recomputed whole, and an empty one removes the
+	// carried file, as a full build would not write it (#4441).
 	mergeFixes(dir, tmp, replacements, replaceKeys)
 	buildCommandsFromIndex(tmp)
 	for key := range replaceKeys {

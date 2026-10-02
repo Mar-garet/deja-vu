@@ -1,6 +1,7 @@
 package index
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -227,6 +228,10 @@ func buildCommandsFromIndex(tmp string) {
 		out = append(out, a.use)
 	}
 	if len(out) == 0 {
+		// Nothing recurs any more: the table a full build would not write.
+		// Returning left the carried one in place, and hook-tool kept offering
+		// `deja how` for a command no session runs twice (#4441).
+		_ = os.Remove(commandsPath(tmp))
 		return
 	}
 	sort.Slice(out, func(i, j int) bool {
