@@ -209,6 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A config you made read-only (`chmod 444`) is refused, named, and left as it was; install and uninstall wrote a temp file and renamed it over the lock (#4558).
 - `deja install claude-auto` refused on a read-only `~/.claude` no longer leaves deja's MCP server wired in `~/.claude.json` with a `.bak` beside it; the halves that can refuse go first (#4560).
 - A change the client saves to its config while `deja install` is editing it is kept: deja reads the file again before replacing it and, if it moved, edits the new version. Measured on `~/.claude.json` with a client saving during install, lost saves went from 31 and 116 of 200 runs to 4 and 5 (#4561).
+- An empty config you created (`touch ~/.codex/config.toml`) is still there, empty, after `deja install` and `deja uninstall`; TOML, YAML and aider configs were deleted and JSON ones came back as `{}` (#4563).
 
 ## [0.21.4] - 2026-09-29
 

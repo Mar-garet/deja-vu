@@ -1633,6 +1633,15 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 		next = snapshotIfSameJSON(path, old, next)
 		next = snapshotIfOnlyEmptyBlocksDiffer(path, old, next)
 	}
+	// An empty config the reader made — `touch ~/.codex/config.toml` — comes
+	// back empty, not deleted and not `{}`: the snapshot deja took of it says
+	// it was there, and holding nothing is how it was (#4563).
+	keptEmpty := false
+	if removingWiring && (len(next) == 0 || structurallyEmptyConfig(next)) && !wiringCreated(path) {
+		if b, ok := ownSnapshot(path); ok && len(bytes.TrimSpace(b)) == 0 {
+			next, keptEmpty = b, true
+		}
+	}
 	if bytes.Equal(old, next) {
 		return "unchanged", nil
 	}
@@ -1652,7 +1661,7 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 		// here. Before backupOnce, so the backup of a file that was entirely
 		// ours is not created either — the .bak of a config the user already
 		// had still is.
-		if len(next) == 0 {
+		if len(next) == 0 && !keptEmpty {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return "", err
 			}
