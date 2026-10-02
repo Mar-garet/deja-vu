@@ -446,6 +446,9 @@ import (
 // 60 also: Roo, Kilo and legacy Cline tasks from the XML tool era read their
 // calls into command, files and edit records and their results as tool
 // output (#4424).
+// 60 also: a rooted DeepSeek TUI or Codex tool path from the other OS's
+// convention is no longer joined onto the session's cwd, and a Roo path with
+// one leading `\` stays as written (#4438).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

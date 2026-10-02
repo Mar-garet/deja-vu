@@ -192,3 +192,49 @@ func TestDeepSeekExitCodeReadsDshsMarkers(t *testing.T) {
 		}
 	}
 }
+
+// A path with a leading separator or a drive letter is rooted on every host.
+// Go's filepath.IsAbs is false for /tmp/proj/retry.go on Windows and for
+// C:\proj\retry.go everywhere else, so the reader joined such a path onto the
+// session's cwd and stored one that does not exist (#4438).
+func TestResolveToolPathKeepsARootedPath(t *testing.T) {
+	for _, c := range []struct{ p, cwd, want string }{
+		{"/tmp/proj/retry.go", "/tmp/proj", "/tmp/proj/retry.go"},
+		{`\tmp\proj\retry.go`, "/tmp/proj", `\tmp\proj\retry.go`},
+		{`C:\proj\retry.go`, `C:\proj`, `C:\proj\retry.go`},
+		{"C:/proj/retry.go", `C:\proj`, "C:/proj/retry.go"},
+		{`\\srv\share\retry.go`, `C:\proj`, `\\srv\share\retry.go`},
+		{"retry.go", "/tmp/proj", "/tmp/proj/retry.go"},
+		{"./sub/retry.go", "/tmp/proj", "/tmp/proj/sub/retry.go"},
+		{"retry.go", "", "retry.go"},
+		{"", "/tmp/proj", ""},
+	} {
+		if got := resolveToolPath(c.p, c.cwd); got != c.want {
+			t.Errorf("resolveToolPath(%q, %q) = %q, want %q", c.p, c.cwd, got, c.want)
+		}
+	}
+}
+
+// The same rule end to end: a session recorded on Windows and read anywhere
+// keeps its drive-letter paths as written (#4438).
+func TestParseDeepSeekFileKeepsADriveLetterPath(t *testing.T) {
+	log := `{"type":"session","version":0,"id":"session-win","createdAt":1790874400000,"cwd":"C:\\proj"}
+{"type":"user/message","seq":7,"time":1790874400100,"data":{"content":[{"type":"text","text":"bound the retry loop"}],"source":{"kind":"user"},"role":"user"}}
+{"type":"tool/call","seq":22,"time":1790874400400,"data":{"callId":"call_2","name":"edit","arguments":"{\"file_path\": \"C:\\\\proj\\\\retry.go\", \"old_string\": \"for {\", \"new_string\": \"for attempt := 0; attempt < maxAttempts; attempt++ {\"}"}}
+{"type":"tool/result","seq":23,"time":1790874400500,"data":{"message":{"source":{"kind":"tool","callId":"call_2"},"content":[{"type":"tool-result","toolCallId":"call_2","content":[{"type":"text","text":"The file has been updated successfully."}],"isError":false}]}}}
+`
+	path := writeDeepSeekSession(t, t.TempDir(), "win", log, false)
+	ss, err := ParseDeepSeekFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v, %d sessions", err, len(ss))
+	}
+	var files []string
+	for _, m := range ss[0].Messages {
+		if m.Role == RoleFiles {
+			files = append(files, m.Text)
+		}
+	}
+	if got := strings.Join(files, "|"); got != `C:\proj\retry.go` {
+		t.Errorf("files = %q, want C:\\proj\\retry.go as written", got)
+	}
+}

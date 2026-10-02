@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- On Windows, a DeepSeek TUI or Codex tool path such as `/tmp/proj/retry.go` is kept as written instead of being joined onto the session's directory as `\tmp\proj\tmp\proj\retry.go`, and `deja doctor` keeps the drive of a `file://C:/…` dsh plugin it reports missing (#4438).
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name. The same goes for every agent whose sessions are filed under such a folder name (Claude Code without a cwd, Cursor CLI, pi, omp and others): `my_org/app` is no longer indexed as `org/app`. The index rebuilds once (#4402).
 - `deja install aider` joins the `read:` list of a CRLF `~/.aider.conf.yml`, or one with a comment after or under the key, instead of writing a second `read:` that made aider drop your files; uninstall gives a scalar or flow `read:` back in the form you wrote, and keeps a config that held only `read: []` (#4330, #4331).
 - A `DSH_HOME` that starts with `~` is expanded the way dsh expands it, so deja finds dsh's sessions and writes its layer under `$HOME/...` instead of a literal `./~/...` directory (#4390).
