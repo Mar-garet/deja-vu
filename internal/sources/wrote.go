@@ -228,8 +228,8 @@ func applyPatch(patch string, resolve func(string) string) (files, spans, wrote 
 // the file every hunk goes to, whatever the headers say, the way a call's own
 // path argument retargets the patch. Hunk bodies are read by the line counts
 // in their headers, so a removed line that starts with "--" is not taken for
-// the next file's header; a header without counts runs to the next hunk or
-// file.
+// the next file's header unless a "+++ " line follows it; a hunk ends early at
+// the next @@ or file header, and one without counts runs to them.
 func unifiedPatch(patch, override string, resolve func(string) string) (files, spans, wrote []string) {
 	if resolve == nil {
 		resolve = func(p string) string { return p }
@@ -278,8 +278,11 @@ func unifiedPatch(patch, override string, resolve func(string) string) (files, s
 				if counted && oldN <= 0 && newN <= 0 {
 					break
 				}
-				if !counted && (strings.HasPrefix(l, "@@") || strings.HasPrefix(l, "diff --git ") ||
-					(strings.HasPrefix(l, "--- ") && j+1 < len(lines) && strings.HasPrefix(lines[j+1], "+++ "))) {
+				// A miscounted header does not carry the hunk past the next
+				// one or the next file's headers; CodeWhale applies such a
+				// patch the same way (apply_patch.rs parse_hunk_header).
+				if strings.HasPrefix(l, "@@") || strings.HasPrefix(l, "diff ") ||
+					(strings.HasPrefix(l, "--- ") && j+1 < len(lines) && strings.HasPrefix(lines[j+1], "+++ ")) {
 					break
 				}
 				switch {

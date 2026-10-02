@@ -370,6 +370,32 @@ func TestUnifiedPatchReadsHunksByCount(t *testing.T) {
 	}
 }
 
+// A model miscounts hunks, and CodeWhale applies the patch anyway: a hunk ends
+// at the next @@, at diff, or at a --- that a +++ follows, whatever its
+// header promised (apply_patch.rs parse_hunk_header).
+func TestUnifiedPatchOvercountedHunk(t *testing.T) {
+	patch := "--- a/a.go\n+++ b/a.go\n@@ -1,6 +1,6 @@\n-func oldA() {}\n+func newA() error { return nil }\n" +
+		"@@ -9,6 +9,6 @@\n-func oldA2() {}\n+func newA2() error { return nil }\n" +
+		"--- a/b.go\n+++ b/b.go\n@@ -1,6 +1,6 @@\n-func oldB() {}\n+func newB() error { return nil }\n" +
+		"diff --git a/c.go b/c.go\n--- a/c.go\n+++ b/c.go\n@@ -1 +1 @@\n-func oldC() {}\n+func newC() error { return nil }\n"
+	files, spans, wrote := unifiedPatch(patch, "", nil)
+	if got := strings.Join(files, ","); got != "a.go,b.go,c.go" {
+		t.Errorf("files = %q", got)
+	}
+	wantSpans := []string{"a.go\nfunc oldA() {}", "a.go\nfunc oldA2() {}", "b.go\nfunc oldB() {}", "c.go\nfunc oldC() {}"}
+	if strings.Join(spans, "|") != strings.Join(wantSpans, "|") {
+		t.Errorf("spans = %q, want %q", spans, wantSpans)
+	}
+	wantWrote := []string{
+		WroteRecord("a.go", "func newA() error { return nil }\nfunc newA2() error { return nil }"),
+		WroteRecord("b.go", "func newB() error { return nil }"),
+		WroteRecord("c.go", "func newC() error { return nil }"),
+	}
+	if strings.Join(wrote, "|") != strings.Join(wantWrote, "|") {
+		t.Errorf("wrote = %q, want %q", wrote, wantWrote)
+	}
+}
+
 // command-code 1.74.0: shell_command and monitor_command take {command,
 // args[]}, powershell {command}, and read_file's paths may hold globs, which
 // name no file the session touched (#4540).
