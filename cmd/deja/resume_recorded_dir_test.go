@@ -34,60 +34,62 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 	cases := []struct {
 		harness string
 		gone    string
-		session func(name, dir string) model.Session
+		session func(t *testing.T, name, dir string) model.Session
 		goneCmd func(s model.Session) string // the command once the directory is gone, when it changes
 	}{
-		{"pi", fork, func(name, dir string) model.Session {
+		{"pi", fork, func(t *testing.T, name, dir string) model.Session {
 			id := "01a0f828-1111-4222-8333-444455556666"
-			p := filepath.Join(tmp, "pi", "--"+strings.ReplaceAll(strings.TrimPrefix(dir, "/"), "/", "-")+"--", "2026-10-01T09-00-00-000Z_"+id+".jsonl")
+			p := filepath.Join(tmp, "pi", piSessionFolder(dir), "2026-10-01T09-00-00-000Z_"+id+".jsonl")
 			writeResumeFile(t, p, `{"type":"session","version":3,"id":"`+id+`","timestamp":"2026-10-01T09:00:00.000Z","cwd":`+jsonStr(dir)+`}`+"\n")
 			return model.Session{Harness: "pi", ID: id, Path: p}
 		}, nil},
-		{"grok", note, func(name, dir string) model.Session {
-			p := filepath.Join(tmp, "grok", url.PathEscape(dir), "019f-"+name, "updates.jsonl")
+		{"grok", note, func(t *testing.T, name, dir string) model.Session {
+			// QueryEscape, not PathEscape: the folder holds a Windows path's
+			// colon too, which no Windows directory name can.
+			p := filepath.Join(tmp, "grok", url.QueryEscape(dir), "019f-"+name, "updates.jsonl")
 			writeResumeFile(t, p, "")
 			writeResumeFile(t, filepath.Join(filepath.Dir(p), "summary.json"), `{"info":{"cwd":`+jsonStr(dir)+`}}`)
 			return model.Session{Harness: "grok", ID: "019f-" + name, Path: p}
 		}, nil},
-		{"kiro", note, func(name, dir string) model.Session {
+		{"kiro", note, func(t *testing.T, name, dir string) model.Session {
 			id := "11111111-2222-4333-8444-555555555555"
 			p := filepath.Join(tmp, "kiro", name, id+".jsonl")
 			writeResumeFile(t, filepath.Join(tmp, "kiro", name, id+".json"), `{"session_id":"`+id+`","cwd":`+jsonStr(filepath.ToSlash(dir))+`}`)
 			writeResumeFile(t, p, `{"version":"v1","kind":"Prompt","data":{"content":[{"kind":"text","data":"hi"}]}}`+"\n")
 			return model.Session{Harness: "kiro", ID: id, Path: p}
 		}, nil},
-		{"continue", note, func(name, dir string) model.Session {
+		{"continue", note, func(t *testing.T, name, dir string) model.Session {
 			id := "5f38800d-4bfe-4a34-a6f1-b117d8ce618c"
 			p := filepath.Join(tmp, "continue", name, id+".json")
 			writeResumeFile(t, p, `{"sessionId":"`+id+`","workspaceDirectory":`+jsonStr(dir)+`,"history":[]}`)
 			return model.Session{Harness: "continue", ID: id, Path: p}
 		}, nil},
-		{"codewhale", note, func(name, dir string) model.Session {
+		{"codewhale", note, func(t *testing.T, name, dir string) model.Session {
 			id := "eeeeeeee-0000-4000-8000-000000000005"
 			p := filepath.Join(tmp, "codewhale", name, id+".json")
 			writeResumeFile(t, p, `{"schema_version":1,"metadata":{"id":"`+id+`","workspace":`+jsonStr(dir)+`},"messages":[]}`)
 			return model.Session{Harness: "codewhale", ID: id, Path: p}
 		}, nil},
-		{"commandcode", note, func(name, dir string) model.Session {
+		{"commandcode", note, func(t *testing.T, name, dir string) model.Session {
 			id := "0c4d0000-1111-4222-8333-444455556666"
 			p := filepath.Join(tmp, "commandcode", name, id+".jsonl")
 			writeResumeFile(t, p, `{"type":"session","version":3,"id":"`+id+`","cwd":`+jsonStr(dir)+`}`+"\n")
 			return model.Session{Harness: "commandcode", ID: id, Path: p}
-		}, func(s model.Session) string { return "cmd --session " + s.ID }},
-		{"reasonix", note, func(name, dir string) model.Session {
+		}, func(s model.Session) string { return commandCodeBin() + " --session " + s.ID }},
+		{"reasonix", note, func(t *testing.T, name, dir string) model.Session {
 			id := "20261001-101000.000000000-deepseek-chat"
 			p := filepath.Join(tmp, "reasonix", name, id+".jsonl")
 			writeResumeFile(t, p+".meta", `{"workspace_root":`+jsonStr(dir)+`}`)
 			return model.Session{Harness: "reasonix", ID: id, Path: p}
 		}, func(s model.Session) string { return "reasonix --resume " + s.Path }},
-		{"roo", refuse, func(name, dir string) model.Session {
+		{"roo", refuse, func(t *testing.T, name, dir string) model.Session {
 			id := "01a07bf9-8882-7703-a3fa-245deb8ea752"
 			if name == "gone" {
 				id = "01a07bf9-8882-7703-a3fa-245deb8ea753"
 			}
 			return model.Session{Harness: "roo", ID: "roo-task-" + id, Path: rooCLITask(t, filepath.Join(tmp, "roo"), id, filepath.ToSlash(dir))}
 		}, nil},
-		{"crush", refuse, func(name, dir string) model.Session {
+		{"crush", refuse, func(t *testing.T, name, dir string) model.Session {
 			return model.Session{Harness: "crush", ID: "942cbc1e-78c7-41cb-aa8a-78c3baab018c", Path: filepath.Join(dir, ".crush", "crush.db")}
 		}, nil},
 	}
@@ -97,7 +99,7 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			s := c.session("here", dir)
+			s := c.session(t, "here", dir)
 			got, _, err := resumeCommand(s)
 			if err != nil {
 				t.Fatal(err)
@@ -110,10 +112,10 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 			}
 
 			gone := filepath.Join(tmp, "w-"+c.harness, "gone")
-			s = c.session("gone", gone)
+			s = c.session(t, "gone", gone)
 			got, cmd, err := resumeCommand(s)
 			if c.gone == refuse {
-				if err == nil || !strings.Contains(err.Error(), gone) || !strings.Contains(err.Error(), "deja show") {
+				if err == nil || !namesDir(err.Error(), gone) || !strings.Contains(err.Error(), "deja show") {
 					t.Fatalf("dir = %q, err = %v; want a refusal naming %s and deja show", got, err, gone)
 				}
 				return
@@ -125,11 +127,26 @@ func TestResumeRecordedDirectoryPresentAndGone(t *testing.T) {
 				t.Errorf("cmd = %q, want %q", cmd, c.goneCmd(s))
 			}
 			n := resumeDirGoneNote(s, got)
-			if !strings.Contains(n, gone) || (c.gone == fork) != strings.Contains(n, "fork") {
+			if !namesDir(n, gone) || (c.gone == fork) != strings.Contains(n, "fork") {
 				t.Errorf("note = %q, want it to name %s (fork: %v)", n, gone, c.gone == fork)
 			}
 		})
 	}
+}
+
+// commandCodeBin is the name Command Code installs under: cmdc on Windows,
+// where cmd is the shell.
+func commandCodeBin() string {
+	if runtime.GOOS == "windows" {
+		return "cmdc"
+	}
+	return "cmd"
+}
+
+// namesDir reports whether s names dir, in the OS's separators or in the
+// forward slashes Kiro and the Roo CLI record a Windows path in.
+func namesDir(s, dir string) bool {
+	return strings.Contains(s, dir) || strings.Contains(s, filepath.ToSlash(dir))
 }
 
 // pi folds every `/` of the directory into `-` for the session folder, so the
@@ -154,5 +171,28 @@ func TestResumePiTakesTheHeaderCwdNotTheFolderName(t *testing.T) {
 	dir, cmd, err := resumeCommand(model.Session{Harness: "pi", ID: id, Path: p})
 	if err != nil || dir != real || cmd != "pi --session "+id {
 		t.Fatalf("got (%q, %q, %v), want (%q, pi --session %s)", dir, cmd, err, real, id)
+	}
+}
+
+// piSessionFolder is pi's own name for a project's session folder
+// (session-manager.ts): one leading separator dropped, every `/`, `\` and `:`
+// a dash. Folding only `/` left a Windows path's `C:\` in the name, and mkdir
+// refused it (#4521).
+func piSessionFolder(dir string) string {
+	if strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, `\`) {
+		dir = dir[1:]
+	}
+	return "--" + strings.NewReplacer("/", "-", `\`, "-", ":", "-").Replace(dir) + "--"
+}
+
+func TestPiSessionFolderIsPisOnBothSeparators(t *testing.T) {
+	for in, want := range map[string]string{
+		"/Users/x/proj":    "--Users-x-proj--",
+		`C:\Users\x\proj`:  "--C--Users-x-proj--",
+		`\\srv\share\proj`: "---srv-share-proj--",
+	} {
+		if got := piSessionFolder(in); got != want {
+			t.Errorf("piSessionFolder(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

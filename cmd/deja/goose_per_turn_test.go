@@ -16,8 +16,8 @@ import (
 // file is re-read every turn. So the guard was the only thing keeping per-turn
 // recall to the wrapper.
 func TestTheGoosePromptHookRefreshesWithoutTheWrapper(t *testing.T) {
-	cfg := gooseHomeForTest(t)
-	path := filepath.Join(cfg, "goose", "AGENTS.md")
+	goose := gooseHomeForTest(t)
+	path := filepath.Join(goose, "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -44,8 +44,8 @@ func TestTheGoosePromptHookRefreshesWithoutTheWrapper(t *testing.T) {
 // And the writer both halves share keeps the markers on the file that is the
 // reader's, while the MOIM file — deja's own — is written whole.
 func TestGooseRecallWritesAMarkedBlockOnlyInTheReadersFile(t *testing.T) {
-	cfg := gooseHomeForTest(t)
-	agents := filepath.Join(cfg, "goose", "AGENTS.md")
+	goose := gooseHomeForTest(t)
+	agents := filepath.Join(goose, "AGENTS.md")
 	if err := os.MkdirAll(filepath.Dir(agents), 0o755); err != nil {
 		t.Fatal(err)
 	}

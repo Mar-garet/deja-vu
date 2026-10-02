@@ -61,7 +61,9 @@
 <p>Read in the sessions directory beside the live transcripts: what a reset or a</p>
 <p>delete left behind — <code>&lt;id&gt;.jsonl.reset.&lt;ts&gt;</code>, <code>&lt;id&gt;.jsonl.deleted.&lt;ts&gt;</code> and the</p>
 <p>compressed <code>&lt;id&gt;.jsonl.deleted.&lt;ts&gt;.zst</code> an explicit delete writes since the</p>
-<p>SQLite flip. That is the history someone asks for after losing it. An archive</p>
+<p>SQLite flip. <code>&lt;ts&gt;</code> is a number or, from 2026.7, an ISO stamp with dashes such</p>
+<p>as <code>2026-10-01T15-18-21.294Z</code>. That is the history someone asks for after</p>
+<p>losing it. An archive</p>
 <p>whose live file is back stands down, so a reset conversation is indexed once.</p>
 <p>Skipped: <code>sessions.json</code> (store metadata), compaction checkpoints</p>
 <p>(<code>&lt;id&gt;.checkpoint.&lt;uuid&gt;.jsonl</code>), <code>.bak</code> copies and the</p>

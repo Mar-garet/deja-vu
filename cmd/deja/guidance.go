@@ -123,7 +123,7 @@ func guidancePath(harness string) string {
 		// on every turn, which is what makes recall arrive unasked (#3062).
 		return continueSkillPath()
 	case "copilot":
-		return filepath.Join(homeDir(), ".copilot", "skills", "deja-history", "SKILL.md")
+		return filepath.Join(sources.CopilotHome(), "skills", "deja-history", "SKILL.md")
 	case "pi":
 		return filepath.Join(sources.PiConfigDir(), "skills", "deja-history", "SKILL.md")
 	case "hermes":

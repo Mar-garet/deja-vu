@@ -128,7 +128,7 @@ const (
 func appendHermesPluginsBlock(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		if strings.TrimRight(line, " \t") == "..." {
+		if yamlDocumentEnd(line) {
 			lines = slices.Insert(lines, i, "", "plugins:", "  enabled:", "    - deja")
 			return strings.Join(lines, "\n")
 		}
@@ -421,6 +421,13 @@ func stripYAMLComment(v string) string {
 		}
 	}
 	return v
+}
+
+// yamlDocumentEnd reports a `...` line, trailing blanks and a comment
+// allowed: `... # end` ends the document as surely as a bare one, and a block
+// written after it is outside the config (#4348).
+func yamlDocumentEnd(line string) bool {
+	return strings.TrimRight(stripYAMLComment(strings.TrimRight(line, "\r\n")), " \t") == "..."
 }
 
 // hermesYAMLScalar is a list item as a name: no comment, no quotes.

@@ -853,7 +853,10 @@ func showWindowNote(offset, returned, total int) string {
 // reader who found the parent could not get to it and a reader who found the
 // child could not say what asked for it (#1385).
 func printSpawnEdges(w io.Writer, dir string, s model.Session) {
-	if s.Parent != "" {
+	if s.Parent != "" && s.Kind == "fork" {
+		// A Codex fork names the thread it branched from; nothing spawned it.
+		fmt.Fprintf(w, "deja: forked from %s — `deja show %s`\n", digest.Short(s.Parent), pasteSafe(digest.Short(s.Parent)))
+	} else if s.Parent != "" {
 		by := ""
 		if s.Agent != "" {
 			by = " as " + s.Agent

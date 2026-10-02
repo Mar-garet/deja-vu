@@ -164,6 +164,29 @@ func withoutSubagentRuns(ss []model.Session) []model.Session {
 	return out
 }
 
+// codexThreadHasDigest reports whether a Codex thread starting now already
+// carries a start digest. Codex keeps the context a hook added in the thread
+// and replays it on resume, so every `codex resume` put the same digest in
+// front of the model once more, and a fork, which copies its source's history,
+// one more again (#4550). Claude Code drops the old one on resume and is not
+// asked. Read off what deja told the thread, or the thread it was forked from:
+// a thread whose ledger rows have rotated out gets one more, which is the old
+// behaviour.
+func codexThreadHasDigest(dir, source, sessionID, transcript string) bool {
+	if transcript == "" || sessionID == "" || source == "compact" || source == "clear" {
+		return false
+	}
+	head, err := sources.TranscriptHead(transcript, sessionID)
+	if err != nil || head.Harness != "codex" {
+		return false
+	}
+	told := func(id string) bool { return len(alreadyInjected(dir, sessionStartKeyPrefix+id)) > 0 }
+	if source == "resume" && told(sessionID) {
+		return true
+	}
+	return head.Kind == "fork" && head.Parent != "" && told(head.Parent)
+}
+
 // sessionHadDigest reports whether this session has already had its one
 // session-start attempt, for a host that fires that event every turn. Antigravity
 // keeps the same record under a key of its own; this one is for hosts that come
@@ -358,7 +381,12 @@ func runHookContextMode(dir string, plain, once bool) error {
 		// Cursor's sessionStart names the conversation conversation_id
 		// (#3287); the once mark and the audit log key on it.
 		ConversationID string `json:"conversation_id"`
-		CWD            string `json:"cwd"`
+		// The session that spawned this one, when the host knows it: an
+		// opencode task session's digest led with its parent, which is live
+		// and asking through it (#4548).
+		ParentSessionID string `json:"parent_session_id"`
+		TranscriptPath  string `json:"transcript_path"`
+		CWD             string `json:"cwd"`
 		// Cursor leaves cwd empty and names the project here instead.
 		WorkspaceRoots []string `json:"workspace_roots"`
 		// Grok spells all of this in camelCase. See hook_grok.go.
@@ -399,6 +427,15 @@ func runHookContextMode(dir string, plain, once bool) error {
 		}
 		rememberSessionDigest(dir, input.SessionID)
 	}
+	// Claude Code forks with source "fork", and the fork carries its source's
+	// turns, the digest that opened it among them. A second one led with the
+	// source itself, the fork's own opening under another id (#4549).
+	if input.Source == "fork" {
+		return nil
+	}
+	if codexThreadHasDigest(dir, input.Source, input.SessionID, input.TranscriptPath) {
+		return nil
+	}
 	input.WorkspaceRoots = adoptGrokRoots(input.WorkspaceRoots, input.WorkspaceRoot)
 	// The harness tells us which project this is; deja read only the
 	// environment, so a host that sends the payload without exporting
@@ -406,11 +443,15 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// none (#759).
 	// The session asking is left out of its own digest (#4199), except after a
 	// compaction: the lead there points the agent at that session's id.
-	self := input.SessionID
-	if input.Source == "compact" {
-		self = ""
+	var self []string
+	for id := range askerLineage(dir, input.SessionID, input.TranscriptPath, input.ParentSessionID) {
+		if input.Source == "compact" && id == input.SessionID {
+			continue
+		}
+		self = append(self, id)
 	}
-	digest, sessions, raw, taskMatched, withheld, servedIDs, servedProjects := cachedHookDigestFor(dir, hookProjectPath(input.CWD, input.WorkspaceRoots), self)
+	sort.Strings(self)
+	digest, sessions, raw, taskMatched, withheld, servedIDs, servedProjects := cachedHookDigestFor(dir, hookProjectPath(input.CWD, input.WorkspaceRoots), self...)
 	if digest == "" {
 		// No session from this project, which is the usual state in a new
 		// checkout — and exactly where knowing what this machine is missing
@@ -760,13 +801,23 @@ type hookDigestVariant struct {
 }
 
 // servedWithout is what the entry serves to a session that must not see
-// itself, and whether it has that at all.
-func (e hookCacheEntry) servedWithout(exclude string) (hookDigestVariant, bool) {
-	if exclude == "" || !slices.Contains(e.IDs, exclude) {
-		return hookDigestVariant{Digest: e.Digest, Sessions: e.Sessions, Raw: e.Raw, TaskMatched: e.TaskMatched, IDs: e.IDs, Projects: e.Projects}, true
+// itself, and whether it has that at all. The entry holds a variant for one
+// session left out; a caller leaving out two that are both in it builds.
+func (e hookCacheEntry) servedWithout(exclude ...string) (hookDigestVariant, bool) {
+	var in []string
+	for _, id := range exclude {
+		if id != "" && slices.Contains(e.IDs, id) && !slices.Contains(in, id) {
+			in = append(in, id)
+		}
 	}
-	v, ok := e.Without[exclude]
-	return v, ok
+	switch len(in) {
+	case 0:
+		return hookDigestVariant{Digest: e.Digest, Sessions: e.Sessions, Raw: e.Raw, TaskMatched: e.TaskMatched, IDs: e.IDs, Projects: e.Projects}, true
+	case 1:
+		v, ok := e.Without[in[0]]
+		return v, ok
+	}
+	return hookDigestVariant{}, false
 }
 
 func hookCachePath(dir, cwd string) string {
@@ -856,8 +907,10 @@ func cachedHookDigest(dir string) (string, int, int64, []string, int, []string, 
 //
 // exclude is the session asking. A harness whose session-start seam runs
 // after the first message is stored — opencode's system transform — would
-// otherwise be served its own opening prompt as history (#4199).
-func cachedHookDigestFor(dir, fromPayload, exclude string) (string, int, int64, []string, int, []string, []string) {
+// otherwise be served its own opening prompt as history (#4199). It also holds
+// what counts as the asker: the session that spawned it, live and asking
+// through it (#4548).
+func cachedHookDigestFor(dir, fromPayload string, exclude ...string) (string, int, int64, []string, int, []string, []string) {
 	cwd := hookCWD(fromPayload)
 	if recallIsOff() {
 		return "", 0, 0, nil, 0, nil, nil
@@ -879,7 +932,7 @@ func cachedHookDigestFor(dir, fromPayload, exclude string) (string, int, int64, 
 	if b, err := os.ReadFile(p); err == nil {
 		var e hookCacheEntry
 		if json.Unmarshal(b, &e) == nil && e.Digest != "" && e.CWD == cwd && e.Gate == gate {
-			if v, ok := e.servedWithout(exclude); ok {
+			if v, ok := e.servedWithout(exclude...); ok {
 				if time.Since(e.At) >= hookDigestTTL {
 					// Serve stale instantly; a detached self-refresh rebuilds
 					// the cache off the startup path.
@@ -889,7 +942,7 @@ func cachedHookDigestFor(dir, fromPayload, exclude string) (string, int, int64, 
 			}
 		}
 	}
-	if exclude == "" {
+	if !slices.ContainsFunc(exclude, func(id string) bool { return id != "" }) {
 		// The digest goes out now and the resume variants come from the
 		// detached refresh: rendering one per served session here put them
 		// on the startup path of every first start in a project.
@@ -904,7 +957,7 @@ func cachedHookDigestFor(dir, fromPayload, exclude string) (string, int, int64, 
 	// cache is the project's, read by every session that opens in it; one
 	// without the asker would hide that session from the next one, so the
 	// refresh writes it with every variant instead.
-	digest, sessions, raw, taskMatched, withheld, ids, projects := hookDigestResultFor(dir, cwd, exclude)
+	digest, sessions, raw, taskMatched, withheld, ids, projects := hookDigestResultFor(dir, cwd, exclude...)
 	requestHookRefresh(dir, cwd)
 	return digest, sessions, raw, taskMatched, withheld, ids, projects
 }
@@ -992,7 +1045,7 @@ func hookDigestResult(dir string) (string, int, int64, []string, int, []string, 
 // project the call is about, rather than one reading it back out of the
 // environment, where a project deja itself had written stayed for every later
 // call in the process (#2182, #2185).
-func hookDigestResultFor(dir, fromPayload, exclude string) (string, int, int64, []string, int, []string, []string) {
+func hookDigestResultFor(dir, fromPayload string, exclude ...string) (string, int, int64, []string, int, []string, []string) {
 	e := hookDigestBuild(dir, fromPayload, exclude, false)
 	return e.Digest, e.Sessions, e.Raw, e.TaskMatched, e.Withheld, e.IDs, e.Projects
 }
@@ -1000,7 +1053,7 @@ func hookDigestResultFor(dir, fromPayload, exclude string) (string, int, int64, 
 // hookDigestEntryFor is the digest as the cache keeps it: with every session
 // it serves, and as it reads with each of them left out.
 func hookDigestEntryFor(dir, fromPayload string) hookCacheEntry {
-	return hookDigestBuild(dir, fromPayload, "", true)
+	return hookDigestBuild(dir, fromPayload, nil, true)
 }
 
 // withProjectsOf adds the projects of sessions already chosen to a name list,
@@ -1025,7 +1078,7 @@ func withProjectsOf(names []string, ss []model.Session) []string {
 // cache hit from a rebuild.
 var hookDigestRenders atomic.Int64
 
-func hookDigestBuild(dir, fromPayload, exclude string, variants bool) (entry hookCacheEntry) {
+func hookDigestBuild(dir, fromPayload string, exclude []string, variants bool) (entry hookCacheEntry) {
 	withheld := 0
 	defer func() { _ = recover() }()
 	trace := os.Getenv("DEJA_TRACE") == "1"
@@ -1157,9 +1210,9 @@ func hookDigestBuild(dir, fromPayload, exclude string, variants bool) (entry hoo
 	}
 	// Each variant works on its own copy: the steps below sort and trim in
 	// place, and the next variant has to start from the order the store gave.
-	render := func(exclude string) hookCacheEntry {
+	render := func(exclude []string) hookCacheEntry {
 		hookDigestRenders.Add(1)
-		ss := slices.DeleteFunc(slices.Clone(ss), func(s model.Session) bool { return exclude != "" && s.ID == exclude })
+		ss := slices.DeleteFunc(slices.Clone(ss), func(s model.Session) bool { return s.ID != "" && slices.Contains(exclude, s.ID) })
 		// A subagent run is the parent's work seen from inside, and what it says
 		// on its own is the process talk a spawned agent produces — "Sending
 		// verdict", "Worktrees cleaned up". Indexing already treats these runs as
@@ -1247,7 +1300,7 @@ func hookDigestBuild(dir, fromPayload, exclude string, variants bool) (entry hoo
 	entry = render(exclude)
 	if variants && entry.Digest != "" {
 		for _, id := range entry.IDs {
-			v := render(id)
+			v := render([]string{id})
 			if entry.Without == nil {
 				entry.Without = map[string]hookDigestVariant{}
 			}
@@ -1315,7 +1368,7 @@ func warmupLooksDead(dir string, now time.Time, stamp int64) bool {
 }
 
 func requestWarmup(dir string) {
-	if os.Getenv("DEJA_WARMUP_SENTINEL") != "" {
+	if os.Getenv("DEJA_WARMUP_SENTINEL") != "" || installBuildsIndex {
 		return
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {

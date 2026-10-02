@@ -208,6 +208,12 @@ func resumeCommand(s model.Session) (string, string, error) {
 	if !resumeIDPattern.MatchString(s.ID) {
 		return "", "", fmt.Errorf("session id %q contains characters deja will not place in a command", digest.Short(s.ID))
 	}
+	// A Kimi or Qwen sub-agent log is a session in deja under
+	// DEJA_INCLUDE_SUBAGENTS=1, but neither client opens one on its own; the
+	// id deja gives it is one they have never seen (#4483).
+	if s.Kind == "subagent" && (s.Harness == "kimi" || s.Harness == "qwen") && s.Parent != "" {
+		return "", "", fmt.Errorf("session %s is a sub-agent run, which %s does not reopen on its own — `deja resume %s` reopens the session that spawned it", digest.Short(s.ID), s.Harness, s.Parent)
+	}
 	switch s.Harness {
 	case "claude":
 		return claudeProjectDirFor(s), "claude --resume " + s.ID, nil

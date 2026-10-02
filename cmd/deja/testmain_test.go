@@ -45,6 +45,13 @@ func TestMain(m *testing.M) {
 		"DEJA_ANTIGRAVITY_ROOT": filepath.Join(root, "antigravity"),
 		"DEJA_GROK_ROOT":        filepath.Join(root, "grok"),
 		"DEJA_QWEN_ROOT":        filepath.Join(root, "qwen"),
+		// An opencode on PATH is asked its version, which writes its log under
+		// the test's home and decides which plugin shape doctor calls current:
+		// three tests went red only where opencode was installed (#4155). "0"
+		// reads as no opencode; a test that wants a major sets its own.
+		"DEJA_OPENCODE_MAJOR": "0",
+		// Copilot's own switch moves install and the session root (#4240).
+		"COPILOT_HOME": "",
 	}
 	// The version lookup is the one thing in this package that talks to the
 	// internet, and only one test ever replaced it — so a full run asked

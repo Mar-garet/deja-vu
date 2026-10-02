@@ -342,8 +342,9 @@ func buildCommandFailsFromIndex(dir string, prior *commandFailState, redo map[st
 const (
 	commandFailStateFile = "commandfails-state.gob"
 	// commandFailStateVersion changes with what the state means; a state of
-	// another version is walked again rather than read.
-	commandFailStateVersion = 1
+	// another version is walked again rather than read. 2: a pending run ends
+	// on any other turn, as in a full build (#4309).
+	commandFailStateVersion = 2
 )
 
 func commandFailStatePath(dir string) string { return filepath.Join(dir, commandFailStateFile) }
@@ -385,7 +386,9 @@ func carriedCommandFailState(dir string, old Manifest, tmp, generation string, r
 		return nil
 	}
 	if fi.Size() > st.Size {
-		if _, err := eachCommandAndOutputFrom(path, old, st.Size, nil, func(r Record) { redo[r.Key] = true }); err != nil {
+		// Another turn in the tail ends the session's pending run, as the
+		// walk would have; a command or an output reads the session again.
+		if _, err := eachCommandAndOutputFrom(path, old, st.Size, nil, func(r Record) { redo[r.Key] = true }, st.Acc.stop); err != nil {
 			return nil
 		}
 	}
@@ -424,7 +427,7 @@ func commandFailsFromIndex(dir string, prior *commandFailState, redo map[string]
 				return
 			}
 			st.Acc.output(r.Key, r.Text)
-		})
+		}, st.Acc.stop)
 		if err != nil {
 			return err
 		}
@@ -449,8 +452,12 @@ func commandFailsFromIndex(dir string, prior *commandFailState, redo map[string]
 // eachCommandAndOutputFrom streams the command and tool output records of the
 // sessions m holds, in the order they were written: all of them from byte
 // from on, and before it only the sessions in redo. The rest are skipped on
-// their prefix, undecoded. It returns where the last whole record ended.
-func eachCommandAndOutputFrom(path string, m Manifest, from int64, redo map[string]bool, fn func(Record)) (int64, error) {
+// their prefix, undecoded. Each record of another role is handed to stop by
+// its key alone: a full build ends a pending run on any other turn, and a walk
+// that never saw the prompt or the Read between a clean `make build` and a
+// failing log laid the log at the build (#4309). It returns where the last
+// whole record ended.
+func eachCommandAndOutputFrom(path string, m Manifest, from int64, redo map[string]bool, fn func(Record), stop func(key string)) (int64, error) {
 	f, err := openIndexFile(path)
 	if err != nil {
 		return 0, err
@@ -485,13 +492,14 @@ func eachCommandAndOutputFrom(path string, m Manifest, from int64, redo map[stri
 		at := off
 		off += int64(len(hdr)) + int64(size)
 		key, role, ok := recordRoleIn(payload, t)
-		if !ok || (role != roleCommand && role != roleToolOutput) {
-			continue
-		}
-		if at < from && !redo[key] {
+		if !ok || (at < from && !redo[key]) {
 			continue
 		}
 		if _, ok := m.Sessions[key]; !ok {
+			continue
+		}
+		if role != roleCommand && role != roleToolOutput {
+			stop(key)
 			continue
 		}
 		rec, err := decodeRecord(payload, t)
