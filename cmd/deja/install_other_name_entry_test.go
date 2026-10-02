@@ -75,3 +75,45 @@ func TestInstallSeesDejaUnderAnotherName(t *testing.T) {
 		})
 	}
 }
+
+// A filesystem server told to serve ~/code/deja has the binary's name as its
+// last argument and is not deja. Install took it over as deja's entry and
+// wrote deja's command over it.
+func TestInstallLeavesAServerThatOnlyServesADejaPath(t *testing.T) {
+	const files = `{"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/me/code/deja"]}`
+	for _, c := range []struct {
+		name, seed string
+		path       func() string
+		write      func(path, exe string, uninstall bool) (installResult, error)
+	}{
+		{"vscode", `{"servers": {"files": ` + files + `}}` + "\n",
+			func() string { return filepath.Join(vsCodeDefaultUserDir(), "mcp.json") }, installVSCodeMCPAt},
+		{"prime", `{"mcpServers": {"files": ` + files + `}}` + "\n", primeSettingsPath, installPrimeMCPAt},
+		{"amp", `{"amp.mcpServers": {"files": ` + files + `}}` + "\n", sources.AmpSettingsFile, installAmpMCPAt},
+		{"zcode", `{"mcp": {"servers": {"files": ` + files + `}}}` + "\n", zcodeConfigPath, zcodeServerAt},
+		{"claude-code", `{"mcpServers": {"files": ` + files + `}}` + "\n", sources.ClaudeJSONPath,
+			func(_, exe string, uninstall bool) (installResult, error) { return installClaude(exe, uninstall) }},
+		{"claude-code-jsonc", "{\n  // mine\n  \"mcpServers\": {\"files\": " + files + "}\n}\n", sources.ClaudeJSONPath,
+			func(_, exe string, uninstall bool) (installResult, error) { return installClaude(exe, uninstall) }},
+		{"codex", "[mcp_servers.files]\ncommand = \"npx\"\nargs = [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"/home/me/code/deja\"]\n",
+			func() string { return filepath.Join(sources.CodexHome(), "config.toml") },
+			func(_, exe string, uninstall bool) (installResult, error) { return installCodex(exe, uninstall) }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			hermeticEnv(t)
+			p := c.path()
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, []byte(c.seed), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.write(p, filepath.Join(t.TempDir(), "deja"), false); err != nil {
+				t.Fatal(err)
+			}
+			if got, _ := os.ReadFile(p); !strings.Contains(string(got), "server-filesystem") {
+				t.Errorf("the filesystem server was taken over as deja's entry:\n%s", got)
+			}
+		})
+	}
+}

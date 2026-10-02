@@ -2751,7 +2751,12 @@ func foreignTOMLDejaKeys(s string) []string {
 	return keys
 }
 
+// tomlBlockRunsDeja is entryIsDejaServer for a [mcp_servers.X] table: deja as
+// the command, or deja in the args beside `mcp`. A filesystem server serving
+// ~/code/deja ends its args with the binary's name too, and was adopted and
+// overwritten with deja's command (#4556).
 func tomlBlockRunsDeja(lines []string, block tomlMCPBlock) bool {
+	command, inArgs, hasArgs, mcp := false, false, false, false
 	for i := block.start + 1; i < block.end; i++ {
 		key, value, ok := tomlLineKeyValue(lines[i])
 		if !ok {
@@ -2761,19 +2766,19 @@ func tomlBlockRunsDeja(lines []string, block tomlMCPBlock) bool {
 		case "command":
 			for _, value := range tomlStringValues(value) {
 				if commandIsDeja(value) {
-					return true
+					command = true
 				}
 			}
 		case "args":
+			hasArgs = true
 			value, i = tomlArrayValue(lines, i, block.end, value)
 			for _, value := range tomlStringValues(value) {
-				if commandIsDeja(value) {
-					return true
-				}
+				inArgs = inArgs || commandIsDeja(value)
+				mcp = mcp || value == "mcp"
 			}
 		}
 	}
-	return false
+	return (command && (!hasArgs || mcp)) || (inArgs && mcp)
 }
 
 func tomlLineKeyValue(line string) (string, string, bool) {
@@ -2995,8 +3000,10 @@ func dejaEntryKey(m map[string]any) string {
 		}
 	}
 	sort.Strings(keys)
+	// Deja's server, not any entry with the binary's name in it: a filesystem
+	// server serving ~/code/deja was taken over and lost its command (#4556).
 	for _, key := range keys {
-		if mcpEntryRunsDeja(m[key]) {
+		if entry, ok := m[key].(map[string]any); ok && entryIsDejaServer(entry) {
 			return key
 		}
 	}
