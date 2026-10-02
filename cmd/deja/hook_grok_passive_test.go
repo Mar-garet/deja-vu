@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,14 +57,16 @@ func TestGrokSessionStartAndPromptClaimNothingGrokDrops(t *testing.T) {
 	}
 	t.Chdir(cwd)
 	log := strings.TrimSuffix(dir, string(filepath.Separator)) + ".injections.jsonl"
+	// Quoted as JSON: a Windows cwd's backslashes are not valid escapes.
+	cwdJSON, _ := json.Marshal(cwd)
 
 	start := func(id string) string {
-		withHookStdin(t, `{"hookEventName":"session_start","sessionId":"`+id+`","cwd":"`+cwd+`","source":"new","hook_event_name":"SessionStart","session_id":"`+id+`"}`)
+		withHookStdin(t, `{"hookEventName":"session_start","sessionId":"`+id+`","cwd":`+string(cwdJSON)+`,"source":"new","hook_event_name":"SessionStart","session_id":"`+id+`"}`)
 		return captureStdout(t, func() { _ = runHookContext(dir, false) })
 	}
 	prompt := func(id string) string {
 		var out bytes.Buffer
-		in := strings.NewReader(`{"hookEventName":"user_prompt_submit","sessionId":"` + id + `","cwd":"` + cwd + `","prompt":"what did we change in the retry_loop in fetcher","hook_event_name":"UserPromptSubmit","session_id":"` + id + `"}`)
+		in := strings.NewReader(`{"hookEventName":"user_prompt_submit","sessionId":"` + id + `","cwd":` + string(cwdJSON) + `,"prompt":"what did we change in the retry_loop in fetcher","hook_event_name":"UserPromptSubmit","session_id":"` + id + `"}`)
 		if err := runHookPrompt(dir, in, &out); err != nil {
 			t.Fatal(err)
 		}
