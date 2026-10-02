@@ -150,14 +150,14 @@ func clientMCPDenied(name string) string {
 			}
 		}
 	case "claude-code":
-		projects := asMap(jsonAt(readJSONConfig(sources.ClaudeJSONPath()), "projects"))
-		for _, dir := range doctorProjectDirs() {
+		if dir := doctorProjectDir(true); dir != "" {
+			projects := asMap(jsonAt(readJSONConfig(sources.ClaudeJSONPath()), "projects"))
 			if listHasDeja(jsonAt(asMap(projects[dir]), "disabledMcpServers")) {
 				return mcpOffNote(name, "`disabledMcpServers` for "+reportPath(dir)+" lists deja", sources.ClaudeJSONPath())
 			}
 		}
 	case "cursor":
-		for _, dir := range doctorProjectDirs() {
+		if dir := doctorProjectDir(false); dir != "" {
 			p := filepath.Join(cursorDataDir(), "projects", cursorProjectSlug(dir), "mcp-disabled.json")
 			if b, err := readConfig(p); err == nil && listHasDeja(parseJSONValue(b)) {
 				return mcpOffNote(name, "deja is listed for this project", p)
@@ -188,7 +188,13 @@ func clientHooksOff(name string) string {
 		// What `gemini extensions disable deja` writes: rules over the
 		// workspace path, the last one that matches winning.
 		p = filepath.Join(sources.GeminiHome(), "extensions", "extension-enablement.json")
-		if cwd, err := os.Getwd(); err == nil && !geminiExtensionEnabled(jsonStrings(jsonAt(readJSONConfig(p), "deja", "overrides")), cwd) {
+		if cwd, err := os.Getwd(); err == nil {
+			if real, err := filepath.EvalSymlinks(cwd); err == nil {
+				cwd = real
+			}
+			if geminiExtensionEnabled(jsonStrings(jsonAt(readJSONConfig(p), "deja", "overrides")), cwd) {
+				return ""
+			}
 			return pluginOffNote(name, "deja's extension is disabled for this directory", p)
 		}
 	case "codex-hook":
@@ -303,18 +309,59 @@ func pluginOffNote(client, what, p string) string {
 	return "switched off: " + what + " in " + reportPath(p) + " — " + client + " will not run deja's recall"
 }
 
-// doctorProjectDirs is the directory doctor runs in and the repository it is
-// in, the two a client keys its per-project switches by.
-func doctorProjectDirs() []string {
+// doctorProjectDir is the directory a client keys its per-project switches
+// by when it starts where doctor runs: the real path, then the nearest
+// directory with a .git (cursor-agent), or for a linked worktree the main
+// repository's (claude-code). Never the subdirectory itself inside a repo:
+// an entry there is one the client does not read.
+func doctorProjectDir(mainRepo bool) string {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil
+		return ""
 	}
-	dirs := []string{cwd}
-	if root := gitRootOf(filepath.Join(cwd, "x")); root != "" && root != cwd {
-		dirs = append(dirs, root)
+	if real, err := filepath.EvalSymlinks(cwd); err == nil {
+		cwd = real
 	}
-	return dirs
+	root := gitRootOf(filepath.Join(cwd, "x"))
+	if root == "" {
+		return cwd
+	}
+	if mainRepo {
+		if main := worktreeMainRoot(root); main != "" {
+			return main
+		}
+	}
+	return root
+}
+
+// worktreeMainRoot is the main checkout of a linked worktree at root: its
+// .git file names the worktree's git dir, whose commondir is the main .git.
+// "" when root is not a linked worktree.
+func worktreeMainRoot(root string) string {
+	b, err := os.ReadFile(filepath.Join(root, ".git"))
+	if err != nil {
+		return ""
+	}
+	gitdir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
+	if !ok {
+		return ""
+	}
+	gitdir = strings.TrimSpace(gitdir)
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(root, gitdir)
+	}
+	c, err := os.ReadFile(filepath.Join(gitdir, "commondir"))
+	if err != nil {
+		return ""
+	}
+	common := strings.TrimSpace(string(c))
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(gitdir, common)
+	}
+	if filepath.Base(common) != ".git" {
+		return ""
+	}
+	return filepath.Dir(common)
 }
 
 // cursorDataDir and cursorProjectSlug are cursor-agent's: CURSOR_DATA_DIR or

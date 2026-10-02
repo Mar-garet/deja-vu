@@ -167,7 +167,8 @@ func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
 			}},
 		{name: "claude project", target: "claude-code", section: "mcp", row: "claude-code", key: "disabledMcpServers",
 			off: func(t *testing.T) {
-				setJSON(sources.ClaudeJSONPath(), []string{"projects", cwd, "disabledMcpServers"}, []any{"deja"})(t)
+				// The repository's main root, which TestPerProjectListsAreReadForTheDirectoryTheClientKeys pins.
+				setJSON(sources.ClaudeJSONPath(), []string{"projects", doctorProjectDir(true), "disabledMcpServers"}, []any{"deja"})(t)
 			}},
 		{name: "cursor project", target: "cursor", section: "mcp", row: "cursor", key: "mcp-disabled.json",
 			off: func(t *testing.T) {
@@ -539,4 +540,90 @@ func TestOpencodeToolsLastMatchingKeyWins(t *testing.T) {
 			t.Errorf("%s: switched off = %v, want %v", body, got, off)
 		}
 	}
+}
+
+// claude-code keys its per-project lists by the repository's main root and
+// cursor-agent by the nearest root with a .git, both by the real path; a
+// subdirectory's own entry is one neither reads (#4468).
+func TestPerProjectListsAreReadForTheDirectoryTheClientKeys(t *testing.T) {
+	write := func(t *testing.T, p, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	claudeOff := func(t *testing.T, dir string) {
+		b, _ := json.Marshal(map[string]any{"projects": map[string]any{dir: map[string]any{"disabledMcpServers": []string{"deja"}}}})
+		write(t, sources.ClaudeJSONPath(), string(b))
+	}
+	cursorOff := func(t *testing.T, dir string) {
+		write(t, filepath.Join(cursorDataDir(), "projects", cursorProjectSlug(dir), "mcp-disabled.json"), `["deja"]`)
+	}
+	setup := func(t *testing.T) (main, sub, wt string) {
+		hermeticEnv(t)
+		base, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		main = filepath.Join(base, "repo")
+		sub = filepath.Join(main, "pkg")
+		if err := os.MkdirAll(filepath.Join(main, ".git", "worktrees", "wt"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(main, ".git", "worktrees", "wt", "commondir"), "../..\n")
+		wt = filepath.Join(base, "wt")
+		write(t, filepath.Join(wt, ".git"), "gitdir: "+filepath.Join(main, ".git", "worktrees", "wt")+"\n")
+		return main, sub, wt
+	}
+	cases := []struct {
+		name   string
+		client string
+		run    func(t *testing.T, main, sub, wt string) string // the dir doctor runs in
+		off    bool
+	}{
+		{"claude subdir entry", "claude-code", func(t *testing.T, main, sub, wt string) string { claudeOff(t, sub); return sub }, false},
+		{"claude repo entry from subdir", "claude-code", func(t *testing.T, main, sub, wt string) string { claudeOff(t, main); return sub }, true},
+		{"claude main entry from worktree", "claude-code", func(t *testing.T, main, sub, wt string) string { claudeOff(t, main); return wt }, true},
+		{"claude worktree entry", "claude-code", func(t *testing.T, main, sub, wt string) string { claudeOff(t, wt); return wt }, false},
+		{"cursor subdir entry", "cursor", func(t *testing.T, main, sub, wt string) string { cursorOff(t, sub); return sub }, false},
+		{"cursor repo entry from subdir", "cursor", func(t *testing.T, main, sub, wt string) string { cursorOff(t, main); return sub }, true},
+		{"cursor worktree entry", "cursor", func(t *testing.T, main, sub, wt string) string { cursorOff(t, wt); return wt }, true},
+		{"claude real path through a link", "claude-code", func(t *testing.T, main, sub, wt string) string {
+			claudeOff(t, main)
+			link := filepath.Join(filepath.Dir(main), "link")
+			if err := os.Symlink(main, link); err != nil {
+				t.Skip(err)
+			}
+			return link
+		}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			main, sub, wt := setup(t)
+			t.Chdir(c.run(t, main, sub, wt))
+			if got := clientMCPDenied(c.client) != ""; got != c.off {
+				t.Errorf("switched off = %v, want %v (%q)", got, c.off, clientMCPDenied(c.client))
+			}
+		})
+	}
+	// Gemini matches its extension rules against the real path too.
+	t.Run("gemini extension rule through a link", func(t *testing.T) {
+		main, _, _ := setup(t)
+		link := filepath.Join(filepath.Dir(main), "link")
+		if err := os.Symlink(main, link); err != nil {
+			t.Skip(err)
+		}
+		b, _ := json.Marshal(map[string]any{"deja": map[string]any{"overrides": []string{"!" + main + "/*"}}})
+		write(t, filepath.Join(sources.GeminiHome(), "extensions", "extension-enablement.json"), string(b))
+		t.Chdir(link)
+		if clientHooksOff("gemini") == "" {
+			t.Error("a rule over the real path did not reach a directory entered through a link")
+		}
+	})
 }
