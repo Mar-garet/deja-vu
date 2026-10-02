@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
@@ -55,6 +56,47 @@ func installPiShapedExtension(agentDir, exe string, uninstall bool) (installResu
 	next := []byte(piExtensionTS(exe))
 	a, err := writeIfChanged(path, old, next)
 	return installResult{Path: path, Action: a}, err
+}
+
+// installPiMCP writes the server into ~/.pi/agent/mcp.json. pi has no MCP of
+// its own; that file is read by the pi-mcp-adapter package, so without it in
+// pi's packages the entry is a file nothing reads, and install says so (#4583).
+func installPiMCP(exe string, uninstall bool) (installResult, error) {
+	r, err := installMCPJSON(filepath.Join(sources.PiConfigDir(), "mcp.json"), exe, uninstall)
+	if err != nil || uninstall || piMCPAdapterInstalled() {
+		return r, err
+	}
+	note := piNoAdapterNote
+	if r.Note != "" {
+		note = r.Note + "; " + note
+	}
+	r.Note = note
+	return r, nil
+}
+
+const piNoAdapterNote = "pi reads this file only through the pi-mcp-adapter package — `pi install npm:pi-mcp-adapter`"
+
+// piMCPAdapterInstalled reports whether pi loads pi-mcp-adapter: a package
+// source naming it in the user's settings.json or the project's. pi takes a
+// source as a string or as {source: …}, from npm, git or a local path.
+func piMCPAdapterInstalled() bool {
+	files := []string{filepath.Join(sources.PiConfigDir(), "settings.json")}
+	if cwd, err := os.Getwd(); err == nil {
+		files = append(files, filepath.Join(cwd, ".pi", "settings.json"))
+	}
+	for _, p := range files {
+		pkgs, _ := jsonAt(readJSONConfig(p), "packages").([]any)
+		for _, pkg := range pkgs {
+			src, _ := pkg.(string)
+			if m, ok := pkg.(map[string]any); ok {
+				src, _ = m["source"].(string)
+			}
+			if strings.Contains(src, "pi-mcp-adapter") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func piExtensionTS(exe string) string {

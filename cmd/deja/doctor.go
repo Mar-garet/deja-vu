@@ -1408,6 +1408,13 @@ func doctorMCP(w io.Writer) {
 		if c.name == "cherrystudio" && doctorCherryStudioMCP(w, status, c.path) {
 			continue
 		}
+		// pi has no MCP of its own, and the file is read only by the adapter
+		// package: declared there without it, the server never starts (#4583).
+		if status == "wired" && c.name == "pi" && !piMCPAdapterInstalled() {
+			fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", c.name, "no adapter", guidanceStatus(guidanceHarness(c.name)), reportPath(c.path))
+			fmt.Fprintf(w, "  %-12s %s\n", "", piNoAdapterNote)
+			continue
+		}
 		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", c.name, status, guidanceStatus(guidanceHarness(c.name)), reportPath(c.path))
 		// One "wired" can be two registrations: a hand add under another name
 		// — the project is called deja-vu, after all — plus the `deja` a later

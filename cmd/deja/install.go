@@ -937,7 +937,7 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 	case "hermes-auto":
 		return installHermesAuto(exe, uninstall)
 	case "pi":
-		return installMCPJSON(filepath.Join(sources.PiConfigDir(), "mcp.json"), exe, uninstall)
+		return installPiMCP(exe, uninstall)
 	case "pi-auto":
 		return installPiAuto(exe, uninstall)
 	case "omp":
@@ -1106,7 +1106,7 @@ func installHermesAuto(exe string, uninstall bool) (installResult, error) {
 }
 
 func installPiAuto(exe string, uninstall bool) (installResult, error) {
-	mcp, err := installMCPJSON(filepath.Join(sources.PiConfigDir(), "mcp.json"), exe, uninstall)
+	mcp, err := installPiMCP(exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
