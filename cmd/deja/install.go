@@ -849,6 +849,17 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 	case "kimi-auto":
 		// Both halves in the result: the report is what says which files were
 		// touched, and this one wrote mcp.json without ever naming it (#3254).
+		// The hooks' refusal is asked first, so a refused target writes nothing.
+		if !uninstall {
+			path := filepath.Join(sources.KimiConfigDir(), "config.toml")
+			old, err := readConfig(path)
+			if err != nil {
+				return installResult{}, err
+			}
+			if err := tomlInlineKey(lfText(old), "hooks", "[[hooks]]"); err != nil {
+				return installResult{}, configParseError(path, err)
+			}
+		}
 		mcp, err := installMCPJSON(filepath.Join(sources.KimiConfigDir(), "mcp.json"), exe, uninstall)
 		if err != nil {
 			return installResult{}, err
@@ -2485,6 +2496,26 @@ func tomlHeadersClose(text string) error {
 	return nil
 }
 
+// tomlInlineKey refuses a config whose top level gives the key its whole value
+// inline — `mcp_servers = { mine = {…} }`, `hooks = []`. The table deja appends
+// for the same key then defines it a second time, which TOML forbids: codex
+// stopped loading its config at all, and kimi and grok refused the file (#4554).
+// Dotted keys (`mcp_servers.mine.command = …`) are tables, and a header may
+// extend them.
+func tomlInlineKey(text, key, header string) error {
+	for i, line := range strings.Split(text, "\n") {
+		code := tomlCode(line)
+		if strings.HasPrefix(code, "[") {
+			return nil
+		}
+		k, _, ok := strings.Cut(code, "=")
+		if ok && strings.Trim(strings.TrimSpace(k), `"'`) == key {
+			return fmt.Errorf("line %d sets %s inline, and the %s table deja adds would define it twice — write it as %s tables or add deja by hand", i+1, key, header, header)
+		}
+	}
+	return nil
+}
+
 type tomlMCPBlock struct {
 	key        string
 	start, end int
@@ -2502,6 +2533,11 @@ func installTOML(path, block string, uninstall bool) (installResult, error) {
 	// named deja's lines (#3576).
 	if err := tomlHeadersClose(text); err != nil {
 		return installResult{}, configParseError(path, err)
+	}
+	if !uninstall {
+		if err := tomlInlineKey(text, "mcp_servers", "[mcp_servers.deja]"); err != nil {
+			return installResult{}, configParseError(path, err)
+		}
 	}
 	blocks := tomlMCPBlocks(text)
 	hasDeja := false
