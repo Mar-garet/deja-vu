@@ -14,8 +14,8 @@ import (
 // DeepSeek Harness (`dsh`) keeps one append-only log per session under
 // $DSH_HOME/sessions/<workspace-slug>/session-<uuid>/. The log was
 // session.jsonl.zstd when this reader was written; dsh has since moved to
-// session.v3.jsonl.zstd with the same records, and a session directory can keep
-// a header-only file under the old name beside its v3 log. The
+// session.v3.jsonl.zstd and then session.v4.jsonl.zstd, migrating a session
+// into the new name and leaving the old file beside it. The
 // file is a JSONL stream written as consecutive zstd frames by default, with
 // raw lines available as a configuration; both are read here, chosen by the
 // extension the harness wrote.
@@ -48,7 +48,8 @@ import (
 // than as an error.
 //
 // Tool output is its own event, `tool/result`, whose content nests a
-// tool-result block around the text.
+// tool-result block around the text. From v4 the message is the result itself:
+// role "tool", the text blocks as its content, isError on the message.
 //
 // Verified against dsh 0.1.1-rc.2 driven by a local model, over sessions that
 // answered, called a tool, and failed before answering.
@@ -69,28 +70,96 @@ func DeepSeekRoot() string {
 	return EnvPath("DEJA_DEEPSEEK_ROOT", filepath.Join(DSHHome(), "sessions"))
 }
 
-// deepSeekLogNames is every name dsh gives a session log. Discovery and the
-// incremental index both match on this one list, so a new name cannot reach
-// one of them and miss the other.
-var deepSeekLogNames = []string{
-	"session.jsonl", "session.jsonl.zstd",
-	"session.v3.jsonl", "session.v3.jsonl.zstd",
+// deepSeekLogGeneration reads the format generation a session log's name
+// carries, the way dsh names them: session.jsonl is generation 0 and every
+// later one is session.vN.jsonl, either with .zstd when framed. The walk and
+// the incremental kind both use it, and it is open-ended because dsh's is: a
+// v4 log was skipped while the list here stopped at v3 (#4600).
+func deepSeekLogGeneration(p string) (int, bool) {
+	name := strings.TrimSuffix(filepath.Base(p), ".zstd")
+	if name == "session.jsonl" {
+		return 0, true
+	}
+	rest, ok := strings.CutPrefix(name, "session.v")
+	digits, ok2 := strings.CutSuffix(rest, ".jsonl")
+	if !ok || !ok2 || digits == "" || digits[0] == '0' || len(digits) > 9 {
+		return 0, false
+	}
+	n := 0
+	for _, c := range digits {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
 }
 
 func isDeepSeekLog(p string) bool {
-	for _, name := range deepSeekLogNames {
-		if hasBase(p, name) {
-			return true
+	_, ok := deepSeekLogGeneration(p)
+	return ok
+}
+
+// DeepSeekLogSupersedes reports whether newer, a log deepSeekLogs listed, is
+// what it chose over older in the same session directory: a later generation,
+// or the same one in the encoding written last. The index uses it to tell a
+// log left behind by a migration, still on disk and no longer listed, from a
+// transcript a client deleted (#4600).
+func DeepSeekLogSupersedes(newer, older string) bool {
+	if newer == older || filepath.Dir(newer) != filepath.Dir(older) {
+		return false
+	}
+	n, ok := deepSeekLogGeneration(newer)
+	o, ok2 := deepSeekLogGeneration(older)
+	return ok && ok2 && n >= o
+}
+
+// deepSeekLogs walks root for session logs and keeps the newest generation in
+// each session directory. dsh migrates a session it opens into a new
+// generation holding the whole history and leaves the old file untouched, so
+// the old one is a copy frozen at the upgrade: reading it as well listed the
+// session twice, reading it alone lost everything after (#4600). A dsh
+// downgraded after that appends to the old generation again, and those turns
+// wait until a newer dsh migrates them.
+//
+// dsh reads only the encoding it is configured for, so one generation held
+// both raw and framed means the setting changed; the file written last is the
+// one in use.
+func deepSeekLogs(root string) []string {
+	type pick struct {
+		path string
+		gen  int
+		mod  int64
+	}
+	newest := map[string]pick{}
+	var order []string
+	for _, p := range walkFiles(root, isDeepSeekLog) {
+		n, _ := deepSeekLogGeneration(p)
+		var mod int64
+		if fi, err := os.Stat(p); err == nil {
+			mod = fi.ModTime().UnixNano()
+		}
+		d := filepath.Dir(p)
+		cur, ok := newest[d]
+		if !ok {
+			order = append(order, d)
+		}
+		if !ok || n > cur.gen || (n == cur.gen && (mod > cur.mod || (mod == cur.mod && p > cur.path))) {
+			newest[d] = pick{p, n, mod}
 		}
 	}
-	return false
+	out := make([]string, 0, len(order))
+	for _, d := range order {
+		out = append(out, newest[d].path)
+	}
+	return out
 }
 
 // DeepSeekSessionFiles leaves out Cherry Studio's dsh store. Cherry runs dsh
 // with DSH_HOME pointed into its own data dir, so a deja it starts inherits that
 // root and listed those logs under both harnesses (#4342).
 func DeepSeekSessionFiles() []string {
-	files := walkFiles(DeepSeekRoot(), isDeepSeekLog)
+	files := deepSeekLogs(DeepSeekRoot())
 	cherry := cherryStudioDshRoots()
 	if len(cherry) == 0 {
 		return files
@@ -221,7 +290,7 @@ func ParseDeepSeekFile(path string) ([]model.Session, error) {
 			text := deepSeekToolText(msg["content"])
 			source, _ := msg["source"].(map[string]any)
 			id, _ := source["callId"].(string)
-			if call := calls[id]; call != nil && !deepSeekResultFailed(msg["content"]) {
+			if call := calls[id]; call != nil && !deepSeekResultFailed(msg) {
 				delete(calls, id)
 				s.Messages = append(s.Messages, call.settle(s.Messages, text)...)
 			}
@@ -305,9 +374,13 @@ func deepSeekExitCode(text string) (string, bool) {
 	return "0", true
 }
 
-// deepSeekResultFailed reports whether a tool result is marked an error.
-func deepSeekResultFailed(v any) bool {
-	blocks, _ := v.([]any)
+// deepSeekResultFailed reports whether a tool result is marked an error: on
+// the message from v4, on its tool-result block before that.
+func deepSeekResultFailed(msg map[string]any) bool {
+	if bad, _ := msg["isError"].(bool); bad {
+		return true
+	}
+	blocks, _ := msg["content"].([]any)
 	for _, b := range blocks {
 		block, _ := b.(map[string]any)
 		if bad, _ := block["isError"].(bool); bad {
@@ -433,9 +506,9 @@ func deepSeekPackedTexts(v any) []string {
 	return out
 }
 
-// deepSeekToolText unwraps tool output, which nests one block array inside
-// another: the outer block says which call this answers, the inner one carries
-// the text the tool printed.
+// deepSeekToolText unwraps tool output. Up to v3 it nests one block array
+// inside another: the outer block says which call this answers, the inner one
+// carries the text the tool printed. From v4 the inner blocks are the content.
 func deepSeekToolText(v any) string {
 	blocks, ok := v.([]any)
 	if !ok {
@@ -445,6 +518,13 @@ func deepSeekToolText(v any) string {
 	for _, b := range blocks {
 		block, ok := b.(map[string]any)
 		if !ok {
+			continue
+		}
+		// Only the wrapper and text blocks are what the tool printed. From v4
+		// the blocks sit directly in the message, beside images and the
+		// plugin:* blocks dsh namespaces, whose text is not the output (#4600).
+		typ, _ := block["type"].(string)
+		if typ != "" && typ != "text" && typ != "tool-result" {
 			continue
 		}
 		if text := deepSeekContentText(block["content"]); text != "" {

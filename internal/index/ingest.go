@@ -3803,9 +3803,10 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	// made the session its own second copy, and the append path below, which
 	// takes over once nothing is removed, has no pairing to catch it.
 	arrivedDirs := sessionDirsUnder(changed)
+	superseded := supersededLogs(removed, files)
 	kept := map[string]bool{}
 	for p := range removed {
-		if !deletedFromLiveStore(p) {
+		if superseded[p] || !deletedFromLiveStore(p) {
 			continue
 		}
 		if d := goneSessionDir(p); d != "" && arrivedDirs[filepath.Base(d)] {
@@ -5134,6 +5135,37 @@ func deletedFromLiveStore(p string) bool {
 		return true
 	}
 	return goneSessionDir(p) != ""
+}
+
+// supersededLogs are the removed paths a listed file replaced: an older dsh
+// log generation, still on disk beside the one dsh migrated it into. Keeping
+// it back as a deleted transcript held the session twice and sent the new log
+// down the append path on top of the old records (#4600); left removed, the
+// replacement path drops the old file's records and reads the new one whole.
+func supersededLogs(removed map[string]bool, files map[string]FileState) map[string]bool {
+	out := map[string]bool{}
+	if len(removed) == 0 {
+		return out
+	}
+	byDir := map[string][]string{}
+	for p := range removed {
+		byDir[filepath.Dir(p)] = nil
+	}
+	for p := range files {
+		d := filepath.Dir(p)
+		if _, ok := byDir[d]; ok {
+			byDir[d] = append(byDir[d], p)
+		}
+	}
+	for p := range removed {
+		for _, q := range byDir[filepath.Dir(p)] {
+			if sources.DeepSeekLogSupersedes(q, p) {
+				out[p] = true
+				break
+			}
+		}
+	}
+	return out
 }
 
 // sessionDirsUnder names the session directories the given files sit in.

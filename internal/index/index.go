@@ -647,6 +647,9 @@ import (
 //
 // 60 also: a Kimi Code /btw side question is read from its fork, the
 // question and the answer without main's copied context (#4484).
+//
+// 60 also: a DeepSeek Harness session.v4.jsonl is read, in place of the older
+// log dsh leaves beside it, and a v4 error result keeps its edit out (#4600).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

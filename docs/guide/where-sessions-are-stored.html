@@ -162,7 +162,7 @@
 <tr><td><a href="../registry/copilot.html">Copilot CLI</a></td><td><code>${DEJA_COPILOT_ROOT:-${COPILOT_HOME:-~/.copilot}/session-state}/*/events.jsonl</code></td><td>JSONL, one record per line</td></tr>
 <tr><td><a href="../registry/crush.html">Crush</a></td><td><code>&lt;project&gt;/.crush/crush.db</code></td><td>SQLite database, one per project</td></tr>
 <tr><td><a href="../registry/cursor.html">Cursor</a></td><td><code>~/Library/Application Support/Cursor/User/{globalStorage,workspaceStorage/*}/state.vscdb</code>; the CLI writes <code>~/.cursor/projects/**/agent-transcripts/**/*.jsonl</code></td><td>SQLite key-value store, or JSONL</td></tr>
-<tr><td><a href="../registry/deepseek.html">DeepSeek Harness</a></td><td><code>${DSH_HOME:-~/.dsh}/sessions/*/session-*/session.v3.jsonl.zstd</code></td><td>zstd-compressed JSONL</td></tr>
+<tr><td><a href="../registry/deepseek.html">DeepSeek Harness</a></td><td><code>${DSH_HOME:-~/.dsh}/sessions/*/session-*/session.v4.jsonl.zstd</code></td><td>zstd-compressed JSONL</td></tr>
 <tr><td><a href="../registry/gjc.html">gajae-code</a></td><td><code>${GJC_CODING_AGENT_DIR:-~/.gjc/agent}/sessions/*/*.jsonl</code></td><td>JSONL, one record per line</td></tr>
 <tr><td><a href="../registry/gemini.html">Gemini CLI</a></td><td><code>${GEMINI_CLI_HOME:-~}/.gemini/tmp/*/chats/**/*.{json,jsonl}</code></td><td>JSON or JSONL</td></tr>
 <tr><td><a href="../registry/goose.html">Goose</a></td><td><code>${GOOSE_PATH_ROOT}/data/sessions/sessions.db</code></td><td>SQLite database; older builds JSONL</td></tr>
