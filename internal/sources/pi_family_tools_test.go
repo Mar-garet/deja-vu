@@ -128,6 +128,11 @@ func TestOmpHashlineEdit(t *testing.T) {
 			[]string{"files " + retry + "\n" + jitter, "wrote " + WroteRecord(retry, newLoop)}},
 		{"refused", "[retry.go#1a2b]\nPUT 3.=3:\n+" + newLoop, `{}`, true,
 			[]string{"files " + retry}},
+		// omp takes the path as everything between the brackets less the
+		// tag, so a path with "#" in it or one quoted for its space is a
+		// file too (qxo/IOa in omp's cli).
+		{"hash and quotes", "[src/C#/Retry.cs#1a2b]\nPUT >3:\n+" + newLoop + "\n[\"my proj/jitter.go\"#3c4d]\nCUT 5.=5", `{}`, false,
+			[]string{"files /tmp/proj/src/C#/Retry.cs\n/tmp/proj/my proj/jitter.go", "wrote " + WroteRecord("/tmp/proj/src/C#/Retry.cs", newLoop)}},
 		// gjc's own form is read as before, a TOML section line in its body
 		// included.
 		{"gjc", "§retry.toml\n≔1rq\n[server]\nretry_attempts_before_giving_up = 5", `{}`, false,

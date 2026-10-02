@@ -156,88 +156,6 @@ func (r *piReader) call(id, name string, args map[string]any, applied bool, t ti
 	}
 }
 
-// piEditKeys are the names omp's and gjc's replace mode give the two sides of
-// an edit, mapped onto pi's own.
-var piEditKeys = map[string]string{
-	"old_string": "oldText", "new_string": "newText",
-	"old_text": "oldText", "new_text": "newText",
-}
-
-// piEditModes puts an edit made in omp's or gjc's other modes into pi's own
-// shape, {path, edits:[{oldText, newText}]}, which the dialect reads (#4524).
-// omp's replace takes {path, old_string, new_string} or an edits list of
-// those, gjc's {path, edits:[{old_text, new_text}]}; both patch modes take
-// {path, edits:[{op, diff}]}, where an update's diff is hunks of " ", "-" and
-// "+" lines under "@@" and a create's is the whole file. The call is copied,
-// not changed.
-func piEditModes(args map[string]any) map[string]any {
-	out := make(map[string]any, len(args))
-	for k, v := range args {
-		if pk, ok := piEditKeys[k]; ok {
-			k = pk
-		}
-		out[k] = v
-	}
-	edits, ok := args["edits"].([]any)
-	if !ok {
-		return out
-	}
-	var folded []any
-	for _, e := range edits {
-		em, ok := e.(map[string]any)
-		if !ok {
-			continue
-		}
-		if diff, ok := em["diff"].(string); ok {
-			folded = append(folded, piPatchEdits(str(em["op"]), diff)...)
-			continue
-		}
-		pe := make(map[string]any, len(em))
-		for k, v := range em {
-			if pk, ok := piEditKeys[k]; ok {
-				k = pk
-			}
-			pe[k] = v
-		}
-		folded = append(folded, pe)
-	}
-	out["edits"] = folded
-	return out
-}
-
-// piPatchEdits is one patch-mode entry as pi edits: a hunk's removed lines
-// the replaced side, its added lines the written one, and a created file's
-// diff written whole. A delete writes nothing.
-func piPatchEdits(op, diff string) []any {
-	if op == "create" {
-		return []any{map[string]any{"newText": diff}}
-	}
-	if op != "update" {
-		return nil
-	}
-	var out []any
-	var removed, added []string
-	flush := func() {
-		if len(removed)+len(added) > 0 {
-			out = append(out, map[string]any{"oldText": strings.Join(removed, "\n"), "newText": strings.Join(added, "\n")})
-		}
-		removed, added = nil, nil
-	}
-	for _, l := range strings.Split(diff, "\n") {
-		switch {
-		case strings.HasPrefix(l, "@@"):
-			flush()
-		case strings.HasPrefix(l, "---"), strings.HasPrefix(l, "+++"):
-		case strings.HasPrefix(l, "-"):
-			removed = append(removed, l[1:])
-		case strings.HasPrefix(l, "+"):
-			added = append(added, l[1:])
-		}
-	}
-	flush()
-	return out
-}
-
 // patch records OpenClaw's apply_patch, on beside pi's edit and write for
 // every model: one `input` holding a patch in codex's format, so the files and
 // both sides come out of its headers and lines (#4500).
@@ -293,9 +211,27 @@ func evalText(txt string) string {
 	return *v.Text
 }
 
-// ompHashlineHeader is an omp hashline section header, `[path#TAG]` with a
-// four-hex snapshot tag, or `[path]` (HL_HEADER_RE in @oh-my-pi/hashline).
-var ompHashlineHeader = regexp.MustCompile(`^\s*\[([^#\r\n\]]+)(?:#[0-9a-fA-F]{4})?\]\s*$`)
+// ompHashlineTag is the four-hex snapshot tag that ends an omp section
+// header's path.
+var ompHashlineTag = regexp.MustCompile(`#[0-9a-fA-F]{4}$`)
+
+// ompHashlinePath reads an omp hashline section header, `[path#TAG]`, the
+// way omp does: the path is all between the brackets less the tag, and may
+// itself hold a "#" or be quoted.
+func ompHashlinePath(l string) (string, bool) {
+	l = strings.TrimRight(l, " \t")
+	if len(l) < 2 || l[0] != '[' || l[len(l)-1] != ']' {
+		return "", false
+	}
+	p := strings.TrimSpace(l[1 : len(l)-1])
+	if at := ompHashlineTag.FindStringIndex(p); at != nil {
+		p = p[:at[0]]
+	}
+	if len(p) >= 2 && (p[0] == '"' || p[0] == '\'') && p[len(p)-1] == p[0] {
+		p = p[1 : len(p)-1]
+	}
+	return p, strings.TrimSpace(p) != ""
+}
 
 // hashline reads gjc's edit, which takes one string rather than a path and a
 // span: `§path` starts a file, `≔A..B` replaces the anchored lines, `«A` and
@@ -315,8 +251,8 @@ func (r *piReader) hashline(id, input string, t time.Time) {
 	cur, inOp := "", false
 	for _, l := range strings.Split(input, "\n") {
 		l = strings.TrimRight(l, "\r")
-		if m := ompHashlineHeader.FindStringSubmatch(l); omp && m != nil {
-			if cur, inOp = r.abs(strings.TrimSpace(m[1])), false; cur != "" {
+		if p, ok := ompHashlinePath(l); omp && ok {
+			if cur, inOp = r.abs(p), false; cur != "" {
 				files = append(files, cur)
 			}
 			continue
