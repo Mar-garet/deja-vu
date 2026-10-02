@@ -452,6 +452,9 @@ import (
 //
 // 60 also: a Codex, Copilot CLI or pi-shaped command whose result came a pass
 // after its call carries its exit, and a refused edit is dropped (#4443).
+//
+// 60 also: a Codex session known only from history.jsonl is one session per
+// id, not per line, so a full build derives it from every prompt (#4449).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

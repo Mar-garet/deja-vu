@@ -318,3 +318,16 @@ create table part(id text primary key, message_id text, session_id text, time_cr
 		})
 	}
 }
+
+// A Codex session known only from history.jsonl is one session however many
+// lines it has; the full build kept the derived fields of its last (#4449).
+func TestFullBuildReadsCodexHistorySessionWhole(t *testing.T) {
+	tmp := parityEnv(t, map[string]string{"DEJA_CODEX_ROOT": "codex"})
+	h := filepath.Join(tmp, "codex", "history.jsonl")
+	parityWrite(t, h, `{"session_id":"s1","ts":1784278000,"text":"why does the retry loop spin"}`+"\n", false)
+	inc := filepath.Join(tmp, "inc")
+	parityPass(t, inc, false)
+	parityWrite(t, h, `{"session_id":"s1","ts":1784278100,"text":"and why does the backoff never reset"}`+"\n", true)
+	parityPass(t, inc, false)
+	sameAsRebuild(t, inc)
+}

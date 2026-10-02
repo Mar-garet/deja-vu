@@ -278,7 +278,11 @@ func ParseCodexHistoryFromOffset(path string, offset int64) ([]model.Session, er
 	// per-file pass read the file on its own and kept them, and the session
 	// came out twice-asked and owned by the history line (#4180).
 	rollouts := codexRolloutIDs(filepath.Dir(path))
+	// One session per id, not per line: the full build keeps the row of the
+	// last session it is handed under a key, so a session of two prompts was
+	// derived from its second alone (#4449).
 	var out []model.Session
+	at := map[string]int{}
 	err := scanJSONLFromOffset(path, offset, func(m map[string]any) {
 		id, _ := m["session_id"].(string)
 		txt, _ := m["text"].(string)
@@ -286,7 +290,14 @@ func ParseCodexHistoryFromOffset(path string, offset int64) ([]model.Session, er
 			return
 		}
 		t := parseTimeAny(m["ts"])
-		out = append(out, model.Session{Harness: "codex", ID: id, Project: "history", Path: path, Started: t, Updated: t, Messages: []model.Message{{Role: "user", Text: txt, Time: t}}})
+		i, ok := at[id]
+		if !ok {
+			i = len(out)
+			at[id] = i
+			out = append(out, model.Session{Harness: "codex", ID: id, Project: "history", Path: path})
+		}
+		out[i].Touch(t)
+		out[i].Messages = append(out[i].Messages, model.Message{Role: "user", Text: txt, Time: t})
 	})
 	return out, err
 }
