@@ -65,3 +65,37 @@ func TestInstallPiSaysTheAdapterIsNeeded(t *testing.T) {
 		t.Errorf("install wrote mcp.json without saying pi needs pi-mcp-adapter to read it: %+v", r)
 	}
 }
+
+// pi also loads an extension from a path in settings.json "extensions" and
+// from whatever sits in its extensions/ directory, so an adapter cloned or
+// pointed at that way is installed too.
+func TestPiAdapterFoundOutsidePackages(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(dir string) error
+	}{
+		{"settings extensions", func(dir string) error {
+			return os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"extensions":["/src/pi-mcp-adapter"]}`), 0o644)
+		}},
+		{"extensions dir", func(dir string) error {
+			return os.MkdirAll(filepath.Join(dir, "extensions", "pi-mcp-adapter"), 0o755)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hermeticEnv(t)
+			dir := sources.PiConfigDir()
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if piMCPAdapterInstalled() {
+				t.Fatal("adapter found before it was put there")
+			}
+			if err := tc.setup(dir); err != nil {
+				t.Fatal(err)
+			}
+			if !piMCPAdapterInstalled() {
+				t.Error("pi loads pi-mcp-adapter this way and doctor says it is missing")
+			}
+		})
+	}
+}

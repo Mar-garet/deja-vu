@@ -78,20 +78,30 @@ const piNoAdapterNote = "pi reads this file only through the pi-mcp-adapter pack
 
 // piMCPAdapterInstalled reports whether pi loads pi-mcp-adapter: a package
 // source naming it in the user's settings.json or the project's. pi takes a
-// source as a string or as {source: …}, from npm, git or a local path.
+// source as a string or as {source: …}, from npm, git or a local path. It
+// also loads an extension listed under "extensions" or sitting in an
+// extensions/ directory beside settings.json.
 func piMCPAdapterInstalled() bool {
-	files := []string{filepath.Join(sources.PiConfigDir(), "settings.json")}
+	dirs := []string{sources.PiConfigDir()}
 	if cwd, err := os.Getwd(); err == nil {
-		files = append(files, filepath.Join(cwd, ".pi", "settings.json"))
+		dirs = append(dirs, filepath.Join(cwd, ".pi"))
 	}
-	for _, p := range files {
-		pkgs, _ := jsonAt(readJSONConfig(p), "packages").([]any)
-		for _, pkg := range pkgs {
+	for _, dir := range dirs {
+		cfg := readJSONConfig(filepath.Join(dir, "settings.json"))
+		pkgs, _ := jsonAt(cfg, "packages").([]any)
+		exts, _ := jsonAt(cfg, "extensions").([]any)
+		for _, pkg := range append(pkgs, exts...) {
 			src, _ := pkg.(string)
 			if m, ok := pkg.(map[string]any); ok {
 				src, _ = m["source"].(string)
 			}
 			if strings.Contains(src, "pi-mcp-adapter") {
+				return true
+			}
+		}
+		entries, _ := os.ReadDir(filepath.Join(dir, "extensions"))
+		for _, e := range entries {
+			if strings.Contains(e.Name(), "pi-mcp-adapter") {
 				return true
 			}
 		}
