@@ -48,6 +48,10 @@ var codexHookWiring = []struct{ Event, Sub, Matcher string }{
 	// just lost is the memory recall refuses to send again. Codex fires it with
 	// trigger "auto", the same shape Claude sends.
 	{"PreCompact", "hook-precompact", "manual|auto"},
+	// Codex fires SessionEnd on exit (measured on 0.149.0). Without it the
+	// session just quit kept its live stamp, and the next session's MCP recall
+	// left it out for the rest of the window (#4545, #4210).
+	{"SessionEnd", "hook-session-end", ""},
 }
 
 func installCodexHooks(exe string, uninstall bool) (installResult, error) {

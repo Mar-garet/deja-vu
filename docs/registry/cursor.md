@@ -46,7 +46,7 @@ Each chat also has a `meta.json` beside its `store.db` holding the `cwd` it ran 
 
 ## Wiring
 
-`deja install cursor` adds the server to `${CURSOR_CONFIG_DIR:-~/.cursor}/mcp.json`, writes the shared skill `~/.agents/skills/deja-history/SKILL.md` and the `/deja` command in `commands/deja.md` beside it. `deja install cursor-auto` adds the same plus `hooks.json` entries: `sessionStart` (`deja hook-context`), `beforeSubmitPrompt` (`hook-prompt`, interactive TUI only — headless `-p` skips it), `preToolUse`, `postToolUse` and `preCompact`. Cursor also runs the hooks in `~/.claude/settings.json` and dedupes them against its own by exact command string, so a machine with both wired gets one injection.
+`deja install cursor` adds the server to `${CURSOR_CONFIG_DIR:-~/.cursor}/mcp.json`, writes the shared skill `~/.agents/skills/deja-history/SKILL.md` and the `/deja` command in `commands/deja.md` beside it. `deja install cursor-auto` adds the same plus `hooks.json` entries: `sessionStart` (`deja hook-context`), `beforeSubmitPrompt` (`hook-prompt`, interactive TUI only — headless `-p` skips it), `preToolUse`, `postToolUse`, `preCompact` and `sessionEnd` (`hook-session-end`, so the session you closed is back in the next one's MCP recall). Cursor also runs the hooks in `~/.claude/settings.json` and dedupes them against its own by exact command string, so a machine with both wired gets one injection.
 
 ## Resume
 

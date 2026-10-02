@@ -134,6 +134,8 @@ func TestCodexPluginHooks(t *testing.T) {
 		"UserPromptSubmit": {sub: "hook-prompt", omitMatcher: true},
 		"PreToolUse":       {sub: "hook-tool", matcher: "Bash|apply_patch"},
 		"PreCompact":       {sub: "hook-precompact", matcher: "manual|auto"},
+		// The session just quit is back in the next one's MCP recall (#4545).
+		"SessionEnd": {sub: "hook-session-end", omitMatcher: true},
 	}
 	for event, want := range want {
 		groups, ok := file.Hooks[event]

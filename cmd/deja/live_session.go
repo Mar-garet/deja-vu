@@ -82,8 +82,8 @@ func endSessionLive(dir, id string) {
 	writeLiveSessions(dir, rows)
 }
 
-// runHookSessionEnd is the SessionEnd hook of Claude Code, Gemini CLI and Qwen
-// Code. It says nothing back — none of them reads a reply to it — and it runs even
+// runHookSessionEnd is the SessionEnd hook of Claude Code, Codex, Cursor CLI,
+// Gemini CLI and Qwen Code. It says nothing back — none of them reads a reply to it — and it runs even
 // with recall off: clearing a stamp never hands anyone anything.
 func runHookSessionEnd(dir string, stdin io.Reader) {
 	var input precompactHookInput
