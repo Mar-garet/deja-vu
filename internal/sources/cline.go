@@ -402,13 +402,17 @@ var clineDialect = toolDialect{
 // shared helper: apply_diff carries a SEARCH/REPLACE block, not an
 // old_string. Current Roo adds search_replace, edit_file and edit, which name
 // the file `file_path`, and apply_patch, whose paths are in the patch body
-// (#4419).
+// (#4419). read_file still takes the legacy files[{path, lineRanges}] form
+// (#4531). Kilo Code adds write_file, fast_edit_file under target_file,
+// delete_file and generate_image (#4535).
 var rooDialect = toolDialect{
-	pathKey:    "path",
-	pathKeyAlt: "file_path",
+	pathKey:     "path",
+	pathKeyAlt:  "file_path",
+	pathListKey: "files",
 	pathTools: map[string]bool{"read_file": true, "write_to_file": true, "apply_diff": true,
 		"insert_content": true, "search_and_replace": true, "replace_in_file": true,
-		"search_replace": true, "edit_file": true, "edit": true},
+		"search_replace": true, "edit_file": true, "edit": true,
+		"write_file": true, "fast_edit_file": true, "delete_file": true, "generate_image": true},
 	shellTool: "execute_command",
 	editTools: map[string]bool{},
 }
@@ -427,6 +431,7 @@ func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string, xmlEra 
 	if xmlEra {
 		blocks = rooWithXMLCalls(blocks)
 	}
+	rooFoldTargetFile(blocks)
 	var out []model.Message
 	if IndexToolPaths() {
 		if p := rooResolvePaths(rooPatchPaths(blocks, toolPathsIn(blocks, rooDialect)), workspace); p != "" {
@@ -538,8 +543,40 @@ func clineJoinExits(msgs []model.Message, from int, raw json.RawMessage, d toolD
 			exits.stamp(msgs, id, "", code)
 		} else if code, ok := statusCode(line, "Command executed successfully (exit code ", ")."); ok {
 			exits.stamp(msgs, id, "", code)
+		} else if code, ok := rooExitCode(contentText(m["content"])); ok {
+			exits.stamp(msgs, id, "", code)
 		}
+		// A result answers its call once; an id handed out again belongs to
+		// a later call.
+		delete(exits, id)
 	}
+}
+
+// rooExitCode reads the status Roo's and Kilo Code's execute_command open
+// their result with: "Command executed in terminal within working directory
+// '<dir>'. Exit code: N", or for a failure that sentence ending "Command
+// execution was not successful, …" and "Exit code: N" on the next line. A run
+// whose output went to an artifact opens "Command executed in '<dir>'." the
+// same way (#4530).
+func rooExitCode(text string) (int, bool) {
+	head, rest, _ := strings.Cut(text, "\n")
+	// Kilo Code and older Roo builds put two spaces after "terminal".
+	if tail, ok := strings.CutPrefix(head, "Command executed in terminal "); ok {
+		if !strings.HasPrefix(strings.TrimLeft(tail, " "), "within working directory '") {
+			return 0, false
+		}
+	} else if !strings.HasPrefix(head, "Command executed in '") {
+		return 0, false
+	}
+	at := strings.LastIndex(head, "'. ")
+	if at < 0 {
+		return 0, false
+	}
+	status := head[at+3:]
+	if status == "Command execution was not successful, inspect the cause and adjust as needed." {
+		status, _, _ = strings.Cut(rest, "\n")
+	}
+	return statusCode(status, "Exit code: ", "")
 }
 
 // clineTurnToolOutput is what a turn's tool_result blocks printed, for the
