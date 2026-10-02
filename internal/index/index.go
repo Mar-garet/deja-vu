@@ -390,6 +390,8 @@ import (
 //
 // 60 also: a Crush edit, multiedit or write carries the replaced span and the
 // written lines (#4377).
+// 60 also: an aider session carries the files aider added and edited and the
+// commands it ran, and an /ask question is kept once (#4324, #4325).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

@@ -3435,6 +3435,9 @@ func printSources(dir string) {
 		note += fmt.Sprintf("\texcluded-sessions=%d", excluded)
 	}
 	note += unreadNote("aider")
+	if len(rawAiderSessions) == 0 && !skipAider {
+		note += "\tnote=" + aiderNoHistoryHint
+	}
 	if !skipAider {
 		fmt.Printf("aider\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", aiderLocation, sources.CountSessions(aiderSessions), aiderMessages, humanBytes(aiderSize), aiderRedactions, note)
 	}
