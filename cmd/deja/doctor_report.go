@@ -997,7 +997,8 @@ func collectDoctorMCP() []doctorMCPStatus {
 		// imports from (#4344).
 		if config.name == "cherrystudio" {
 			if known, wired, off, db, missing := cherryStudioAppWiring(); known {
-				row.BinaryMissing = false
+				// The import file's own flags say nothing about the app's copy.
+				row.BinaryMissing, row.SwitchedOff = false, false
 				switch {
 				case off:
 					row.State, row.Path = "disabled", db
