@@ -160,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installing and uninstalling no longer re-sorts the keys of a hook entry you wrote on one line in `~/.claude/settings.json` (or any JSON config deja edits): entries inside a block deja adds to keep their text, so an install followed by an uninstall gives the file back byte for byte (#4167).
 - A Claude Code session run in a directory named with characters outside A–Z and 0–9 (Cyrillic, CJK, accents, spaces) is filed under that directory rather than its parent, so recall in that directory finds it, and `deja resume` cds into it instead of `parent///////`. The index rebuilds once (#4175).
 - A rebuild no longer re-reads all of Cursor's `chats/` for every CLI transcript whose chat is gone from it; 500 such transcripts took 3.6 s and take 6 ms. A chat started later is still found, within two seconds when it shares a folder with an older one (#4226).
+- A Claude Code or Cherry Studio session keeps its PowerShell commands and the notebooks NotebookEdit changed, as commands, files and written lines, and the pre-tool hook speaks before both. The index rebuilds once (#4489).
 
 ## [0.21.4] - 2026-09-29
 

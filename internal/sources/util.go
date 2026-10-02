@@ -595,6 +595,10 @@ type toolDialect struct {
 	// new_string. A dialect whose key is not set records no written side —
 	// nothing wrong, just nothing to attribute from.
 	newKey string
+	// newKeyAlt is a second name for the written text, read beside newKey:
+	// Claude's NotebookEdit writes a cell under `new_source` (#4489). Empty
+	// means newKey alone.
+	newKeyAlt string
 	// editsOldKey and editsNewKey name the same two sides inside each element
 	// of an `edits` array, when they differ from oldKey and newKey: CodeWhale's
 	// edit takes edits[{oldText,newText}] while its legacy edit_file takes
@@ -659,9 +663,24 @@ func (d toolDialect) contentSpanKey() string {
 }
 
 var claudeDialect = toolDialect{
-	pathKey:   "file_path",
-	pathTools: pathTools,
-	shellTool: "Bash",
+	pathKey:    "file_path",
+	pathKeyAlt: "notebook_path",
+	pathTools:  pathTools,
+	shellTools: claudeShellTools,
+	newKeyAlt:  "new_source",
+}
+
+// callPath is the file one call names, under the dialect's key or its
+// second name.
+func (d toolDialect) callPath(in map[string]any) string {
+	if p, _ := in[d.pathKey].(string); p != "" {
+		return p
+	}
+	if d.pathKeyAlt == "" {
+		return ""
+	}
+	p, _ := in[d.pathKeyAlt].(string)
+	return p
 }
 
 func toolPart(it any, d toolDialect) (name string, in map[string]any, ok bool) {
@@ -714,13 +733,8 @@ func toolPathsIn(v any, d toolDialect) string {
 // read_files takes `files`, an array whose elements each name a path — and
 // reading only the scalar key indexed none of those.
 func toolPathStrings(in map[string]any, d toolDialect) []string {
-	if p, _ := in[d.pathKey].(string); p != "" {
+	if p := d.callPath(in); p != "" {
 		return []string{p}
-	}
-	if d.pathKeyAlt != "" {
-		if p, _ := in[d.pathKeyAlt].(string); p != "" {
-			return []string{p}
-		}
 	}
 	if d.pathListKey == "" {
 		return nil
@@ -759,7 +773,7 @@ func editSpansIn(v any, d toolDialect) []string {
 		if len(d.editTools) > 0 && !d.editTools[name] {
 			continue
 		}
-		path, _ := in[d.pathKey].(string)
+		path := d.callPath(in)
 		if path == "" {
 			continue
 		}
@@ -814,13 +828,17 @@ func wroteRecordsIn(v any, d toolDialect) []string {
 		if len(d.editTools) > 0 && !d.editTools[name] {
 			continue
 		}
-		path, _ := in[d.pathKey].(string)
+		path := d.callPath(in)
 		if path == "" {
 			continue
 		}
 		newText, _ := in[d.newSpanKey()].(string)
 		content, _ := in[d.contentSpanKey()].(string)
 		written := []string{newText, content}
+		if d.newKeyAlt != "" {
+			alt, _ := in[d.newKeyAlt].(string)
+			written = append(written, alt)
+		}
 		if edits, ok := in["edits"].([]any); ok {
 			for _, e := range edits {
 				em, ok := e.(map[string]any)

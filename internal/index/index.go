@@ -485,6 +485,9 @@ import (
 //
 // 60 also: an OpenClaw <id>.trajectory.jsonl is no longer read as a session
 // (#4477).
+//
+// 60 also: a Claude Code PowerShell call is a command and a NotebookEdit call
+// leaves files and wrote records (#4489).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
