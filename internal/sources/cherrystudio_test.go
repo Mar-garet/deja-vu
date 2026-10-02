@@ -297,3 +297,43 @@ func TestCherryStudioMovedDirComesBeforeTheDefault(t *testing.T) {
 		t.Errorf("app dirs = %q, want the moved one, then the default", dirs)
 	}
 }
+
+// A tail that carries more snapshots of the call the stored part ended on
+// rewrites a stored reply and cannot be appended; a tail that starts a new
+// call can (#4346).
+func TestCherryStudioResumesOnlyOnANewCall(t *testing.T) {
+	lines := strings.SplitAfter(cherrySnapshotTranscript, "\n")
+	p := filepath.Join(t.TempDir(), "cs-1.jsonl")
+	if err := os.WriteFile(p, []byte(cherrySnapshotTranscript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	at := func(n int) int64 { return int64(len(strings.Join(lines[:n], ""))) }
+	if CherryStudioResumes(p, at(2)) {
+		t.Error("a tail continuing req-1 was allowed to append to its half reply")
+	}
+	if !CherryStudioResumes(p, at(4)) {
+		t.Error("a tail starting req-2 was refused")
+	}
+	if !CherryStudioResumes(p, at(1)) {
+		t.Error("a tail after the user line was refused")
+	}
+}
+
+// Resumes reads the tail only up to the first line that names a call. A
+// stream's snapshots run back to back, so once another call starts the stored
+// one is done, and reading on cost a search the whole tail before the inline
+// append cap could hand it off (#4346).
+func TestCherryStudioResumesStopsAtTheNextCall(t *testing.T) {
+	lines := strings.SplitAfter(cherrySnapshotTranscript, "\n")
+	at := int64(len(strings.Join(lines[:2], "")))
+	// After the stored half of req-1: a new call, then a stray req-1 line the
+	// check must not reach.
+	body := strings.Join(lines[:2], "") + lines[4] + lines[1]
+	p := filepath.Join(t.TempDir(), "cs-1.jsonl")
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !CherryStudioResumes(p, at) {
+		t.Error("read past the call that started after the stored one")
+	}
+}

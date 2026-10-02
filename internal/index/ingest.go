@@ -4265,8 +4265,23 @@ func canAppendIncremental(changed map[string]FileState, old map[string]FileState
 		if !appendableKind(harnessForPath(p)) {
 			return false
 		}
+		// The kind can resume, but this tail may rewrite a record already
+		// stored: a Cherry Studio reply still streaming when the last pass ran
+		// (#4346).
+		if k, ok := kindForPath(p); ok && k.Resumes != nil && !k.Resumes(p, resumeOffset(of)) {
+			return false
+		}
 	}
 	return true
+}
+
+// resumeOffset is where an appended read of a known file starts: the end of
+// the last complete line indexed, or the old size when none was recorded.
+func resumeOffset(old FileState) int64 {
+	if old.SafeSize == 0 || old.SafeSize > old.Size {
+		return old.Size
+	}
+	return old.SafeSize
 }
 
 func appendIncremental(dir, harness, scope string, old Manifest, files map[string]FileState, changed map[string]FileState) (filesTouched, messages, unreadable int, err error) {
@@ -4583,11 +4598,7 @@ func parseAppendedFile(harness, p string, old FileState, isNew bool) (ss []model
 		}
 		return k.Parse(p, 0)
 	}
-	from := old.SafeSize
-	if from == 0 || from > old.Size {
-		from = old.Size
-	}
-	return k.ParseFrom(p, from, old.LastUpdated)
+	return k.ParseFrom(p, resumeOffset(old), old.LastUpdated)
 }
 
 // harnessForPath reports the fine-grained source kind for a path (claude,
