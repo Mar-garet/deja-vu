@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A Kimi Code `/btw` side question is indexed, from Kimi 0.28 through 2.x: the question and its answer, read from the fork Kimi runs it in without the copy of the session's context the fork opens with, and `deja doctor` no longer counts it as a skipped sub-agent. A sub-agent forked by an `Agent` call still waits for `DEJA_INCLUDE_SUBAGENTS=1`. It is its own session naming the one it was asked in, and `deja resume` on it points there. The index rebuilds once (#4484).
+- Releases are signed with cosign 3 and carry `checksums.txt.sigstore.json` in place of `checksums.txt.sig` and `checksums.txt.pem`; verify with `cosign verify-blob --bundle checksums.txt.sigstore.json` as SECURITY.md shows. The release workflow no longer pins cosign 2, which is past its last release (#4577).
 - The first turn of a Hermes session no longer gets itself back from the deja tool: the plugin names the session to `hook-context`, which stamps it live. Run `deja install hermes-auto` again to regenerate the plugin (#4246).
 - A Claude Code session moved to the background, or resumed with `--fork-session`, no longer gets its source back from MCP recall once the source ends. The "No response requested." turn and task notification Claude Code adds to the source after the fork no longer count as work the fork lacks (#4251).
 - deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).

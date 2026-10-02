@@ -185,21 +185,24 @@ output. Do not use it with histories that contain secrets.
 
 ## Release integrity
 
-Each GitHub release includes `checksums.txt`, `checksums.txt.sig`, and
-`checksums.txt.pem`. The release workflow creates a keyless cosign signature
-over `checksums.txt` and publishes a GitHub build-provenance attestation for the
-same checksum set. Releases also include an SPDX JSON SBOM for each archive.
+Each GitHub release includes `checksums.txt` and `checksums.txt.sigstore.json`.
+The release workflow creates a keyless cosign signature over `checksums.txt`,
+stored as a sigstore bundle, and publishes a GitHub build-provenance
+attestation for the same checksum set. Releases also include an SPDX JSON SBOM for each archive.
 
-After downloading those three checksum files, verify the signature with:
+After downloading both files, verify the signature with:
 
 ```sh
 cosign verify-blob \
-  --certificate checksums.txt.pem \
-  --signature checksums.txt.sig \
+  --bundle checksums.txt.sigstore.json \
   --certificate-identity-regexp '^https://github.com/vshulcz/deja-vu/.github/workflows/release.yml@refs/tags/v[0-9].*$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   checksums.txt
 ```
+
+Releases up to v0.21.4 carry `checksums.txt.sig` and `checksums.txt.pem`
+instead of the bundle; pass those as `--signature` and `--certificate` in
+place of `--bundle`.
 
 Then verify the downloaded archive against the signed checksum list:
 
