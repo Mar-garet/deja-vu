@@ -201,3 +201,62 @@ func TestClineBatchStampsARepeatedCommandOncePerEntry(t *testing.T) {
 		t.Errorf("commands = %q, want %q", got, want)
 	}
 }
+
+// A failed result that lands a pass after its call sends the file back for a
+// whole read in every appendable format whose reader now stamps the failure,
+// as kiro-cli's does above; a clean one, or a call and failure both in the
+// tail, does not (#4443).
+func TestAFailedResultForAStoredCallIsReadWithItsCall(t *testing.T) {
+	claudeCall := `{"type":"assistant","sessionId":"c1","timestamp":"2026-10-01T10:00:01Z","cwd":"/tmp/proj","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"go test ./..."}}]}}` + "\n"
+	claudeOut := func(failed bool) string {
+		if failed {
+			return `{"type":"user","sessionId":"c1","timestamp":"2026-10-01T10:00:02Z","cwd":"/tmp/proj","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Exit code 1\nFAIL"}]}}` + "\n"
+		}
+		return `{"type":"user","sessionId":"c1","timestamp":"2026-10-01T10:00:02Z","cwd":"/tmp/proj","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","is_error":false,"content":"ok"}]}}` + "\n"
+	}
+	gooseCall := `{"role":"assistant","created":1790874401,"content":[{"type":"toolRequest","id":"c1","toolCall":{"status":"success","value":{"name":"developer__shell","arguments":{"command":"go test ./..."}}}}]}` + "\n"
+	gooseOut := func(failed bool) string {
+		if failed {
+			return `{"role":"user","created":1790874402,"content":[{"type":"toolResponse","id":"c1","toolResult":{"status":"success","value":{"content":[{"type":"text","text":"FAIL\n\nCommand exited with code 1"}],"isError":true}}}]}` + "\n"
+		}
+		return `{"role":"user","created":1790874402,"content":[{"type":"toolResponse","id":"c1","toolResult":{"status":"success","value":{"content":[{"type":"text","text":"ok"}],"structuredContent":{"exit_code":0}}}}]}` + "\n"
+	}
+	resumes := func(kind string) func(string, int64) bool {
+		for _, h := range Registry() {
+			for _, k := range h.Kinds {
+				if k.Name == kind {
+					return k.Resumes
+				}
+			}
+		}
+		t.Fatalf("no kind %s", kind)
+		return nil
+	}
+	for _, c := range []struct {
+		kind, head, tail string
+		want             bool
+	}{
+		{"claude", claudeCall, claudeOut(true), false},
+		{"claude", claudeCall, claudeOut(false), true},
+		{"claude", "", claudeCall + claudeOut(true), true},
+		{"cherrystudio", claudeCall, claudeOut(true), false},
+		{"goose-jsonl", gooseCall, gooseOut(true), false},
+		{"goose-jsonl", gooseCall, gooseOut(false), true},
+		{"goose-jsonl", gooseCall, `{"role":"user","created":1790874402,"content":[{"type":"toolResponse","id":"c1","toolResult":{"status":"success","value":{"content":[{"type":"text","text":"FAIL"}],"structuredContent":{"exit_code":2}}}}]}` + "\n", false},
+		{"goose-jsonl", "", gooseCall + gooseOut(true), true},
+	} {
+		p := filepath.Join(t.TempDir(), "s.jsonl")
+		body := `{"type":"user","sessionId":"c1","timestamp":"2026-10-01T10:00:00Z","message":{"role":"user","content":"fix the retry loop"}}` + "\n" + c.head
+		if err := os.WriteFile(p, []byte(body+c.tail), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// A kind with no Resumes appends every tail.
+		got := true
+		if r := resumes(c.kind); r != nil {
+			got = r(p, int64(len(body)))
+		}
+		if got != c.want {
+			t.Errorf("%s head=%t tail %q: resumes = %v, want %v", c.kind, c.head != "", c.tail, got, c.want)
+		}
+	}
+}

@@ -508,8 +508,8 @@ func gooseExitCode(m map[string]any) (int, bool) {
 	res, _ := m["toolResult"].(map[string]any)
 	value, _ := res["value"].(map[string]any)
 	if sc, ok := value["structuredContent"].(map[string]any); ok {
-		if n, ok := sc["exit_code"].(float64); ok {
-			return int(n), true
+		if n, ok := piExitCode(sc["exit_code"]); ok {
+			return n, true
 		}
 	}
 	if failed, _ := value["isError"].(bool); failed {

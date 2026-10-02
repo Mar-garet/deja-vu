@@ -106,3 +106,44 @@ func lastLine(s string) string {
 	s = strings.TrimRight(s, " \t\r\n")
 	return strings.TrimSpace(s[strings.LastIndexByte(s, '\n')+1:])
 }
+
+// claudeExitResumes is the #4443 rule for Claude's format, which Cherry Studio
+// writes too: a tail holding the failed result of a call stored already is
+// read whole, or the call never gets the exit its result names; a clean one
+// is let go, as it is for pi.
+var claudeExitResumes = resumesUnlessAnswering(`"tool_`, func(m map[string]any) ([]string, string) {
+	msg, _ := m["message"].(map[string]any)
+	items, _ := msg["content"].([]any)
+	var calls []string
+	for _, it := range items {
+		p, _ := it.(map[string]any)
+		switch p["type"] {
+		case "tool_use":
+			calls = append(calls, str(p["id"]))
+		case "tool_result":
+			failed, _ := p["is_error"].(bool)
+			if id := str(p["tool_use_id"]); failed && id != "" && claudeOutcome(id, true, p["content"]).Known {
+				return calls, id
+			}
+		}
+	}
+	return calls, ""
+})
+
+// gooseExitResumes is the same rule for goose's jsonl sessions.
+var gooseExitResumes = resumesUnlessAnswering(`"tool`, func(m map[string]any) ([]string, string) {
+	items, _ := m["content"].([]any)
+	var calls []string
+	for _, it := range items {
+		p, _ := it.(map[string]any)
+		switch p["type"] {
+		case "toolRequest":
+			calls = append(calls, str(p["id"]))
+		case "toolResponse":
+			if code, ok := gooseExitCode(p); ok && code != 0 && str(p["id"]) != "" {
+				return calls, str(p["id"])
+			}
+		}
+	}
+	return calls, ""
+})
