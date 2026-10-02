@@ -376,6 +376,26 @@ func TestClientOffReadersStayOnWhenUnsure(t *testing.T) {
 	if tomlDejaEntriesOff("[mcp_servers.deja]\ncommand = \"deja\"\n\n[other]\nenabled = false\n") {
 		t.Error("another table's enabled read as deja's")
 	}
+	// Text inside a string is not a key, and YAML after a second document
+	// marker is one the clients' loaders refuse rather than read.
+	for _, y := range []string{
+		"extensions:\n  deja:\n    description: \"two\n    enabled: false\"\n",
+		"extensions:\n  deja:\n    description: 'two\n    enabled: false'\n",
+		"extensions:\n  deja:\n    enabled: true\n---\nextensions:\n  deja:\n    enabled: false\n",
+	} {
+		if v, _, _ := yamlLookup(y, "extensions", "deja", "enabled"); v == "false" {
+			t.Errorf("read as off: %q", y)
+		}
+	}
+	for _, q := range []string{`"""`, `'''`} {
+		toml := "[mcp_servers.deja]\ncommand = \"deja\"\nnote = " + q + "\nenabled = false\n" + q + "\n"
+		if tomlDejaEntriesOff(toml) {
+			t.Errorf("a line inside a %s string read as the switch", q)
+		}
+		if tomlTableValue("[features]\nnote = "+q+"\nhooks = false\n"+q+"\n", "features", "hooks") != "" {
+			t.Errorf("a line inside a %s string read as [features] hooks", q)
+		}
+	}
 }
 
 // `deja install --all` adds the -auto sibling of a wired target, and both

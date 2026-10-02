@@ -140,18 +140,38 @@ func yamlLookup(text string, keys ...string) (scalar string, items []string, fou
 		}
 		return true
 	}
+	// quote is the quote a scalar opened and has not closed yet: the lines
+	// until it closes are text, not keys.
+	var quote byte
+	content := false
 	for _, raw := range strings.Split(strings.TrimPrefix(text, string(utf8BOM)), "\n") {
 		line := strings.TrimRight(raw, " \t\r")
-		t := strings.TrimSpace(line)
-		if t == "" || t[0] == '#' || t == "---" {
+		if quote != 0 {
+			if yamlQuoteEnd(line, quote) >= 0 {
+				quote = 0
+			}
 			continue
 		}
+		t := strings.TrimSpace(line)
+		if t == "" || t[0] == '#' {
+			continue
+		}
+		if t == "---" || strings.HasPrefix(t, "--- ") {
+			// A second document: the clients' loaders refuse the file
+			// rather than read either, so stop at the first.
+			if content {
+				break
+			}
+			continue
+		}
+		content = true
 		w := yamlIndentWidth(line)
 		if t == "-" || strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "-\t") {
 			// An item may sit at its key's own indent.
 			for len(stack) > 0 && stack[len(stack)-1].indent > w {
 				stack = stack[:len(stack)-1]
 			}
+			quote = yamlOpenQuote(strings.TrimSpace(t[1:]))
 			if found && at() {
 				items = append(items, hermesYAMLScalar(t[1:]))
 			}
@@ -161,6 +181,7 @@ func yamlLookup(text string, keys ...string) (scalar string, items []string, fou
 		if !ok {
 			continue
 		}
+		quote = yamlOpenQuote(strings.TrimSpace(rest))
 		for len(stack) > 0 && stack[len(stack)-1].indent >= w {
 			stack = stack[:len(stack)-1]
 		}
@@ -183,6 +204,56 @@ func yamlLookup(text string, keys ...string) (scalar string, items []string, fou
 		}
 	}
 	return scalar, items, found
+}
+
+// yamlOpenQuote is the quote a value starts and does not close on its line,
+// 0 when it closes or is not quoted.
+func yamlOpenQuote(v string) byte {
+	if v == "" || v[0] != '"' && v[0] != '\'' {
+		return 0
+	}
+	if yamlQuoteEnd(v[1:], v[0]) >= 0 {
+		return 0
+	}
+	return v[0]
+}
+
+// yamlQuoteEnd is the index of the quote that closes a scalar in s, or -1: a
+// `"` not escaped by a backslash, a `'` not doubled.
+func yamlQuoteEnd(s string, quote byte) int {
+	for i := 0; i < len(s); i++ {
+		switch {
+		case quote == '"' && s[i] == '\\':
+			i++
+		case s[i] == quote && quote == '\'' && i+1 < len(s) && s[i+1] == '\'':
+			i++
+		case s[i] == quote:
+			return i
+		}
+	}
+	return -1
+}
+
+// tomlCodeLines is text's lines with those inside a multi-line string
+// blanked, so a line of a string never reads as a key or a table.
+func tomlCodeLines(text string) []string {
+	lines := strings.Split(text, "\n")
+	open := ""
+	for i, line := range lines {
+		if open != "" {
+			lines[i] = ""
+			if strings.Contains(line, open) {
+				open = ""
+			}
+			continue
+		}
+		for _, d := range []string{`"""`, `'''`} {
+			if strings.Count(tomlCode(line), d)%2 == 1 {
+				open = d
+			}
+		}
+	}
+	return lines
 }
 
 // dshRowDisabled reports whether the row with this id in a dsh patch layer
@@ -228,9 +299,9 @@ func dshRowDisabled(text, id string) bool {
 // tomlDejaEntriesOff reports whether every [mcp_servers.X] block that runs
 // deja says `enabled = false`. One left on is enough for recall to work.
 func tomlDejaEntriesOff(text string) bool {
-	lines := strings.Split(text, "\n")
+	lines := tomlCodeLines(text)
 	off := false
-	for _, b := range tomlMCPBlocks(text) {
+	for _, b := range tomlMCPBlocks(strings.Join(lines, "\n")) {
 		if b.key != "deja" && !tomlBlockRunsDeja(lines, b) {
 			continue
 		}
@@ -252,7 +323,7 @@ func tomlDejaEntriesOff(text string) bool {
 // the top level; "" when it is not set.
 func tomlTableValue(text, table, key string) string {
 	current, value := "", ""
-	for _, line := range strings.Split(text, "\n") {
+	for _, line := range tomlCodeLines(text) {
 		code := tomlCode(line)
 		if strings.HasPrefix(code, "[") {
 			current = strings.TrimSpace(strings.Trim(code, "[]"))
@@ -271,7 +342,7 @@ func tomlTableValue(text, table, key string) string {
 
 // tomlTopLevelStrings is the strings of an array set before the first table.
 func tomlTopLevelStrings(text, key string) []string {
-	lines := strings.Split(text, "\n")
+	lines := tomlCodeLines(text)
 	for i, line := range lines {
 		if strings.HasPrefix(tomlCode(line), "[") {
 			return nil
