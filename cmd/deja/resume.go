@@ -102,10 +102,11 @@ func runResume(dir string, args []string, stdout io.Writer) error {
 // on, a trailing \ (fish reads \' as a quote, which turned the next quoted
 // word inside out), a leading - (an option to roo, not its value) and a byte
 // that is not UTF-8 (--exec would read it back as U+FFFD). The bare set has
-// no , or @: PowerShell reads a,b as two arguments and @x as a splat.
+// no , or @: PowerShell reads a,b as two arguments and @x as a splat. A word
+// cmd.exe would expand is refused too (cmdExpands).
 func resumeWord(s string) (word string, ok bool) {
 	if s == "" || !utf8.ValidString(s) || strings.ContainsAny(s, "'\"$`‘’‚‛“”„") ||
-		strings.HasPrefix(s, "-") || strings.HasSuffix(s, `\`) {
+		strings.HasPrefix(s, "-") || strings.HasSuffix(s, `\`) || cmdExpands(s) {
 		return "", false
 	}
 	bare := true
@@ -189,7 +190,7 @@ func resumeLine(goos, dir, cmdline string) (string, bool) {
 		}
 	}
 	if goos == "windows" {
-		if strings.ContainsAny(dir, "\"$`\u201c\u201d\u201e") {
+		if strings.ContainsAny(dir, "\"$`\u201c\u201d\u201e") || cmdExpands(dir) {
 			return cmdline, false
 		}
 		dir = "'" + psSingleQuoted.Replace(dir) + "'"
@@ -199,6 +200,16 @@ func resumeLine(goos, dir, cmdline string) (string, bool) {
 		return cmdline, false
 	}
 	return fmt.Sprintf("cd %s && %s", shellQuote(dir), cmdline), true
+}
+
+// cmdExpands reports whether cmd.exe could read part of s as a variable: it
+// expands %name% even inside double quotes, and !name! under delayed
+// expansion, before PowerShell sees the line. The value is the user's, not
+// the path's, and one holding a quote (a user named O'Brien) ended the
+// single-quoted path early, so the rest of the name ran as PowerShell. A
+// lone % or ! expands nothing.
+func cmdExpands(s string) bool {
+	return strings.Count(s, "%") > 1 || strings.Count(s, "!") > 1
 }
 
 var psSingleQuoted = strings.NewReplacer("'", "''", "\u2018", "\u2018\u2018", "\u2019", "\u2019\u2019", "\u201a", "\u201a\u201a", "\u201b", "\u201b\u201b")

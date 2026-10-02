@@ -43,6 +43,11 @@ func TestWindowsResumeLineKeepsTheDirOneLiteral(t *testing.T) {
 		"C:\\p\\a\u201eb",
 		"C:\\p\\a\x1b[2Jb",
 		"C:\\p\\a\nb",
+		// cmd.exe expands %name% even inside its double quotes, and !name!
+		// under delayed expansion, before PowerShell sees the line: a user
+		// named O'Brien turned %USERNAME% into a quote that ended the path.
+		`C:\p\%USERNAME%;calc;#`,
+		`C:\p\!USERNAME!;calc;#`,
 	} {
 		if got, ok := resumeLine("windows", dir, cmd); ok || got != cmd {
 			t.Errorf("resumeLine(windows, %q) = %q, %v; want the command alone, no cd", dir, got, ok)

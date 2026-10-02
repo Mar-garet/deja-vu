@@ -28,6 +28,9 @@ func TestResumeWordRefusesWhatSomeShellActsOn(t *testing.T) {
 		// A leading dash is an option to roo, not its -w value.
 		"--yolo",
 		"-w",
+		// cmd.exe expands these inside the Windows line's double quotes.
+		`C:\%USERNAME%&calc`,
+		`C:\!USERNAME!&calc`,
 	} {
 		if w, ok := resumeWord(s); ok {
 			t.Errorf("resumeWord(%q) = %q, want refused", s, w)
