@@ -200,6 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With `deja install reasonix-auto`, a file's history also arrives after a Reasonix `notebook_edit`, `delete_range`, `delete_symbol` or `move_file`; the hook ran for them and said nothing (#4541).
 - OpenClaw starts without the two `[plugins]` warnings about deja on every run: `deja install openclaw-auto` names the plugin in `plugins.load.paths`, which OpenClaw counts as provenance, and leaves `plugins.allow` alone (#4579).
 - `deja doctor` no longer calls OpenClaw auto-recall wired when deja's plugin is gone from `~/.openclaw/extensions`; the row says stale and how to put it back, since the hook pack alone recalls only in gateway mode (#4580).
+- OpenClaw per-prompt recall no longer sends the same block again on every turn: the plugin read the session id off the `before_prompt_build` event, which never carries one, instead of the hook context. Run `deja install openclaw-auto` again to update the plugin (#4581).
 
 ## [0.21.4] - 2026-09-29
 
