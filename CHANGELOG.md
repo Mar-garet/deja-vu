@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja install hermes-auto` writes its blocks before a `...` document end that carries a comment or trailing spaces, such as `... # end`, instead of after it where Hermes cannot load them (#4348).
 - A goose `text_editor` edit sent as a unified diff, which goose 1.10–1.25 prefers, leaves edit and wrote records, so `deja restore` and `deja blame` see it. The index rebuilds once (#4287).
 - The first `deja install goose-auto` on a machine with history no longer reports `index: built (0 sessions, 0 messages)`: writing goose's recall block started a background build that install then waited on (#4268).
 - `deja uninstall goose-auto` also removes the `plugins:` entry goose adds to `config.yaml` for deja's plugin on its first start, instead of leaving it pointing at a deleted directory (#4270).
