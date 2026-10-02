@@ -104,8 +104,15 @@ func parseGrokFileFromOffset(path string, offset int64) ([]model.Session, error)
 	if title == "" {
 		title = doc.SessionSummary
 	}
+	// "headless" is how a `grok -p` run is started, not what spawned it: a
+	// top-level session from a shell. Kept as a kind, every scripted session
+	// read as a subagent whose parent was lost (#4585).
+	kind := doc.SessionKind
+	if kind == "headless" {
+		kind = ""
+	}
 	s := model.Session{ID: id, Harness: "grok", Project: projectName(cwd), Path: path, Title: title,
-		Kind: doc.SessionKind, Parent: doc.ParentSessionID, Agent: doc.AgentName}
+		Kind: kind, Parent: doc.ParentSessionID, Agent: doc.AgentName}
 	if t, err := time.Parse(time.RFC3339Nano, doc.CreatedAt); err == nil {
 		s.Touch(t)
 	}

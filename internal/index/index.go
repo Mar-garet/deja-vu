@@ -590,6 +590,9 @@ import (
 // 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
 // call leaves files records, notebook_edit a wrote record and delete_range an
 // edit record from its result's diff (#4541).
+//
+// 60 also: a Grok Build `grok -p` session, which grok marks "headless", is no
+// longer stored with that as its spawn kind (#4585).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

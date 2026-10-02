@@ -38,7 +38,9 @@ and `forked_at`. deja reads the first three into the session record — they sho
 up in `--json` as `kind`, `parent` and `agent`, and `deja show` names the
 session a child was spawned from and the children a parent spawned. A
 `subagent` with no `parent_session_id` keeps its kind and no edge: which
-session asked for it is not written down, and deja does not guess.
+session asked for it is not written down, and deja does not guess. A
+`grok -p` run is marked `headless`, which says how the session was started,
+not that something spawned it, so deja records no kind for it (#4585).
 
 ## Known quirks and drift
 
