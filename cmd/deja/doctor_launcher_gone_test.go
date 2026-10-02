@@ -42,7 +42,7 @@ func TestDoctorNamesALauncherThatIsGone(t *testing.T) {
 
 	var out bytes.Buffer
 	doctorHooks(&out)
-	if got := out.String(); !strings.Contains(got, "runs "+launcher+", which is not there") {
+	if got := out.String(); !strings.Contains(got, "runs "+reportPath(launcher)+", which is not there") {
 		t.Errorf("doctor said nothing about the missing launcher:\n%s", got)
 	}
 

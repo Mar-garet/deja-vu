@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -62,4 +63,12 @@ func doctorLauncherNote(path, target string) string {
 		return ""
 	}
 	return "runs " + reportPath(launcher) + ", which finds no deja to run — put the binary back on the PATH, or set DEJA_BIN to it"
+}
+
+// hookExeIsLauncher reports whether the binary a hook file runs and cannot
+// find is the launcher itself, which doctorLauncherNote already names.
+func hookExeIsLauncher(path string) bool {
+	missing := dejaHookCommandMissing(path)
+	launcher := dejaLauncherPath()
+	return missing != "" && launcher != "" && samePathSpelling(missing, launcher, runtime.GOOS == "windows")
 }
