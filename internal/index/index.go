@@ -494,6 +494,9 @@ import (
 // 60 also: a Copilot CLI view call leaves a files record and an apply_patch
 // call, whose arguments are the patch string, leaves files, edit and wrote
 // records (#4491).
+//
+// 60 also: a Copilot Chat copilot_readFile or copilot_getErrors call leaves a
+// files record from its message uris (#4492).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

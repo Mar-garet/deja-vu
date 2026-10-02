@@ -58,6 +58,9 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 		{"copilot view and apply_patch", vocabCopilot(patch), append([]string{
 			vocabFiles("/tmp/proj/view.go"),
 		}, patchWants...)},
+		{"copilot-chat readFile", vocabCopilotChat, []string{
+			vocabFiles("/tmp/proj/retry.go"),
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

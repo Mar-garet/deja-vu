@@ -163,6 +163,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Claude Code or Cherry Studio session keeps its PowerShell commands and the notebooks NotebookEdit changed, as commands, files and written lines, and the pre-tool hook speaks before both. The index rebuilds once (#4489).
 - A Codex session run with unified exec off keeps its commands: `shell_command` calls are read as well as `exec_command` ones, with their exit codes (#4490).
 - A Copilot CLI session keeps the files it read with `view`, and with a GPT model every `apply_patch` edit as files, replaced text and written lines, so `deja files`, `restore` and `blame` answer for it (#4491).
+- A file Copilot Chat read with `copilot_readFile`, or checked with `copilot_getErrors`, is recorded. VS Code keeps those paths only in the tool's message, where deja did not look (#4492).
 
 ## [0.21.4] - 2026-09-29
 
