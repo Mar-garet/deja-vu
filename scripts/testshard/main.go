@@ -14,14 +14,15 @@
 // The ranges cover every possible name, not just the ones found here, so a test
 // this scanner misses still runs in exactly one shard. The cuts fall at equal
 // time rather than equal count, from weights.txt: what each test took in one
-// `go test -json` run. A stale file only moves the cuts; it cannot drop a test.
+// `go test -race -json` run, since the legs that wait longest run with -race.
+// A stale file only moves the cuts; it cannot drop a test.
 //
 //	go run ./scripts/testshard -shard 2 -of 3 >> "$GITHUB_OUTPUT"
 //	go test -run "$RUN" -skip "$SKIP" ./...
 //
 // To refresh the weights:
 //
-//	go test -count=1 -json ./... | go run ./scripts/testshard -record > scripts/testshard/weights.txt
+//	go test -race -count=1 -json ./... | go run ./scripts/testshard -record > scripts/testshard/weights.txt
 package main
 
 import (
@@ -180,7 +181,7 @@ func record(in io.Reader, out io.Writer) error {
 	if restN > 0 && rest > 0 {
 		def = rest / float64(restN)
 	}
-	fmt.Fprintln(out, "# go test -count=1 -json ./... | go run ./scripts/testshard -record")
+	fmt.Fprintln(out, "# go test -race -count=1 -json ./... | go run ./scripts/testshard -record")
 	fmt.Fprintf(out, "# %s, %.0fs\n", slowest, sums[slowest])
 	fmt.Fprintf(out, "default %.4f\n", def)
 	for _, name := range listed {
