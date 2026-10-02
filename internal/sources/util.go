@@ -514,9 +514,13 @@ func parseFiles(files []string, parse func(string) ([]model.Session, error)) []m
 // `file_path` and its shell tool `Bash`, Cursor names them `path` and `Shell`.
 // Both were read off transcripts the vendor's own CLI had just written.
 type toolDialect struct {
-	pathKey   string
-	pathTools map[string]bool
-	shellTool string
+	pathKey string
+	// pathKeyAlt is a second name for the file argument, read when pathKey is
+	// absent. Roo's newer edit tools take `file_path` where its older ones take
+	// `path` (#4419). Empty means pathKey alone.
+	pathKeyAlt string
+	pathTools  map[string]bool
+	shellTool  string
 	// shellTools names every alias the shell tool answers to, when a harness
 	// has more than one. CodeWhale's canonical name is exec_shell and it also
 	// takes bash and Bash, so a run recorded under an alias was no command at
@@ -657,6 +661,11 @@ func toolPathsIn(v any, d toolDialect) string {
 func toolPathStrings(in map[string]any, d toolDialect) []string {
 	if p, _ := in[d.pathKey].(string); p != "" {
 		return []string{p}
+	}
+	if d.pathKeyAlt != "" {
+		if p, _ := in[d.pathKeyAlt].(string); p != "" {
+			return []string{p}
+		}
 	}
 	if d.pathListKey == "" {
 		return nil

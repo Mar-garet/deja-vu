@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
@@ -1325,6 +1326,51 @@ func mcpBlock(root map[string]any, key, path string) (map[string]any, bool, erro
 	return m, true, nil
 }
 
+// snapshotIfSameJSON gives back the snapshot's bytes when the file deja is
+// about to write holds the same JSON. Marshalling cannot know how the reader
+// laid out what deja did not touch: Roo's default settings have an empty
+// mcpServers object over three lines, and an uninstall wrote it back as `{}`
+// though the .bak beside it had the original (#4423). Anything that decodes
+// differently — a server added since, a file that is not JSON — keeps next.
+// So does a file deja took nothing out of: its layout now is the reader's, not
+// the snapshot's. Numbers are compared as written, not as float64s.
+func snapshotIfSameJSON(path string, old, next []byte) []byte {
+	if bytes.Equal(old, next) {
+		return next
+	}
+	want, ok := decodeJSONExact(next)
+	if !ok {
+		return next
+	}
+	if before, ok := decodeJSONExact(old); ok && reflect.DeepEqual(before, want) {
+		return next
+	}
+	bak := path + ".bak"
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		bak = resolved + ".bak"
+	}
+	b, err := os.ReadFile(bak)
+	if err != nil {
+		return next
+	}
+	b = bytes.TrimPrefix(b, utf8BOM)
+	if have, ok := decodeJSONExact(b); !ok || !reflect.DeepEqual(want, have) {
+		return next
+	}
+	return b
+}
+
+// decodeJSONExact decodes one JSON document with its numbers kept as text.
+func decodeJSONExact(b []byte) (any, bool) {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil || dec.More() {
+		return nil, false
+	}
+	return v, true
+}
+
 // dropOwnBackup removes the snapshot beside path when the snapshot is deja's
 // own wiring and nothing else. A snapshot of the reader's config stays even
 // when the live file has come back to exactly it: that copy is theirs, and
@@ -1557,6 +1603,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	// this is the one place that knows the file had one (#3696). The
 	// comparison is of the text, and the mark goes back on what is written.
 	bom := fileStartsWithBOM(path)
+	if removingWiring {
+		next = snapshotIfSameJSON(path, old, next)
+	}
 	if bytes.Equal(old, next) {
 		return "unchanged", nil
 	}

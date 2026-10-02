@@ -330,23 +330,30 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 			base = fi.ModTime()
 		}
 	}
+	contents := make([]json.RawMessage, len(turns))
+	for i, m := range turns {
+		contents[i] = m.Content
+	}
+	xmlEra := rooXMLEra(contents)
 	for ti, m := range turns {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
 		}
 		ts := base.Add(time.Duration(ti) * time.Second)
+		text := clineContentText(m.Content)
 		if m.Role == "user" {
-			if tool := clineTurnToolOutput(m.Content, ts); len(tool) > 0 {
+			// A result of the XML era is a text block, not a tool_result
+			// (#4424), so the person's words are what is left beside it.
+			results, words := rooUserTurn(m.Content, xmlEra)
+			tool := append(clineTurnToolOutput(m.Content, ts), rooLegacyToolOutput(results, ts)...)
+			if len(tool) > 0 {
 				s.Touch(ts)
 				s.Messages = append(s.Messages, tool...)
 			}
-		} else if work := rooWorkRecords(m.Content, ts, workspace); len(work) > 0 {
+			text = unwrapClineTask(words)
+		} else if work := rooWorkRecords(m.Content, ts, workspace, xmlEra); len(work) > 0 {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, work...)
-		}
-		text := clineContentText(m.Content)
-		if m.Role == "user" {
-			text = unwrapClineTask(text)
 		}
 		if text == "" {
 			continue
@@ -381,25 +388,36 @@ var clineDialect = toolDialect{
 // replace_in_file. Neither reader emitted a call as a work record before
 // #3295. The two sides of an edit come out of rooEditRecords rather than the
 // shared helper: apply_diff carries a SEARCH/REPLACE block, not an
-// old_string.
+// old_string. Current Roo adds search_replace, edit_file and edit, which name
+// the file `file_path`, and apply_patch, whose paths are in the patch body
+// (#4419).
 var rooDialect = toolDialect{
-	pathKey: "path",
+	pathKey:    "path",
+	pathKeyAlt: "file_path",
 	pathTools: map[string]bool{"read_file": true, "write_to_file": true, "apply_diff": true,
-		"insert_content": true, "search_and_replace": true, "replace_in_file": true},
+		"insert_content": true, "search_and_replace": true, "replace_in_file": true,
+		"search_replace": true, "edit_file": true, "edit": true},
 	shellTool: "execute_command",
 	editTools: map[string]bool{},
 }
 
 // rooWorkRecords is clineWorkRecords for the task files: the command a call
 // ran and the files it named, under the same switches.
-func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string) []model.Message {
+func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string, xmlEra bool) []model.Message {
 	var blocks []any
 	if json.Unmarshal(raw, &blocks) != nil {
-		return nil
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			return nil
+		}
+		blocks = []any{map[string]any{"type": "text", "text": s}}
+	}
+	if xmlEra {
+		blocks = rooWithXMLCalls(blocks)
 	}
 	var out []model.Message
 	if IndexToolPaths() {
-		if p := rooResolvePaths(toolPathsIn(blocks, rooDialect), workspace); p != "" {
+		if p := rooResolvePaths(rooPatchPaths(blocks, toolPathsIn(blocks, rooDialect)), workspace); p != "" {
 			out = append(out, model.Message{Role: RoleFiles, Text: p, Time: ts})
 		}
 	}
@@ -557,7 +575,7 @@ func clineContentText(raw json.RawMessage) string {
 // user-input equivalent) so the tags themselves are not indexed, and the
 // host's <environment_details> block, which is not the person's words.
 func unwrapClineTask(text string) string {
-	t := stripClineHostBlocks(text)
+	t := stripNoToolsPrompt(stripClineHostBlocks(text))
 	for _, tag := range []string{"task", "user_message", "user_input"} {
 		open := "<" + tag
 		if !strings.HasPrefix(t, open) {
@@ -576,6 +594,39 @@ func unwrapClineTask(text string) string {
 		return strings.TrimSpace(rest)
 	}
 	return t
+}
+
+// The retry prompt Roo and Cline send as a user turn when the model answered
+// without a tool call (formatResponse.noToolsUsed). The client shows it as an
+// error row, not as something the person typed, and on one live Roo task it
+// was 36 of 37 user turns (#4421).
+const (
+	noToolsPromptHead = "[ERROR] You did not use a tool in your previous response!"
+	noToolsPromptTail = "(This is an automated message, so do not respond to it conversationally.)"
+)
+
+// stripNoToolsPrompt drops that prompt from a turn's text. It starts a line
+// when the client writes it, so a person quoting it in a sentence keeps it; a
+// prompt whose closing line is missing runs to the end of the text.
+func stripNoToolsPrompt(text string) string {
+	for {
+		i := strings.Index(text, noToolsPromptHead)
+		for i > 0 && text[i-1] != '\n' {
+			j := strings.Index(text[i+1:], noToolsPromptHead)
+			if j < 0 {
+				return text
+			}
+			i += 1 + j
+		}
+		if i < 0 {
+			return text
+		}
+		end := len(text)
+		if k := strings.Index(text[i:], noToolsPromptTail); k >= 0 {
+			end = i + k + len(noToolsPromptTail)
+		}
+		text = strings.TrimSpace(text[:i] + text[end:])
+	}
 }
 
 func firstNonEmpty(a, b string) string {
