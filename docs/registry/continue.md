@@ -11,9 +11,13 @@ write the same file. The session document holds `history[]`, each item a
 `{type, text}` parts; an assistant item that called tools carries them in
 `toolCallStates[]`. `system` and `tool` roles are skipped — the first is
 configuration, and a tool's result arrives under the assistant item that asked
-for it. The tool calls themselves are not indexed as work records: they are
-model tools (`read_file`, `edit_file`) rather than commands anyone ran, and the
-command index is for the latter.
+for it. Each call in `toolCallStates[]` is read off its `parsedArgs`: `Bash`
+and `run_terminal_command` give a command, the file tools their `filepath`
+(`file_path` for the CLI's `Edit`), and the editors the replaced and written
+sides — `old_string`/`new_string`, `edits[]`, `content`/`contents`, and the
+`changes` of `edit_existing_file`, without the `// ... existing code ...`
+lines that stand for what was left alone (#4529). A call whose status is
+`errored` or `canceled` keeps its path and output but no edit or written lines.
 
 Nothing in the file carries a timestamp. `sessions.json` records `dateCreated`
 and `workspaceDirectory` per session, so that date is the session's start (the

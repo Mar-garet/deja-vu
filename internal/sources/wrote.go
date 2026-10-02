@@ -3,6 +3,7 @@ package sources
 import (
 	"hash/fnv"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -134,6 +135,30 @@ func WroteRecordHas(record string, want uint64) (path string, has bool) {
 	}
 	return path, false
 }
+
+// withoutElisions drops the placeholder lines a model writes for the code it
+// left alone — "// ... existing code ...", "# ... rest of code ...",
+// "<!-- ... -->" — from an edit that sends only the changed stretches, as
+// Continue's edit_existing_file and Kilo Code's fast_edit_file do. They are
+// not lines the file was given (#4529).
+func withoutElisions(text string) string {
+	if !strings.Contains(text, "...") && !strings.Contains(text, "…") {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	out := lines[:0]
+	for _, line := range lines {
+		if !elisionLine(line) {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// elisionLine is a line that is only an elision: a comment that opens with an
+// ellipsis, or text that opens and closes with one. A bare "..." is code in
+// Python and is kept.
+var elisionLine = regexp.MustCompile(`^\s*(?:(?:\{/\*|<!--|//|/\*|--|#|;)\s*(?:\.\.\.|…)(?:.*(?:\.\.\.|…))?|(?:\.\.\.|…)\s*\S.*(?:\.\.\.|…))\s*(?:\*/\}|\*/|-->)?\s*$`).MatchString
 
 // addedLinesOfPatch is the written side of an apply_patch payload: the lines it
 // adds, per file. The mirror of patchSpans, which takes the removed ones.

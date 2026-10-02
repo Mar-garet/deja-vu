@@ -177,6 +177,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `kiro-cli --v3` or Kiro IDE session keeps its tool calls: the commands it ran, the files it read, wrote, appended to or deleted, and the replaced text and written lines of each edit. Only the results' text was kept (#4506).
 - An Amp thread keeps its `shell_command` runs as commands and its `apply_patch` edits as files, replaced text and written lines; a patch you rejected is left out. Only `Bash` and `edit_file` were read (#4527).
 - A file Antigravity created with `write_to_file` gets its written lines, so `deja blame` can attribute it. The step that runs the call carries no diff, and the content in the call was not read (#4528).
+- A Continue IDE edit made with `edit_existing_file` gets its written lines, without the `// ... existing code ...` placeholders, so `deja blame` can attribute it; only the path was kept. A call you canceled is no longer recorded as an edit (#4529).
 
 ## [0.21.4] - 2026-09-29
 

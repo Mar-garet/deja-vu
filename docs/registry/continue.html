@@ -49,9 +49,13 @@
 <p><code>{type, text}</code> parts; an assistant item that called tools carries them in</p>
 <p><code>toolCallStates[]</code>. <code>system</code> and <code>tool</code> roles are skipped — the first is</p>
 <p>configuration, and a tool&#39;s result arrives under the assistant item that asked</p>
-<p>for it. The tool calls themselves are not indexed as work records: they are</p>
-<p>model tools (<code>read_file</code>, <code>edit_file</code>) rather than commands anyone ran, and the</p>
-<p>command index is for the latter.</p>
+<p>for it. Each call in <code>toolCallStates[]</code> is read off its <code>parsedArgs</code>: <code>Bash</code></p>
+<p>and <code>run_terminal_command</code> give a command, the file tools their <code>filepath</code></p>
+<p>(<code>file_path</code> for the CLI&#39;s <code>Edit</code>), and the editors the replaced and written</p>
+<p>sides — <code>old_string</code>/<code>new_string</code>, <code>edits[]</code>, <code>content</code>/<code>contents</code>, and the</p>
+<p><code>changes</code> of <code>edit_existing_file</code>, without the <code>// ... existing code ...</code></p>
+<p>lines that stand for what was left alone (#4529). A call whose status is</p>
+<p><code>errored</code> or <code>canceled</code> keeps its path and output but no edit or written lines.</p>
 <p>Nothing in the file carries a timestamp. <code>sessions.json</code> records <code>dateCreated</code></p>
 <p>and <code>workspaceDirectory</code> per session, so that date is the session&#39;s start (the</p>
 <p>file&#39;s mtime when the list has no entry); turns are laid out one second apart</p>

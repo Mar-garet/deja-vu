@@ -100,3 +100,41 @@ func TestAntigravityWriteToFileWrote(t *testing.T) {
 		vocabWrote("/tmp/proj/never.go", failed),
 	})
 }
+
+// Continue's IDE agent edits with edit_existing_file {filepath, changes}: the
+// new code with the untouched stretches elided. The elision lines are not
+// written lines, and a canceled call wrote nothing (#4529).
+func TestContinueEditExistingFileWrote(t *testing.T) {
+	st := func(id, status string, args map[string]any) string {
+		return vocabJSON(map[string]any{"toolCall": map[string]any{"id": id, "type": "function", "function": map[string]any{"name": "edit_existing_file", "arguments": vocabJSON(args)}},
+			"status": status, "parsedArgs": args, "output": []any{}})
+	}
+	changes := "// ... existing code ...\n" + newLoop + "\n\t# ... rest of code ...\n<!-- … unchanged markup … -->"
+	canceled := "func canceledChange() error { return nil }"
+	body := `{"sessionId":"s1","title":"fix the retry loop","workspaceDirectory":"/tmp/proj","history":[` +
+		`{"message":{"role":"user","content":"fix the retry loop"},"contextItems":[]},` +
+		`{"message":{"role":"assistant","content":"","toolCalls":[]},"contextItems":[],"toolCallStates":[` +
+		st("c1", "done", map[string]any{"filepath": "retry.go", "changes": changes}) + "," +
+		st("c2", "canceled", map[string]any{"filepath": "other.go", "changes": canceled}) + `]}]}`
+	p := vocabWrite(t, filepath.Join(t.TempDir(), "sessions", "s1.json"), body)
+	vocabCheck(t, vocabParse(t, ParseContinueFile, p), []string{
+		vocabFiles("retry.go\nother.go"),
+		vocabWrote("retry.go", newLoop),
+	}, []string{
+		vocabWrote("retry.go", changes),
+		vocabWrote("other.go", canceled),
+	})
+}
+
+func TestWithoutElisions(t *testing.T) {
+	for _, keep := range []string{"...", "\tpass  # ...", "x = ...", "foo(...args)", "return a..b"} {
+		if got := withoutElisions(keep); got != keep {
+			t.Errorf("withoutElisions(%q) = %q, want it kept", keep, got)
+		}
+	}
+	for _, drop := range []string{"// ... existing code ...", "  # ... rest of code ...", "/* ... */ ", "<!-- … unchanged … -->", "{/* ... existing JSX ... */}", "... existing code ..."} {
+		if got := withoutElisions(drop); got != "" {
+			t.Errorf("withoutElisions(%q) = %q, want it dropped", drop, got)
+		}
+	}
+}

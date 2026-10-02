@@ -243,9 +243,9 @@ func ParseContinueFile(path string) ([]model.Session, error) {
 // continueToolWork turns an item's tool calls into work records. The names are
 // the CLI's (Bash, Read, Write, Edit, MultiEdit) and the IDE extension's
 // (run_terminal_command, read_file, create_new_file, single_find_and_replace,
-// multi_edit); the CLI's Edit takes file_path and the rest filepath. A call
-// Continue marked errored changed nothing, so it leaves its path and its
-// output — the failure — but no edit or written lines.
+// multi_edit, edit_existing_file); the CLI's Edit takes file_path and the rest
+// filepath. A call Continue marked errored or canceled changed nothing, so it
+// leaves its path and its output — the failure — but no edit or written lines.
 func continueToolWork(states []continueToolCallSt, at time.Time) []model.Message {
 	var out, outputs []model.Message
 	var paths []string
@@ -265,12 +265,15 @@ func continueToolWork(states []continueToolCallSt, at time.Time) []model.Message
 				out = append(out, model.Message{Role: RoleCommand, Text: "$ " + cmd, Time: at})
 			}
 			path = ""
-		case "Edit", "MultiEdit", "Write", "single_find_and_replace", "multi_edit", "create_new_file":
-			if st.Status == "errored" || path == "" || strings.ContainsAny(path, "\n\r") {
+		case "Edit", "MultiEdit", "Write", "single_find_and_replace", "multi_edit", "create_new_file", "edit_existing_file":
+			if st.Status == "errored" || st.Status == "canceled" || path == "" || strings.ContainsAny(path, "\n\r") {
 				break
 			}
 			olds := []string{str(args["old_string"])}
-			news := []string{str(args["new_string"]), str(args["content"]), str(args["contents"])}
+			// edit_existing_file sends the new code with the unchanged
+			// stretches elided ("// ... existing code ..."), and no replaced
+			// side at all (#4529).
+			news := []string{str(args["new_string"]), str(args["content"]), str(args["contents"]), withoutElisions(str(args["changes"]))}
 			if edits, ok := args["edits"].([]any); ok {
 				for _, e := range edits {
 					if m, ok := e.(map[string]any); ok {

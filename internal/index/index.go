@@ -535,6 +535,9 @@ import (
 //
 // 60 also: an Antigravity write_to_file call leaves a wrote record of its
 // CodeContent once its step finishes (#4528).
+//
+// 60 also: a Continue edit_existing_file call leaves a wrote record of its
+// changes, and a canceled edit leaves none (#4529).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
