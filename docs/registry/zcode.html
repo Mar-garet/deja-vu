@@ -135,7 +135,7 @@ SELECT json_extract(data, &#39;$.type&#39;) FROM part GROUP BY type</code></pre>
 <p>restore gives the session, <code>workspacePath</code> names the project, and the user and</p>
 <p>assistant text is indexed. Files ending <code>.deleted.json</code> are skipped, as ZCode</p>
 <p>skips them, and a snapshot whose id is already in the CLI database is read</p>
-<p>from there instead. <code>deja resume</code> on a snapshot names ZCode&#39;s</p>
+<p>from there instead, from the first pass after the restore on (#4448). <code>deja resume</code> on a snapshot names ZCode&#39;s</p>
 <p><code>/restore-legacy-sessions</code> command rather than a <code>zcode --resume</code> that would</p>
 <p>not find it (#4432).</p>
 

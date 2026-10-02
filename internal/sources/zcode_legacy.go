@@ -1,8 +1,10 @@
 package sources
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +104,81 @@ func parseZCodeLegacy(path string) ([]model.Session, error) {
 		return nil, nil
 	}
 	return []model.Session{s}, nil
+}
+
+// zcodeLegacySidecar fingerprints whether the CLI database holds the session
+// a snapshot was restored as. The reader skips such a snapshot, but a restore
+// leaves the file as it was, so no pass re-read it and its turns stayed beside
+// the database's (#4448).
+func zcodeLegacySidecar(p string) (int64, int64) {
+	ids := zcodeRestoredIDs(ZCodeDB())
+	if len(ids) == 0 {
+		return 0, 0
+	}
+	if id := zcodeLegacyID(p); id != "" && ids[id] {
+		return 1, 1
+	}
+	return 0, 0
+}
+
+// zcodeLegacyID is the id a snapshot is read under, kept per file state so a
+// pass does not decode every snapshot again.
+func zcodeLegacyID(p string) string {
+	fi, err := os.Lstat(p)
+	if err != nil || !fi.Mode().IsRegular() {
+		return ""
+	}
+	stamp := fmt.Sprintf("%d:%d", fi.Size(), fi.ModTime().UnixNano())
+	zcodeIDsMu.Lock()
+	c, ok := zcodeLegacyIDs[p]
+	zcodeIDsMu.Unlock()
+	if ok && c[0] == stamp {
+		return c[1]
+	}
+	id := ""
+	if f, err := os.Open(p); err == nil {
+		if meta, ok := zcodeSnapshotMeta(f); ok {
+			id = firstNonEmpty(meta.ACPSessionID, firstNonEmpty(meta.TaskID, strings.TrimSuffix(filepath.Base(p), ".json")))
+		}
+		_ = f.Close()
+	}
+	zcodeIDsMu.Lock()
+	zcodeLegacyIDs[p] = [2]string{stamp, id}
+	zcodeIDsMu.Unlock()
+	return id
+}
+
+var zcodeLegacyIDs = map[string][2]string{}
+
+type zcodeSnapshotIDs struct {
+	TaskID       string `json:"taskId"`
+	ACPSessionID string `json:"acpSessionId"`
+}
+
+// zcodeSnapshotMeta decodes a snapshot's meta and stops there. The cache above
+// lives as long as the process, and each pass is a process, so this runs for
+// every snapshot on every pass: decoding the messages too cost ~120 ms a pass
+// on 100 MB of them.
+func zcodeSnapshotMeta(r io.Reader) (zcodeSnapshotIDs, bool) {
+	var meta zcodeSnapshotIDs
+	d := json.NewDecoder(bufio.NewReader(r))
+	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
+		return meta, false
+	}
+	for d.More() {
+		tok, err := d.Token()
+		if err != nil {
+			return meta, false
+		}
+		if key, _ := tok.(string); strings.EqualFold(key, "meta") {
+			return meta, d.Decode(&meta) == nil
+		}
+		var skip json.RawMessage
+		if d.Decode(&skip) != nil {
+			return meta, false
+		}
+	}
+	return meta, true
 }
 
 // zcodeRestoredIDs is the session ids in the CLI database, read once for each

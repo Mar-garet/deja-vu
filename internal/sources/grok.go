@@ -227,6 +227,29 @@ func grokWorkRecords(event grokUpdateEvent, t time.Time) []model.Message {
 	return out
 }
 
+// GrokResumes reports whether the tail of updates.jsonl can be appended to
+// what is stored. Chunks that share a key are joined into one message, across
+// the tool records between them; when the tail's first chunk continues the
+// message the stored part ended on, the file is read whole (#4445).
+func GrokResumes(path string, offset int64) bool {
+	return resumesUnlessJoined(path, offset, func(line []byte) (string, bool) {
+		role := ""
+		switch {
+		case bytes.Contains(line, grokUserChunk):
+			role = "user"
+		case bytes.Contains(line, grokAgentChunk):
+			role = "assistant"
+		default:
+			return "", false
+		}
+		var event grokUpdateEvent
+		if json.Unmarshal(line, &event) != nil || grokContentText(event.Params.Update.Content) == "" {
+			return "", false
+		}
+		return grokMessageKey(role, event), true
+	})
+}
+
 func grokMessageKey(role string, event grokUpdateEvent) string {
 	if role == "assistant" {
 		if event.Params.Meta.PromptID != "" {

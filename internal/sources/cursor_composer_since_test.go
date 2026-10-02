@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/vshulcz/deja-vu/internal/model"
 )
 
 // cursor writes a composer's `lastUpdatedAt` when it feels like it, and the
@@ -48,29 +46,21 @@ insert into cursorDiskKV values
 	}
 	// The watermark a pass would carry after the first turn: past the
 	// composer's own stamp, before the later bubble.
+	// The composer comes back whole, the turn already indexed with the new
+	// one: the index replaces the session with what a pass returns (#4451).
 	got := texts(1752600200000)
-	if strings.Join(got, " ") != "the later answer" {
-		t.Errorf("returned %v, want the turn written after the composer stopped advancing", got)
+	if strings.Join(got, " ") != "the first question the later answer" {
+		t.Errorf("returned %v, want the composer whole with the turn written after it stopped advancing", got)
 	}
-	// Nothing already indexed comes back with it: the bubbles keep their own
-	// filter, so the session carries exactly the one new turn.
 	ss, err := parseCursorDB(db, time.UnixMilli(1752600200000).UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ss) != 1 || len(ss[0].Messages) != 1 {
-		t.Errorf("the pass returned %d session(s) carrying %d message(s), want one of each", len(ss), messageCount(ss))
+	if len(ss) != 1 {
+		t.Errorf("the pass returned %d session(s), want one", len(ss))
 	}
 	// And it is still a filter: past every bubble, the pass is empty.
 	if got := texts(1752601000000); len(got) != 0 {
 		t.Errorf("a watermark past every bubble returned %v, want nothing", got)
 	}
-}
-
-func messageCount(ss []model.Session) int {
-	n := 0
-	for _, s := range ss {
-		n += len(s.Messages)
-	}
-	return n
 }

@@ -28,7 +28,8 @@ host added context or cut a result for the model, and that is what is indexed.
 
 Beside each transcript sits `<id>.jsonl.meta`, which carries `created_at`,
 `updated_at`, `workspace_root` and the titles (`custom_title`, `topic_title`,
-`name`). The session's clock and project come from there.
+`name`). The session's clock and project come from there, and a rename that
+rewrites only this file re-reads the session (#4446).
 
 ## 1.x session directories
 
