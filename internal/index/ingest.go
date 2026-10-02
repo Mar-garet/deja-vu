@@ -1046,9 +1046,26 @@ func vanishedFromStores(dir, harness string, files map[string]FileState, fresh [
 	for _, s := range fresh {
 		have[s.Harness+":"+s.ID] = true
 	}
+	// An OpenCode-schema session records its project directory as its path,
+	// not the database (#2033), so the path alone carried none of them and a
+	// rebuild dropped what the incremental pass keeps (#4447). The harness
+	// names the store there, as sessionInStore has it.
+	schemaDB := map[string]bool{}
+	for h, db := range opencodeSchemaDBs {
+		if stores[db()] {
+			schemaDB[h] = true
+		}
+	}
+	inStore := func(r Record) bool {
+		if stores[r.SourcePath] {
+			return true
+		}
+		h, _, _ := strings.Cut(r.Key, ":")
+		return schemaDB[h] && inOpencodeSchemaDB(h, r.SourcePath)
+	}
 	by := map[string]*model.Session{}
 	_ = eachRecord(filepath.Join(dir, "records.bin"), tablesFromManifest(m), func(r Record) {
-		if !stores[r.SourcePath] || have[r.Key] {
+		if have[r.Key] || !inStore(r) {
 			return
 		}
 		s := by[r.Key]

@@ -276,3 +276,45 @@ func TestToolResultInTheNextPassSettlesItsCall(t *testing.T) {
 		})
 	}
 }
+
+// A session deleted from an OpenCode-schema database is kept by the pass
+// that sees it go (#2970), and a rebuild in the same index kept it only for
+// stores whose rows name the database (#4447).
+func TestRebuildKeepsSessionDeletedFromOpencodeSchemaDB(t *testing.T) {
+	const schema = `create table session(id text primary key, project_id text, parent_id text, directory text, title text, version text, time_created integer, time_updated integer);
+create table message(id text primary key, session_id text, time_created integer, time_updated integer, data text);
+create table part(id text primary key, message_id text, session_id text, time_created integer, time_updated integer, data text);
+`
+	const base = int64(1784278800000)
+	row := func(sid, dir, text string, at int64) string {
+		return fmt.Sprintf("insert into session values('%[1]s','p1',null,'%[2]s','%[3]s','1.0.0',%[4]d,%[4]d);\n"+
+			"insert into message values('m_%[1]s','%[1]s',%[4]d,%[4]d,'{\"role\":\"user\",\"time\":{\"created\":%[4]d}}');\n"+
+			"insert into part values('p_%[1]s','m_%[1]s','%[1]s',%[4]d,%[4]d,'{\"type\":\"text\",\"text\":\"%[3]s\",\"time\":{\"start\":%[4]d}}');\n", sid, dir, text, at)
+	}
+	for _, tc := range []struct{ harness, env string }{
+		{"opencode", "DEJA_OPENCODE_DB"},
+		{"kilocode", "DEJA_KILO_DB"},
+		{"zcode", "DEJA_ZCODE_DB"},
+	} {
+		t.Run(tc.harness, func(t *testing.T) {
+			tmp := parityEnv(t, map[string]string{tc.env: "store/store.db"})
+			db := filepath.Join(tmp, "store", "store.db")
+			paritySQL(t, db, schema+row("ses_retry", "/tmp/proj", "fix the retry loop", base)+row("ses_other", "/tmp/other", "inspect the sqlite fixture", base+500))
+			inc := filepath.Join(tmp, "inc")
+			parityPass(t, inc, false)
+			paritySQL(t, db, "delete from part where session_id='ses_retry'; delete from message where session_id='ses_retry'; delete from session where id='ses_retry';\n")
+			parityPass(t, inc, false)
+			key := tc.harness + ":ses_retry"
+			kept, ok := paritySnapshot(t, inc)[key]
+			if !ok {
+				t.Fatalf("control: the incremental pass dropped %s", key)
+			}
+			parityPass(t, inc, true)
+			if got, ok := paritySnapshot(t, inc)[key]; !ok {
+				t.Errorf("%s gone after a rebuild in the same index", key)
+			} else if got != kept {
+				t.Errorf("%s after a rebuild:\n  %s\nwant what the incremental pass kept:\n  %s", key, got, kept)
+			}
+		})
+	}
+}
