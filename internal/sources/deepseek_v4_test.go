@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // writeFramedLog writes body the way dsh does by default: one zstd frame per
@@ -191,5 +192,34 @@ func TestParseDeepSeekFileKeepsOnlyTextFromAV4Result(t *testing.T) {
 	}
 	if got := strings.Join(out, "|"); got != "chartoutput pool usage" {
 		t.Errorf("tool output = %q, want only the text block", got)
+	}
+}
+
+// One generation held raw and framed means dsh's encoding setting changed, and
+// dsh reads only the one it is set to: the file written last is the session.
+func TestDeepSeekKeepsOneEncodingOfAGeneration(t *testing.T) {
+	tmp := hermeticSourcesEnv(t)
+	root := filepath.Join(tmp, "dsh", "sessions")
+	t.Setenv("DSH_HOME", filepath.Join(tmp, "dsh"))
+	t.Setenv("DEJA_DEEPSEEK_ROOT", root)
+	dir := filepath.Join(root, "--work-pgbouncer-lab--", "session-tie")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	framed, raw := filepath.Join(dir, "session.v4.jsonl.zstd"), filepath.Join(dir, "session.v4.jsonl")
+	for _, p := range []string{framed, raw} {
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(framed, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if got := DeepSeekSessionFiles(); !slices.Equal(got, []string{raw}) {
+		t.Errorf("DeepSeekSessionFiles = %q, want only the raw log written last", got)
+	}
+	if !DeepSeekLogSupersedes(raw, framed) {
+		t.Error("the raw log written last does not supersede the framed one")
 	}
 }

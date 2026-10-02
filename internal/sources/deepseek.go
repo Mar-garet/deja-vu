@@ -72,10 +72,9 @@ func DeepSeekRoot() string {
 
 // deepSeekLogGeneration reads the format generation a session log's name
 // carries, the way dsh names them: session.jsonl is generation 0 and every
-// later one is session.vN.jsonl, either with .zstd when framed. Discovery and
-// the incremental index both match on this one grammar, so a new generation
-// cannot reach one of them and miss the other. It is open-ended because dsh's
-// is: a v4 log was skipped while the list here stopped at v3 (#4600).
+// later one is session.vN.jsonl, either with .zstd when framed. The walk and
+// the incremental kind both use it, and it is open-ended because dsh's is: a
+// v4 log was skipped while the list here stopped at v3 (#4600).
 func deepSeekLogGeneration(p string) (int, bool) {
 	name := strings.TrimSuffix(filepath.Base(p), ".zstd")
 	if name == "session.jsonl" {
@@ -101,38 +100,57 @@ func isDeepSeekLog(p string) bool {
 	return ok
 }
 
-// DeepSeekLogSupersedes reports whether newer is a later dsh log generation of
-// the same session as older: the file dsh migrated older into. The index uses
-// it to tell a log left behind by a migration, still on disk and no longer
-// listed, from a transcript a client deleted (#4600).
+// DeepSeekLogSupersedes reports whether newer, a log deepSeekLogs listed, is
+// what it chose over older in the same session directory: a later generation,
+// or the same one in the encoding written last. The index uses it to tell a
+// log left behind by a migration, still on disk and no longer listed, from a
+// transcript a client deleted (#4600).
 func DeepSeekLogSupersedes(newer, older string) bool {
-	if filepath.Dir(newer) != filepath.Dir(older) {
+	if newer == older || filepath.Dir(newer) != filepath.Dir(older) {
 		return false
 	}
 	n, ok := deepSeekLogGeneration(newer)
 	o, ok2 := deepSeekLogGeneration(older)
-	return ok && ok2 && n > o
+	return ok && ok2 && n >= o
 }
 
 // deepSeekLogs walks root for session logs and keeps the newest generation in
 // each session directory. dsh migrates a session it opens into a new
 // generation holding the whole history and leaves the old file untouched, so
 // the old one is a copy frozen at the upgrade: reading it as well listed the
-// session twice, reading it alone lost everything after (#4600).
+// session twice, reading it alone lost everything after (#4600). A dsh
+// downgraded after that appends to the old generation again, and those turns
+// wait until a newer dsh migrates them.
+//
+// dsh reads only the encoding it is configured for, so one generation held
+// both raw and framed means the setting changed; the file written last is the
+// one in use.
 func deepSeekLogs(root string) []string {
-	files := walkFiles(root, isDeepSeekLog)
-	newest := map[string]int{}
-	for _, p := range files {
+	type pick struct {
+		path string
+		gen  int
+		mod  int64
+	}
+	newest := map[string]pick{}
+	var order []string
+	for _, p := range walkFiles(root, isDeepSeekLog) {
 		n, _ := deepSeekLogGeneration(p)
-		if cur, ok := newest[filepath.Dir(p)]; !ok || n > cur {
-			newest[filepath.Dir(p)] = n
+		var mod int64
+		if fi, err := os.Stat(p); err == nil {
+			mod = fi.ModTime().UnixNano()
+		}
+		d := filepath.Dir(p)
+		cur, ok := newest[d]
+		if !ok {
+			order = append(order, d)
+		}
+		if !ok || n > cur.gen || (n == cur.gen && (mod > cur.mod || (mod == cur.mod && p > cur.path))) {
+			newest[d] = pick{p, n, mod}
 		}
 	}
-	out := files[:0]
-	for _, p := range files {
-		if n, _ := deepSeekLogGeneration(p); n == newest[filepath.Dir(p)] {
-			out = append(out, p)
-		}
+	out := make([]string, 0, len(order))
+	for _, d := range order {
+		out = append(out, newest[d].path)
 	}
 	return out
 }
