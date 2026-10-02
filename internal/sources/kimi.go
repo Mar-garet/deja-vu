@@ -41,11 +41,13 @@ func KimiSessionFiles() []string {
 // KimiSidecarFiles lists the per-session state.json the reader opens itself
 // for the title and the working directory. doctor counted one per session as a
 // transcript it could not read (#3309). The goal queue, upcoming-goals.json,
-// sits beside it and is Kimi's own too (#4473).
+// sits beside it and is Kimi's own too (#4473), as is a background task's
+// record, tasks/<task-id>.json in an agent's directory or the session's.
 func KimiSidecarFiles() []string {
 	return walkFiles(filepath.Join(KimiRoot(), "sessions"), func(p string) bool {
 		base := filepath.Base(p)
-		return base == "state.json" || base == "upcoming-goals.json"
+		return base == "state.json" || base == "upcoming-goals.json" ||
+			filepath.Base(filepath.Dir(p)) == "tasks" && strings.HasSuffix(base, ".json")
 	})
 }
 

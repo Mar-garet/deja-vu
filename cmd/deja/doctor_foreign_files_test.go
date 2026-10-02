@@ -25,9 +25,10 @@ func TestAClientsOwnFilesAreNotUnreadTranscripts(t *testing.T) {
 		{
 			row: "kimi", env: "DEJA_KIMI_ROOT", sub: "sessions",
 			session: "wd_api/s1/agents/main/wire.jsonl",
-			own:     []string{"wd_api/s1/state.json", "wd_api/s1/upcoming-goals.json", "wd_api/s1/agents/agent-1/wire.jsonl"},
-			want:    "1 subagent transcripts skipped",
-			avoid:   "DEJA_INCLUDE_SUBAGENTS",
+			own: []string{"wd_api/s1/state.json", "wd_api/s1/upcoming-goals.json", "wd_api/s1/agents/agent-1/wire.jsonl",
+				"wd_api/s1/agents/main/tasks/bash-a1b2c3d4.json", "wd_api/s1/tasks/bash-e5f6a7b8.json"},
+			want:  "1 subagent transcripts skipped",
+			avoid: "DEJA_INCLUDE_SUBAGENTS",
 		},
 		{
 			row: "gemini", env: "DEJA_GEMINI_ROOT", sub: "tmp",
