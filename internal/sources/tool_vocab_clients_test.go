@@ -127,6 +127,22 @@ func TestAntigravityWriteToFileRetryAfterError(t *testing.T) {
 	}, []string{
 		vocabWrote("/tmp/proj/jitter.go", failed),
 	})
+
+	// A failed write_to_file, then a replace on the same file whose step has
+	// no diff block: that step created nothing, so it does not give the
+	// failed call's content to the file.
+	replace := vocabJSON(map[string]any{"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "created_at": "2026-09-30T10:00:05Z", "content": "",
+		"tool_calls": []any{map[string]any{"name": "replace_file_content", "args": map[string]any{"TargetFile": q("/tmp/proj/jitter.go"), "TargetContent": q("a"), "ReplacementContent": q("b")}}}})
+	p = vocabWrite(t, filepath.Join(t.TempDir(), "brain", "b0c1d2e5", ".system_generated", "logs", "transcript.jsonl"),
+		`{"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","created_at":"2026-09-30T10:00:00Z","content":"<USER_REQUEST>\nadd jitter\n</USER_REQUEST>"}`,
+		planner(failed),
+		step("ERROR", "Created At: now\nCompleted At: now\n\nEncountered error in step execution: error executing cascade"),
+		replace,
+		step("DONE", "Created At: now\nCompleted At: now\n\nThe following changes were made by the replace_file_content tool to: file:///tmp/proj/jitter.go"),
+	)
+	vocabCheck(t, vocabParse(t, ParseAntigravityFile, p), nil, []string{
+		vocabWrote("/tmp/proj/jitter.go", failed),
+	})
 }
 
 // Continue's IDE agent edits with edit_existing_file {filepath, changes}: the

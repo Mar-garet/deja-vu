@@ -142,7 +142,12 @@ func ParseAntigravityFile(path string) ([]model.Session, error) {
 			if cwd == "" {
 				cwd = c
 			}
-			antigravityNoteWrites(m["tool_calls"], pendingWrites)
+			if calls, _ := m["tool_calls"].([]any); len(calls) > 0 {
+				// A planner row's steps follow it before the next row: a
+				// write still waiting here is one whose step failed.
+				clear(pendingWrites)
+				antigravityNoteWrites(m["tool_calls"], pendingWrites)
+			}
 		}
 		text, _ := m["content"].(string)
 		if role == "user" {
@@ -322,6 +327,11 @@ func antigravityNoteWrites(v any, pending map[string]string) {
 // its file: an earlier one still waiting is a call whose step failed, and
 // its content never reached the file.
 func antigravityTakeWrite(text string, step []model.Message, pending map[string]string, t time.Time) []model.Message {
+	// Only the step that created the file: a replace step on the same path
+	// with no diff block did not run the write.
+	if antigravityField(text, "Created file") == "" {
+		return nil
+	}
 	p := antigravityPath(text)
 	content, ok := pending[p]
 	if !ok {
