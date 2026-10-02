@@ -234,6 +234,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Crush command the user denied is no longer indexed as one that ran, and a denied edit or view no longer lists its file as touched (#4575).
 - An omp patch edit that moves a file records the lines it wrote under the new path, and lists both paths, so `deja blame` and `restore` find the moved file (#4576).
 - `deja install codex-auto` says when some of its hooks still need approving in codex, as after an upgrade that adds SessionEnd; it spoke only when none were approved (#4572).
+- On opencode 2.x the plugin `deja install opencode-auto` writes, and the `opencode-deja` package, end the sessions they stamped when a turn finishes and when opencode exits, as they already did on 1.x, so a finished session is back in the next one's MCP recall at once (#4571).
 
 ## [0.21.4] - 2026-09-29
 

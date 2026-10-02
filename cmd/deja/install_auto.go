@@ -300,6 +300,12 @@ export default {
     // is empty is still asked only a few times.
     const empties = new Map()
     const emptyRetries = 3
+    // Every session this plugin stamped live, ended when its turn is: 2.x has
+    // no event hook or dispose in the table 1.x reads, so the #4546 end never
+    // ran here and a finished session stayed out of the next one's MCP recall
+    // for twenty minutes (#4571).
+    const live = new Set()
+    const endSession = (id) => runHook("hook-session-end", JSON.stringify({ session_id: id }), cwd)
 
     // Session digest: fold into the first system block rather than
     // appending a second one. An OpenAI-compatible endpoint that requires
@@ -309,6 +315,7 @@ export default {
     await ctx.session.hook("context", async (event) => {
       try {
         const key = event.sessionID || "default"
+        if (event.sessionID) live.add(event.sessionID)
         if (!cache.has(key)) {
           // The session id rides along so the digest leaves this session
           // out: the context hook runs after the first message is stored,
@@ -453,6 +460,31 @@ export default {
         // memory is optional: never break a tool call over it
       }
     })
+
+    // A turn is over when its execution ends: 2.0.22 publishes
+    // session.execution.succeeded, .failed or .interrupted, and none of 1.x's
+    // session.idle, which its schema still carries.
+    const stop = new AbortController()
+    if (typeof ctx.event?.subscribe === "function") {
+      ;(async () => {
+        for await (const event of ctx.event.subscribe({ signal: stop.signal })) {
+          const ends = ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted", "session.idle"]
+          const id = ends.includes(event?.type) ? event.data?.sessionID : ""
+          // Out of live only once ended: opencode run shuts down a few
+          // milliseconds after the turn, and the cleanup ends what is left.
+          if (id && live.has(id)) {
+            await endSession(id)
+            live.delete(id)
+          }
+        }
+      })().catch(() => {})
+    }
+    // opencode run awaits this before it exits.
+    return async () => {
+      stop.abort()
+      for (const id of live) await endSession(id)
+      live.clear()
+    }
   },
 }
 `, exe)
