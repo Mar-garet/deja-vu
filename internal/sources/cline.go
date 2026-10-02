@@ -371,7 +371,9 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 // declares. Three of them differ from every other harness: `run_commands`
 // takes a list under `commands` rather than one string, `read_files` takes a
 // list of read requests under `files`, and the editor names the replaced text
-// `old_text`.
+// `old_text` and the written text `new_text` — the only record of a file the
+// editor created, which was read under new_string and lost (#4503).
+// apply_patch takes its patch under `input`; clineWorkRecords reads it.
 var clineDialect = toolDialect{
 	pathKey:     "path",
 	pathListKey: "files",
@@ -380,6 +382,7 @@ var clineDialect = toolDialect{
 	commandKey:  "commands",
 	editTools:   map[string]bool{"editor": true},
 	oldKey:      "old_text",
+	newKey:      "new_text",
 }
 
 // rooDialect is what the Roo Code and the legacy Cline extension call their
@@ -463,6 +466,9 @@ func clineWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 		for _, span := range editSpansIn(blocks, clineDialect) {
 			out = append(out, model.Message{Role: RoleEdit, Text: span, Time: ts})
 		}
+	}
+	for _, patch := range applyPatchInputs(blocks, clineDialect) {
+		out = append(out, applyPatchRecords(patch, nil, ts)...)
 	}
 	if IndexCommands() {
 		for _, cmd := range commandsIn(blocks, clineDialect) {

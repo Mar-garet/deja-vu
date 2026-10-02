@@ -10,8 +10,11 @@
 `user`/`assistant` turns are indexed for their text, from string content or
 `type:"text"` blocks; thinking, images, compaction artifacts and non-lead agents
 are skipped by design. Tool calls are read as well: `run_commands` becomes a
-command record, the file tools a files record, and the editor's two sides the
-replaced span and the hashed written lines. A tool result is indexed as tool
+command record, the file tools a files record, and the editor's two sides
+(`old_text`, `new_text`) the replaced span and the hashed written lines; an
+`editor` call with only `new_text` creates or inserts, and gives the written
+side alone. `apply_patch` takes its patch under `input` and gives the files,
+removed lines and added lines its headers name. A tool result is indexed as tool
 output whether it is a string or the CLI's list of
 `{query, result, error, success}` entries that `run_commands` and
 `read_files` write; an error the result does not already carry is kept with

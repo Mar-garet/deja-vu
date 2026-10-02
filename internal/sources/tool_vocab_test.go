@@ -89,6 +89,11 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 			vocabWrote("/tmp/proj/jitter.go", jitter),
 		}},
 		{"openclaw apply_patch", vocabOpenClaw(patch), patchWants},
+		{"cline-sdk editor and apply_patch", vocabClineSDK(patch), append([]string{
+			vocabFiles("/tmp/proj/jitter.go"),
+			vocabWrote("/tmp/proj/jitter.go", jitter),
+			vocabEdit("/tmp/proj/retry.go", oldLoop),
+		}, patchWants...)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

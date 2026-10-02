@@ -512,6 +512,9 @@ import (
 //
 // 60 also: an OpenClaw apply_patch call leaves files, edit and wrote records
 // (#4500).
+//
+// 60 also: a Cline CLI editor call leaves a wrote record of new_text, and an
+// apply_patch call files, edit and wrote records (#4503).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
