@@ -39,6 +39,9 @@ func TestResumeRooSplitsTheCLIFromTheEditor(t *testing.T) {
 	cli := filepath.Join(tmp, "vscode-mock", "global-storage")
 	t.Setenv("DEJA_ROO_CLI_ROOT", cli)
 	work := filepath.Join(tmp, "app")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	id := "01a07bf9-8882-7703-a3fa-245deb8ea752"
 	path := rooCLITask(t, cli, id, work)
 
@@ -58,6 +61,9 @@ func TestResumeRooSplitsTheCLIFromTheEditor(t *testing.T) {
 	// A workspace that cannot go on the command line as one word keeps the
 	// cd alone rather than a -w that --exec would split.
 	spaced := filepath.Join(tmp, "my app")
+	if err := os.MkdirAll(spaced, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	sid := "01a07bf9-8882-7703-a3fa-245deb8ea753"
 	if _, cmd, err := resumeCommand(model.Session{Harness: "roo", ID: "roo-task-" + sid, Path: rooCLITask(t, cli, sid, spaced)}); err != nil || cmd != "roo --session-id "+sid {
 		t.Fatalf("spaced workspace: cmd = %q, err = %v", cmd, err)

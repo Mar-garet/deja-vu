@@ -17,6 +17,9 @@ import (
 func TestResumeReasonix(t *testing.T) {
 	dir := t.TempDir()
 	ws := filepath.Join(dir, "relaylab")
+	if err := os.MkdirAll(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(dir, "20260920-101000.000000000-deepseek-chat.jsonl")
 	meta, _ := json.Marshal(map[string]any{"workspace_root": ws})
 	if err := os.WriteFile(path+".meta", meta, 0o644); err != nil {
@@ -52,6 +55,9 @@ func TestResumeReasonix(t *testing.T) {
 func TestResumeReasonixV4(t *testing.T) {
 	state := t.TempDir()
 	ws := filepath.Join(t.TempDir(), "relaylab")
+	if err := os.MkdirAll(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	slugOf := ws
 	if runtime.GOOS == "windows" {
 		slugOf = strings.ToLower(slugOf)

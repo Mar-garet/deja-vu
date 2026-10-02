@@ -207,6 +207,13 @@
     <summary>Where Goose writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
+    <title>Where Grok Build stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/grok.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/grok.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Grok Build writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>Where Hermes stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/hermes.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/hermes.html"></link>
@@ -263,6 +270,13 @@
     <summary>Where Qwen Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
+    <title>Where Reasonix stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/reasonix.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/reasonix.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where Reasonix writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>Where Roo Code stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/roo.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/roo.html"></link>
@@ -275,19 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/senpi.html"></link>
     <updated>2026-10-02T00:00:00Z</updated>
     <summary>Where Senpi writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where ZCode stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/zcode.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/zcode.html"></link>
-    <updated>2026-10-02T00:00:00Z</updated>
-    <summary>Where ZCode writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Zed stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/zed.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/zed.html"></link>
-    <updated>2026-10-02T00:00:00Z</updated>
-    <summary>Where Zed writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
 </feed>
