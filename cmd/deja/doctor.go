@@ -246,13 +246,16 @@ func doctorHooks(w io.Writer) {
 		fmt.Fprintf(w, "  %-12s %s\n", "", note)
 	}
 	// Only when something here is actually wired: the note is about the binary
-	// those entries name, and a file with no deja in it names none.
-	if note := hookExeNote(st.path, "claude-auto"); note != "" && len(st.missing) < st.want {
+	// those entries name, and a file with no deja in it names none. Not when
+	// that binary is the launcher, which the note below names (#4245).
+	launcher := doctorLauncherNote(st.path, "claude-auto")
+	if note := hookExeNote(st.path, "claude-auto"); note != "" && len(st.missing) < st.want &&
+		(launcher == "" || !hookExeIsLauncher(st.path)) {
 		fmt.Fprintf(w, "  %-12s %s\n", "", note)
 	}
 	// The entries name the launcher now, and the launcher is always there —
 	// what can be gone is everything it resolves to (#3422).
-	if note := doctorLauncherNote(st.path, "claude-auto"); note != "" {
+	if note := launcher; note != "" {
 		fmt.Fprintf(w, "  %-12s %s\n", "", note)
 	} else if st.runNote != "" {
 		fmt.Fprintf(w, "  %-12s %s\n", "", st.runNote)
@@ -799,13 +802,10 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// printFilesSkippingIn is printFiles for a harness that has more than one
 	// transcript root and declines some of its own files by a rule.
 	// Files named in beside are the store's own bookkeeping, as for
-	// printFilesBeside below.
-	//
-	// switchable says whether DEJA_INCLUDE_SUBAGENTS brings the skipped ones
-	// in. Kimi's and Qwen's sub-agent logs are left out by design, and naming
-	// the variable for them would send the user after a switch that does
-	// nothing (#4473, #4475).
-	printFilesSkippingWith := func(name, loc string, roots []string, present bool, seen []string, skipped func(string) bool, switchable bool, beside ...string) {
+	// printFilesBeside below. Kimi's and Qwen's sub-agent logs were left out
+	// whatever DEJA_INCLUDE_SUBAGENTS said, so their rows did not name it
+	// (#4473, #4475); the switch takes them now and every row names it (#4483).
+	printFilesSkippingIn := func(name, loc string, roots []string, present bool, seen []string, skipped func(string) bool, beside ...string) {
 		detail := doctorCount(len(seen), "file")
 		placed := append(append([]string{}, seen...), beside...)
 		unread := 0
@@ -815,9 +815,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 			unread += u
 			byRule += b
 		}
-		if byRule > 0 && !switchable {
-			detail += fmt.Sprintf(", %d subagent transcripts skipped", byRule)
-		} else if byRule > 0 {
+		if byRule > 0 {
 			// The variable named the way it was read as the cause of the
 			// skip — "skipped (DEJA_INCLUDE_SUBAGENTS=1)" — so somebody who
 			// wanted those transcripts indexed set the thing the line said
@@ -832,9 +830,6 @@ func doctorHarnesses(w io.Writer, dir string) {
 			detail += fmt.Sprintf(", %d not recognised here", unread)
 		}
 		printRow(name, loc, present, detail)
-	}
-	printFilesSkippingIn := func(name, loc string, roots []string, present bool, seen []string, skipped func(string) bool, beside ...string) {
-		printFilesSkippingWith(name, loc, roots, present, seen, skipped, true, beside...)
 	}
 	// printFilesSkipping is its one-root form.
 	printFilesSkipping := func(name, path string, present bool, seen []string, skipped func(string) bool, beside ...string) {
@@ -923,18 +918,28 @@ func doctorHarnesses(w io.Writer, dir string) {
 	qwenRoot := filepath.Join(sources.QwenRoot(), "projects")
 	// Beside, not unread: `<id>.runtime.json`, `meta.json` and
 	// `extract-cursor.json` are qwen's own bookkeeping (#3676).
-	printFilesSkippingWith("qwen", qwenRoot, []string{qwenRoot}, doctorExists(qwenRoot),
-		sources.QwenSessionFiles(), sources.QwenSubagentFile, false, sources.QwenSidecarFiles()...)
+	printFilesSkippingIn("qwen", qwenRoot, []string{qwenRoot}, doctorExists(qwenRoot),
+		sources.QwenSessionFiles(), sources.QwenSubagentFile, sources.QwenSidecarFiles()...)
 
 	kimiRoot := filepath.Join(sources.KimiRoot(), "sessions")
-	printFilesSkippingWith("kimi", kimiRoot, []string{kimiRoot}, doctorExists(kimiRoot),
-		sources.KimiSessionFiles(), sources.KimiSubagentFile, false, sources.KimiSidecarFiles()...)
+	printFilesSkippingIn("kimi", kimiRoot, []string{kimiRoot}, doctorExists(kimiRoot),
+		sources.KimiSessionFiles(), sources.KimiSubagentFile, sources.KimiSidecarFiles()...)
 
 	gooseRoot := filepath.Join(sources.GooseRoot(), "sessions")
 	printRow("goose", gooseRoot, doctorExists(gooseRoot) || doctorFilePresent(sources.GooseDB()), doctorGooseDetail(sqlite))
 
+	// Hermes 0.17 keeps one state.db at the root and no profiles/ directory,
+	// which HermesDBs reads first; the row looked only at profiles/ and said
+	// missing about an indexed store (#4244).
+	// The directory alone is not a store: it holds hermes' config, and
+	// `deja install hermes-auto` writes there on a machine where it never ran.
 	hermesRoot := sources.HermesProfilesRoot()
-	printRow("hermes", hermesRoot, doctorExists(hermesRoot), doctorCount(len(sources.HermesSessionFiles()), "store"))
+	rootStore := doctorFilePresent(filepath.Join(sources.HermesHome(), "state.db"))
+	hermesPresent := rootStore || doctorExists(hermesRoot)
+	if rootStore || !doctorExists(hermesRoot) {
+		hermesRoot = sources.HermesHome()
+	}
+	printRow("hermes", hermesRoot, hermesPresent, doctorCount(len(sources.HermesSessionFiles()), "store"))
 
 	clineModern := sources.ClineSessionsDir()
 	clineFiles := len(sources.ClineSessionFiles())

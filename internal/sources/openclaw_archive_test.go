@@ -153,3 +153,34 @@ func TestOpenClawStillSkipsCheckpoints(t *testing.T) {
 		t.Fatalf("a checkpoint was offered to the index: %#v", files)
 	}
 }
+
+// OpenClaw 2026.7 stamps an archive with toISOString() and ":" swapped for
+// "-", not a number, so no reset or delete from a current build was read
+// (#4482). The digit stamp stays in case an older build wrote it.
+func TestOpenClawReadsAnArchiveWithAnISOStamp(t *testing.T) {
+	root := t.TempDir()
+	sessions := filepath.Join(root, "main", "sessions")
+	if err := os.MkdirAll(sessions, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEJA_OPENCLAW_ROOT", root)
+	iso := filepath.Join(sessions, "aaaa1111.jsonl.reset.2026-10-01T15-18-21.294Z")
+	digits := filepath.Join(sessions, "bbbb2222.jsonl.reset.1788000000")
+	noMillis := filepath.Join(sessions, "cccc3333.jsonl.deleted.2026-10-01T15-18-21Z")
+	for p, said := range map[string]string{iso: "fix the retry loop in the uploader", digits: "rename the flaky queue worker", noMillis: "drop the stale cache"} {
+		if err := os.WriteFile(p, []byte(openclawArchiveBody(strings.SplitN(filepath.Base(p), ".", 2)[0], said)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := OpenClawSessionFiles()
+	if len(files) != 3 {
+		t.Fatalf("archives offered to the index = %#v, want all three", files)
+	}
+	ss, err := ParseOpenClawFile(iso)
+	if err != nil || len(ss) != 1 || ss[0].ID != "aaaa1111" {
+		t.Fatalf("ISO-stamped archive parsed to %#v: %v", ss, err)
+	}
+	for _, p := range OpenClawSidecarFiles() {
+		t.Errorf("an archive is counted as a sidecar: %s", p)
+	}
+}

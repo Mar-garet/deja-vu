@@ -39,7 +39,10 @@
 <h1>Copilot CLI</h1>
 <ul>
 <li><strong>ID</strong>: <code>copilot</code></li>
-<li><strong>Store</strong>: <code>~/.copilot/session-state/&lt;sessionId&gt;/events.jsonl</code></li>
+<li><strong>Store</strong>: <code>${COPILOT_HOME:-~/.copilot}/session-state/&lt;sessionId&gt;/events.jsonl</code>;</li>
+</ul>
+<p><code>COPILOT_HOME</code> also moves the MCP config and the skill below</p>
+<ul>
 <li><strong>Read override</strong>: <code>DEJA_COPILOT_ROOT</code> (points at the <code>session-state</code> directory)</li>
 <li><strong>Format</strong>: append-only JSONL, one event per line, each <code>{type, data, timestamp}</code></li>
 </ul>
@@ -65,10 +68,11 @@
 <ul>
 <li><strong>MCP</strong>: <code>deja install copilot</code> writes <code>mcpServers.deja</code> into</li>
 </ul>
-<p><code>~/.copilot/mcp-config.json</code>.</p>
+<p><code>${COPILOT_HOME:-~/.copilot}/mcp-config.json</code>.</p>
 <ul>
-<li><strong>Skill</strong>: <code>~/.copilot/skills/deja-history/SKILL.md</code>, loaded on demand;</li>
+<li><strong>Skill</strong>: <code>~/.copilot/skills/deja-history/SKILL.md</code> (under <code>$COPILOT_HOME</code></li>
 </ul>
+<p>when set), loaded on demand;</p>
 <p>Copilot invokes a skill by name, so it is also the <code>/deja-history</code> command.</p>
 <ul>
 <li><strong>Auto-recall</strong>: none. Copilot CLI exposes no hook that can inject context,</li>

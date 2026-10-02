@@ -2514,7 +2514,8 @@ func ChildrenOf(dir, id string) ([]model.Session, error) {
 	}
 	var out []model.Session
 	for _, meta := range m.Sessions {
-		if meta.Parent == id {
+		// A fork names its source as its parent too, and nothing spawned it.
+		if meta.Parent == id && meta.Kind != "fork" {
 			out = append(out, sessionFromMeta(meta))
 		}
 	}

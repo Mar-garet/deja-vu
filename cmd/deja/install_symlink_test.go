@@ -20,8 +20,7 @@ func TestInstallWritesThroughASymlink(t *testing.T) {
 	} {
 		t.Run(tc.target, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
+			setTestHome(t, home)
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 			t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 			t.Setenv("DEJA_INDEX_DIR", filepath.Join(home, "index.db"))
@@ -35,7 +34,7 @@ func TestInstallWritesThroughASymlink(t *testing.T) {
 			if err := os.WriteFile(real, []byte(tc.seed), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			link := filepath.Join(home, filepath.FromSlash(tc.rel))
+			link := homeConfigPath(home, tc.rel)
 			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 				t.Fatal(err)
 			}
