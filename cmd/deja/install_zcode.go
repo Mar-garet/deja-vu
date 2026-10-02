@@ -133,10 +133,13 @@ func zcodeServerAt(path, exe string, uninstall bool) (installResult, error) {
 		noteBlockAdded(path, "mcp.servers")
 	}
 	if uninstall {
-		if _, ok := servers["deja"]; !ok {
-			return installResult{Path: path, Action: "unchanged"}, nil
-		}
+		before := len(servers)
 		delete(servers, "deja")
+		removeAdoptedDejaEntries(path, "mcp.servers", servers)
+		note = leftDejaEntriesNote(servers)
+		if len(servers) == before {
+			return installResult{Path: path, Action: "unchanged", Note: note}, nil
+		}
 		mcp["servers"] = servers
 		if len(servers) == 0 && blockWasAdded(path, "mcp.servers") {
 			delete(mcp, "servers")
@@ -148,9 +151,15 @@ func zcodeServerAt(path, exe string, uninstall bool) (installResult, error) {
 			forgetBlockAdded(path, "mcp")
 		}
 	} else {
+		// deja under another name is adopted, not doubled (#4556).
+		key := dejaEntryKey(servers)
+		if key != "deja" {
+			noteBlockAdded(path, "mcp.servers."+key)
+		}
 		entry := mcpServerEntry(exe)
-		note = keepSwitch(servers["deja"], entry)
-		servers["deja"] = entry
+		note = keepSwitch(servers[key], entry)
+		servers[key] = entry
+		note = withOtherDejaEntries(note, servers, key)
 		mcp["servers"] = servers
 		root["mcp"] = mcp
 	}

@@ -66,6 +66,15 @@ func installZedMCP(path, exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
+	// deja under another name beside ours is said, not doubled in silence
+	// (#4556).
+	if !uninstall {
+		var root map[string]any
+		if json.Unmarshal([]byte(jsoncToJSON(next)), &root) == nil {
+			servers, _ := root[zedServerKey].(map[string]any)
+			note = withOtherDejaEntries(note, servers, zedServerID)
+		}
+	}
 	a, werr := writeIfChanged(path, old, []byte(next))
 	return installResult{Path: path, Action: a, Note: note}, werr
 }

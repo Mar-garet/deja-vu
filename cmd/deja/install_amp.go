@@ -47,13 +47,23 @@ func installAmpMCPAt(path, exe string, uninstall bool) (installResult, error) {
 		servers = map[string]any{}
 		root[ampServersKey] = servers
 	}
+	var note string
 	if uninstall {
 		delete(servers, "deja")
+		removeAdoptedDejaEntries(path, strings.ReplaceAll(ampServersKey, ".", `\.`), servers)
+		note = leftDejaEntriesNote(servers)
 		if len(servers) == 0 {
 			delete(root, ampServersKey)
 		}
 	} else {
-		servers["deja"] = ampServerEntry(exe)
+		// deja under another name is adopted, not doubled (#4556). Recorded
+		// under the escaped key, the spelling the JSONC writer records.
+		key := dejaEntryKey(servers)
+		if key != "deja" {
+			noteBlockAdded(path, strings.ReplaceAll(ampServersKey, ".", `\.`)+"."+key)
+		}
+		servers[key] = ampServerEntry(exe)
+		note = withOtherDejaEntries("", servers, key)
 	}
 	next, err := marshalConfigLike(old, root)
 	if err != nil {
@@ -65,7 +75,7 @@ func installAmpMCPAt(path, exe string, uninstall bool) (installResult, error) {
 		return installResult{}, err
 	}
 	a, err := writeIfChanged(path, old, next)
-	return installResult{Path: path, Action: a}, err
+	return installResult{Path: path, Action: a, Note: note}, err
 }
 
 // The key is one literal string with a dot in it — the way Amp's own

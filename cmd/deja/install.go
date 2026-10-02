@@ -3080,6 +3080,24 @@ func otherDejaEntriesNote(servers map[string]any, mine string) string {
 			names = append(names, name)
 		}
 	}
+	return otherDejaNamesNote(names)
+}
+
+// withOtherDejaNames is withOtherDejaEntries for a writer that found the other
+// entries itself: a list of servers, a YAML block, a file edited as text
+// (#4556).
+func withOtherDejaNames(note string, names []string) string {
+	other := otherDejaNamesNote(names)
+	if other == "" {
+		return note
+	}
+	if note != "" {
+		return note + "; " + other
+	}
+	return other
+}
+
+func otherDejaNamesNote(names []string) string {
 	if len(names) == 0 {
 		return ""
 	}
