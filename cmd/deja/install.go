@@ -1635,6 +1635,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	if bytes.Equal(old, next) {
 		return "unchanged", nil
 	}
+	if err := yamlWriteBreaks(path, old, next); err != nil {
+		return "", err
+	}
 	// Removing something must not leave more behind than it found. A file that
 	// is not there has nothing in it to remove.
 	if removingWiring {
