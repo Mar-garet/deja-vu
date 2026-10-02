@@ -748,12 +748,14 @@ func dropGooseRecallBlock(path string) error {
 	end := strings.Index(rest, gooseRecallEnd)
 	before, after := string(old)[:start], ""
 	if end >= 0 {
-		after = strings.TrimPrefix(rest[end+len(gooseRecallEnd):], "\n")
+		after = strings.TrimLeft(rest[end+len(gooseRecallEnd):], "\n")
 	}
-	// The block went in after the reader's text and a blank line; the blank
-	// line leaves with it, or every round trip gave the file back two
-	// newlines longer (#4269).
-	if strings.HasSuffix(before, "\n\n") {
+	// The block went in after the reader's text and a blank line; at the end
+	// of the file that blank line leaves with it, or every round trip gave the
+	// file back two newlines longer (#4269). With the reader's text after the
+	// block it stays: a refresh drops the blank line below the block, and
+	// taking the one above as well joined two paragraphs into one.
+	if after == "" && strings.HasSuffix(before, "\n\n") {
 		before = before[:len(before)-1]
 	}
 	next := before + after

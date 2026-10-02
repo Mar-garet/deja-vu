@@ -73,4 +73,16 @@ func TestGooseRecallBlockComesOutWhole(t *testing.T) {
 	if got, _ := os.ReadFile(path); string(got) != "one\n\ntwo\n" {
 		t.Errorf("block between the reader's lines came out as %q", got)
 	}
+	// A refresh rewrites the block with the blank line after it gone; the
+	// reader's two paragraphs still come back apart, not joined into one.
+	refreshed := gooseRecallBlock(installed, "newer recall\n")
+	if err := os.WriteFile(path, []byte(refreshed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dropGooseRecallBlock(path); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "one\n\ntwo\n" {
+		t.Errorf("block between the reader's lines, after a refresh, came out as %q", got)
+	}
 }
