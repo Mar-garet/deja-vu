@@ -984,7 +984,10 @@ func vanishedFromStores(dir, harness string, files map[string]FileState, fresh [
 	}
 	stores := map[string]bool{}
 	for p, st := range m.Files {
-		if st.LastUpdated <= 0 {
+		// An aider history is a file and still one store of many sessions: a
+		// session that left it — the file deleted and started again — is kept
+		// by the incremental pass, and a rebuild has to keep it too (#4332).
+		if st.LastUpdated <= 0 && harnessForPath(p) != "aider" {
 			continue
 		}
 		if _, ok := files[p]; !ok {
@@ -1026,9 +1029,16 @@ func vanishedFromStores(dir, harness string, files map[string]FileState, fresh [
 		}
 		s.Messages = append(s.Messages, model.Message{Role: r.Role, Text: r.Text, Time: r.Time})
 	})
+	// An aider session the file still holds under another id — the ordinal
+	// ids before #4332 — has not left it, and carrying it would index it twice.
+	started := aiderStarts(fresh)
 	out := make([]model.Session, 0, len(by))
 	for _, key := range sortedKeys(by) {
-		out = append(out, *by[key])
+		s := by[key]
+		if s.Harness == "aider" && started[aiderStart(s.Path, s.Started)] {
+			continue
+		}
+		out = append(out, *s)
 	}
 	return out
 }
@@ -3214,6 +3224,36 @@ func fromDatabase(r Record) bool {
 	return storeHarness(r.SourcePath) != ""
 }
 
+// leftItsFile reports a session that a re-read file no longer holds, in a
+// harness that keeps many sessions in one file. aider appends every launch to
+// one history, and people delete it because it grows forever: the next launch
+// starts a new file at the same path, and dropping by path took every session
+// the deleted file held, which a deleted transcript keeps (#2970, #4332).
+//
+// A session the file still holds under another id has not left it: ids before
+// #4332 were ordinals, and two launches in one second are told apart by order.
+// held is aiderStarts of what the pass read.
+func leftItsFile(r Record, reread map[string]bool, meta SessionMeta, held map[string]bool) bool {
+	harness, _, _ := strings.Cut(r.Key, ":")
+	return harness == "aider" && !reread[r.Key] && !held[aiderStart(r.SourcePath, meta.Started)]
+}
+
+// aiderStarts is the history path and start time of every aider session in
+// ss, the one thing that names an aider session across a change of its id.
+func aiderStarts(ss []model.Session) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range ss {
+		if s.Harness == "aider" {
+			out[aiderStart(s.Path, s.Started)] = true
+		}
+	}
+	return out
+}
+
+func aiderStart(path string, started time.Time) string {
+	return path + "\x00" + started.UTC().String()
+}
+
 // readWholeThisPass reports whether the pass re-read this record's store in
 // full. Only then may an old record be dropped because its key came back: a
 // store read from a watermark hands back the new turns alone, and dropping the
@@ -3755,6 +3795,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	for _, s := range replacements {
 		replaceKeys[s.Harness+":"+s.ID] = true
 	}
+	aiderHeld := aiderStarts(replacements)
 	// A kept file whose session arrived again from another path is a rename,
 	// not a cleanup: the client moved the transcript, and keeping the old copy
 	// would make the session its own second copy (#1086). Those go back to
@@ -3920,7 +3961,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		// And only when the pass read that store whole: a store read from its
 		// watermark hands back the new turns alone, so dropping the rest by key
 		// would take the earlier turns of every continued session (#2033).
-		if removed[r.SourcePath] || (changed[r.SourcePath].Path != "" && !fromStore) || (fromStore && readWholeThisPass(r) && storeKeys[r.Key]) {
+		if removed[r.SourcePath] || (changed[r.SourcePath].Path != "" && !fromStore && !leftItsFile(r, replaceKeys, old.Sessions[r.Key], aiderHeld)) || (fromStore && readWholeThisPass(r) && storeKeys[r.Key]) {
 			dropped[r.Key] = true
 			return
 		}
