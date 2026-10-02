@@ -22,7 +22,7 @@ The work sits in the same `parts` list as `functionCall` and `functionResponse`.
 
 - **MCP**: `deja install qwen` adds `mcpServers.deja` to `~/.qwen/settings.json`.
 - **Skill**: the shared `~/.agents/skills/deja-history/SKILL.md`. Qwen lists skills under `/skills`, so the skill is also the command.
-- **Auto-recall**: `deja install qwen-auto` adds hooks to the same `settings.json`: `SessionStart` (digest), `UserPromptSubmit` (per-prompt recall), `PostToolUseFailure` on `run_shell_command` (the earlier fix for a failed command) and `PreCompact`.
+- **Auto-recall**: `deja install qwen-auto` adds hooks to the same `settings.json`: `SessionStart` (digest), `UserPromptSubmit` (per-prompt recall), `PostToolUseFailure` on `run_shell_command` (the earlier fix for a failed command), `PreCompact` and `SessionEnd` (the session you quit is back in the next one's MCP recall).
 
 ## Resume
 
