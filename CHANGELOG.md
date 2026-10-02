@@ -184,6 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Kilo CLI session keeps the commands it ran with `background_process` and the notebooks it read and edited with `notebook_read` and `notebook_edit`, with the cells an edit wrote. Those calls left no record (#4534).
 - A Kilo Code extension task keeps what its own tools changed: each pair of a `search_and_replace` `operations` list, the lines a `fast_edit_file` wrote, a `write_file`, and the files `delete_file` and `generate_image` named. They left nothing or only the path (#4535).
 - A CodeWhale command run through `terminal/run` or `task_shell_start` is recorded as a command; only `bash` and `exec_shell` were (#4538).
+- A CodeWhale `apply_patch` edit keeps its files, replaced text and written lines, from a unified diff or from whole-file `replace` entries, so `deja restore` and `blame` see it; at most the `path` argument was recorded. A patch that failed is left out (#4538).
 
 ## [0.21.4] - 2026-09-29
 

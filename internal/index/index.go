@@ -557,6 +557,9 @@ import (
 //
 // 60 also: a CodeWhale terminal/run or task_shell_start call is a command
 // (#4538).
+//
+// 60 also: a CodeWhale apply_patch call leaves files, edit and wrote records
+// from its unified diff or replace[] entries (#4538).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

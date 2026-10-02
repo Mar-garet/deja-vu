@@ -25,7 +25,12 @@ new turns use `read`, `write`, `edit` and `bash`, where `edit` takes
 `oldText`/`newText` pair, both read the same way); the older `read_file`, `write_file` and `edit_file`
 names are still read for sessions saved before. Commands also run through
 `terminal/run` (a PTY session) and `task_shell_start` (a background task), both
-under `command`, and are read as commands (#4538).
+under `command`, and are read as commands (#4538). `apply_patch` takes a
+unified diff (`--- a/x` / `+++ b/x`, not codex's `*** Begin Patch`) under
+`patch`, retargeted to `path` when that is set, or whole files under `replace`
+(deprecated alias `changes`) as `{path, content}`; the files, each hunk's
+removed lines and the added lines or contents are read, paths under the
+workspace. A call whose `tool_result` has `is_error` is not recorded (#4538).
 
 `thinking` blocks are dropped. So are the `system` and `developer` roles:
 CodeWhale's own documentation names them as where it puts compaction summaries,

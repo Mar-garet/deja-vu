@@ -222,10 +222,138 @@ func applyPatch(patch string, resolve func(string) string) (files, spans, wrote 
 	return files, spans, wrote
 }
 
+// unifiedPatch is applyPatch for a unified diff, the `--- a/x` / `+++ b/x`
+// format CodeWhale's apply_patch takes (#4538): the files its headers name,
+// the lines each hunk removed and the lines it added. A non-empty override is
+// the file every hunk goes to, whatever the headers say, the way a call's own
+// path argument retargets the patch. Hunk bodies are read by the line counts
+// in their headers, so a removed line that starts with "--" is not taken for
+// the next file's header; a header without counts runs to the next hunk or
+// file.
+func unifiedPatch(patch, override string, resolve func(string) string) (files, spans, wrote []string) {
+	if resolve == nil {
+		resolve = func(p string) string { return p }
+	}
+	lines := strings.Split(patch, "\n")
+	cur, oldHeader := "", ""
+	var added []string
+	seen := map[string]bool{}
+	flush := func() {
+		if rec := WroteRecord(cur, strings.Join(added, "\n")); cur != "" && rec != "" {
+			wrote = append(wrote, rec)
+		}
+		added = nil
+	}
+	open := func(p string) {
+		flush()
+		cur = p
+		if p != "" && !seen[p] {
+			seen[p] = true
+			files = append(files, p)
+		}
+	}
+	if override != "" {
+		open(resolve(override))
+	}
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		switch {
+		case strings.HasPrefix(line, "--- "):
+			oldHeader = line[4:]
+		case strings.HasPrefix(line, "+++ "):
+			p := unifiedDiffPath(line[4:])
+			if p == "" {
+				p = unifiedDiffPath(oldHeader)
+			}
+			oldHeader = ""
+			if override == "" && p != "" {
+				open(resolve(p))
+			}
+		case strings.HasPrefix(line, "@@"):
+			oldN, newN, counted := unifiedHunkCounts(line)
+			var removed []string
+			j := i + 1
+			for ; j < len(lines); j++ {
+				l := lines[j]
+				if counted && oldN <= 0 && newN <= 0 {
+					break
+				}
+				if !counted && (strings.HasPrefix(l, "@@") || strings.HasPrefix(l, "diff --git ") ||
+					(strings.HasPrefix(l, "--- ") && j+1 < len(lines) && strings.HasPrefix(lines[j+1], "+++ "))) {
+					break
+				}
+				switch {
+				case strings.HasPrefix(l, "-"):
+					removed = append(removed, l[1:])
+					oldN--
+				case strings.HasPrefix(l, "+"):
+					added = append(added, l[1:])
+					newN--
+				case strings.HasPrefix(l, `\`):
+					// "\ No newline at end of file"
+				default:
+					oldN--
+					newN--
+				}
+			}
+			i = j - 1
+			if span := strings.Join(removed, "\n"); cur != "" && strings.TrimSpace(span) != "" {
+				if len(span) > editSpanMax {
+					span = span[:editSpanMax]
+				}
+				spans = append(spans, cur+"\n"+span)
+			}
+		}
+	}
+	flush()
+	return files, spans, wrote
+}
+
+// unifiedHunkCounts reads the old and new line counts off "@@ -a,b +c,d @@";
+// a count left out is 1. counted is false for a bare "@@".
+func unifiedHunkCounts(header string) (oldN, newN int, counted bool) {
+	m := unifiedHunkHeader.FindStringSubmatch(header)
+	if m == nil {
+		return 0, 0, false
+	}
+	count := func(s string) int {
+		if s == "" {
+			return 1
+		}
+		n, _ := strconv.Atoi(s)
+		return n
+	}
+	return count(m[1]), count(m[2]), true
+}
+
+var unifiedHunkHeader = regexp.MustCompile(`^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@`)
+
+// unifiedDiffPath is the file a `---` or `+++` header names: the timestamp
+// after a tab and the a/ or b/ prefix off, and "" for /dev/null.
+func unifiedDiffPath(raw string) string {
+	raw, _, _ = strings.Cut(raw, "\t")
+	raw = strings.TrimSpace(raw)
+	if raw == "/dev/null" || raw == "dev/null" {
+		return ""
+	}
+	if p, ok := strings.CutPrefix(raw, "a/"); ok {
+		return p
+	}
+	if p, ok := strings.CutPrefix(raw, "b/"); ok {
+		return p
+	}
+	return raw
+}
+
 // applyPatchRecords is applyPatch as the records a reader appends, under the
 // switches every reader honours.
 func applyPatchRecords(patch string, resolve func(string) string, t time.Time) []model.Message {
 	files, spans, wrote := applyPatch(patch, resolve)
+	return patchRecords(files, spans, wrote, t)
+}
+
+// patchRecords turns what a patch says into the records a reader appends.
+func patchRecords(files, spans, wrote []string, t time.Time) []model.Message {
 	var out []model.Message
 	if IndexToolPaths() && len(files) > 0 {
 		out = append(out, model.Message{Role: RoleFiles, Text: strings.Join(files, "\n"), Time: t})

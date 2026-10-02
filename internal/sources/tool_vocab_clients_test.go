@@ -293,3 +293,51 @@ func TestCodeWhaleTerminalAndTaskShellCommands(t *testing.T) {
 	)
 	vocabCheck(t, ss, []string{vocabCmd("$ go test ./..."), vocabCmd("$ go test -race ./...")}, nil)
 }
+
+// CodeWhale 0.10.1's apply_patch takes a unified diff under patch, retargeted
+// by path when set, or whole files under replace[] {path, content}. Paths are
+// relative to the workspace, and a call that came back as an error changed
+// nothing (#4538).
+func TestCodeWhaleApplyPatch(t *testing.T) {
+	diff := "--- a/retry.go\n+++ b/retry.go\n@@ -1,3 +1,3 @@\n func retry() {\n-" + oldLoop + "\n+" + newLoop + "\n }\n"
+	ss := cwSaved(t, "applied", false,
+		map[string]any{"name": "apply_patch", "input": map[string]any{"path": "backoff.go", "patch": diff}},
+		map[string]any{"name": "apply_patch", "input": map[string]any{"patch": diff}},
+		map[string]any{"name": "apply_patch", "input": map[string]any{"replace": []any{map[string]any{"path": "/tmp/proj/jitter.go", "content": jitter}}}},
+	)
+	vocabCheck(t, ss, []string{
+		vocabFiles("/tmp/proj/backoff.go"),
+		vocabEdit("/tmp/proj/backoff.go", oldLoop),
+		vocabWrote("/tmp/proj/backoff.go", newLoop),
+		vocabFiles("/tmp/proj/retry.go"),
+		vocabEdit("/tmp/proj/retry.go", oldLoop),
+		vocabWrote("/tmp/proj/retry.go", newLoop),
+		vocabFiles("/tmp/proj/jitter.go"),
+		vocabWrote("/tmp/proj/jitter.go", jitter),
+	}, nil)
+
+	refused := cwSaved(t, "Error: patch did not apply", true,
+		map[string]any{"name": "apply_patch", "input": map[string]any{"patch": diff}})
+	vocabCheck(t, refused, nil, []string{
+		vocabEdit("/tmp/proj/retry.go", oldLoop),
+		vocabWrote("/tmp/proj/retry.go", newLoop),
+	})
+}
+
+func TestUnifiedPatchReadsHunksByCount(t *testing.T) {
+	// The removed SQL comment reads "--- old" with its diff marker, and is not
+	// the next file's header; the second file has a bare @@.
+	patch := "diff --git a/q.sql b/q.sql\n--- a/q.sql\t2026-06-26 10:00:00 +0000\n+++ b/q.sql\n@@ -1,2 +1,2 @@\n--- old\n+select retries from attempts;\n context\n" +
+		"--- /dev/null\n+++ b/new.go\n@@\n+" + jitter + "\n"
+	files, spans, wrote := unifiedPatch(patch, "", func(p string) string { return "/w/" + p })
+	if strings.Join(files, ",") != "/w/q.sql,/w/new.go" {
+		t.Errorf("files = %q", files)
+	}
+	if len(spans) != 1 || spans[0] != "/w/q.sql\n-- old" {
+		t.Errorf("spans = %q", spans)
+	}
+	want := []string{WroteRecord("/w/q.sql", "select retries from attempts;"), WroteRecord("/w/new.go", jitter)}
+	if strings.Join(wrote, "|") != strings.Join(want, "|") {
+		t.Errorf("wrote = %q, want %q", wrote, want)
+	}
+}
