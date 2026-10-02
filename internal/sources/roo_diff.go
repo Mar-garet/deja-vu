@@ -224,6 +224,11 @@ func rooCallSides(name string, in map[string]any) (replaced, written []string) {
 		diff, _ := in["diff"].(string)
 		return rooDiffSides(diff, clineMarkers)
 	case "search_and_replace":
+		// Current Roo keeps search_and_replace as an alias of edit and writes
+		// the alias with edit's arguments (#4531).
+		if _, ok := in["old_string"]; ok {
+			return rooCallSides("edit", in)
+		}
 		// A regular expression is not the text that stopped existing, so only
 		// a literal search is recorded as the replaced side. The written side
 		// of a regex replacement carries $1 and friends, which is not a line

@@ -138,3 +138,29 @@ func TestWithoutElisions(t *testing.T) {
 		}
 	}
 }
+
+// rooTask parses one Roo task under workspace /tmp/proj whose assistant turn
+// makes the given calls.
+func rooTask(t *testing.T, parse func(string) ([]model.Session, error), calls ...string) []model.Session {
+	t.Helper()
+	task := filepath.Join(t.TempDir(), "tasks", "1788845325718")
+	vocabWrite(t, filepath.Join(task, "history_item.json"), `{"id":"1788845325718","ts":1788845325718,"task":"fix the retry loop","workspace":"/tmp/proj"}`)
+	p := vocabWrite(t, filepath.Join(task, "api_conversation_history.json"),
+		`[{"role":"user","content":[{"type":"text","text":"<task>\nfix the retry loop\n</task>"}]},{"role":"assistant","content":[`+strings.Join(calls, ",")+`]}]`)
+	return vocabParse(t, parse, p)
+}
+
+func rooUse(name string, in any) string {
+	return vocabJSON(map[string]any{"type": "tool_use", "id": "t-" + name, "name": name, "input": in})
+}
+
+// roo-cli 0.1.17 offers MiniMax models search_and_replace, an alias of edit,
+// and keeps the alias in history with edit's arguments (#4531).
+func TestRooSearchAndReplaceAlias(t *testing.T) {
+	ss := rooTask(t, ParseRooTask, rooUse("search_and_replace", map[string]any{"file_path": "retry.go", "old_string": oldLoop, "new_string": newLoop}))
+	vocabCheck(t, ss, []string{
+		vocabFiles("/tmp/proj/retry.go"),
+		vocabEdit("/tmp/proj/retry.go", oldLoop),
+		vocabWrote("/tmp/proj/retry.go", newLoop),
+	}, nil)
+}

@@ -23,7 +23,9 @@ not text the file held, and a block whose closing marker never arrives records
 nothing rather than guessing where it ended. Current Roo also offers
 `search_replace`, `edit_file` and `edit`, which take `old_string` and
 `new_string` under `file_path`, and `apply_patch`, whose paths and `-`/`+` lines
-are read out of the patch body.
+are read out of the patch body. `search_and_replace` is kept as an alias of
+`edit` and written under the alias with `edit`'s arguments, which are read as
+`edit`'s (#4531).
 
 Tasks from before native tool calling (Roo 3.20, and the legacy Cline
 extension) keep each call as XML inside the assistant's text block —
