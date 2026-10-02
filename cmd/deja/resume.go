@@ -202,17 +202,18 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "commandcode":
 		// `cmd --resume <id>` (1.73.4 --help) finds the id only under the
 		// project folder of the current directory, so it runs where the
-		// session did (#4372), and with that directory gone it finds nothing
-		// (#4460). On Windows the bin is cmdc, as the client prints on exit.
+		// session did (#4372). `--session <id>` searches every project and
+		// continues the same transcript from wherever it runs, so that is the
+		// command when the directory is gone or unknown (#4460). On Windows
+		// the bin is cmdc, as the client prints on exit.
 		bin := "cmd"
 		if runtime.GOOS == "windows" {
 			bin = "cmdc"
 		}
-		dir, err := recordedResumeDir(s, sources.CommandCodeSessionDir(s.Path), bin+" --resume")
-		if err != nil {
-			return "", "", err
+		if dir := existingDir(resumeRecordedDir(s)); dir != "" {
+			return dir, bin + " --resume " + s.ID, nil
 		}
-		return dir, bin + " --resume " + s.ID, nil
+		return "", bin + " --session " + s.ID, nil
 	case "kiro":
 		// `kiro-cli chat --resume-id <sessionId>`, which Kiro's own docs give
 		// and two orchestrators drive — one of them noting it needs Kiro CLI
@@ -393,16 +394,15 @@ func resumeCommand(s model.Session) (string, string, error) {
 			}
 			return dir, "reasonix --resume " + s.ID, nil
 		}
-		// A workspace that is gone took its store with it (#4459).
-		if ws := sources.ReasonixWorkspace(s.Path); ws != "" {
-			dir, err := recordedResumeDir(s, ws, "reasonix --resume")
-			if err != nil {
-				return "", "", err
-			}
-			return dir, "reasonix --resume " + s.ID, nil
+		// The JSONL store sits under Reasonix's state, not the workspace, and
+		// --resume reads a file path from any directory, so a session whose
+		// workspace is gone is reached by its path, like one that had none
+		// (#4459).
+		if ws := existingDir(sources.ReasonixWorkspace(s.Path)); ws != "" {
+			return ws, "reasonix --resume " + s.ID, nil
 		}
 		if !reasonixPathPattern.MatchString(s.Path) {
-			return "", "", fmt.Errorf("session %s has no workspace and its path holds characters deja will not place in a command — run reasonix --resume with the file %s", digest.Short(s.ID), s.Path)
+			return "", "", fmt.Errorf("session %s has no workspace to run in and its path holds characters deja will not place in a command — run reasonix --resume with the file %s", digest.Short(s.ID), s.Path)
 		}
 		return "", "reasonix --resume " + s.Path, nil
 	case "qwen":
@@ -546,15 +546,22 @@ func resumeRecordedDir(s model.Session) string {
 		return sources.ContinueSessionDir(s.Path)
 	case "codewhale":
 		return sources.CodeWhaleWorkspace(s.Path)
+	case "commandcode":
+		return sources.CommandCodeSessionDir(s.Path)
+	case "reasonix":
+		if sources.ReasonixStore(s.Path) == "jsonl" {
+			return sources.ReasonixWorkspace(s.Path)
+		}
 	}
 	return ""
 }
 
 // resumeDirGoneNote says where a session whose directory is gone will run:
 // opencode, Kilo and ZCode reopen it from anywhere, and their tools then work
-// in the directory the command is run from, and so do Grok, Kiro, Continue
-// and CodeWhale (#4459, #4460). Cline does the same, and its directory is the
-// manifest's rather than the store path's (#4318). pi, gjc, Kimchi and Senpi
+// in the directory the command is run from, and so do Grok, Kiro, Continue,
+// CodeWhale, Command Code and a Reasonix JSONL session (#4459, #4460). Cline
+// does the same, and its directory is the manifest's rather than the store
+// path's (#4318). pi, gjc, Kimchi and Senpi
 // offer to fork it there instead, and prime-agent refuses it unless told to
 // fork (#4408, #4456).
 func resumeDirGoneNote(s model.Session, dir string) string {

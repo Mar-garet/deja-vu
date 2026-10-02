@@ -82,6 +82,18 @@ func TestResumeReasonixV4(t *testing.T) {
 	if err != nil || gotDir != ws || cmd != "reasonix --resume "+id {
 		t.Errorf("project: dir/cmd/err = %q/%q/%v, want the workspace and the id", gotDir, cmd, err)
 	}
+	// The sessions-v4 store is found only from its workspace, so with that
+	// gone there is nowhere to run the command from (#4459).
+	gone := filepath.Join(t.TempDir(), "gone")
+	slugOf = gone
+	if runtime.GOOS == "windows" {
+		slugOf = strings.ToLower(slugOf)
+	}
+	goneSlug := strings.NewReplacer("/", "-", "\\", "-", ":", "-").Replace(slugOf)
+	ws = gone
+	if _, cmd, err := resumeCommand(model.Session{Harness: "reasonix", ID: id, Path: session("projects", goneSlug, "sessions-v4", id)}); err == nil || !strings.Contains(err.Error(), "deja show") {
+		t.Errorf("gone workspace: cmd = %q, err = %v, want a refusal pointing at deja show", cmd, err)
+	}
 	for _, store := range [][]string{{"sessions-v4", id}, {"desktop-sessions-v5", "by-id", "desktop-1"}} {
 		if _, cmd, err := resumeCommand(model.Session{Harness: "reasonix", ID: id, Path: session(store...)}); err == nil {
 			t.Errorf("%s: printed %q for a store --resume does not search", filepath.Join(store...), cmd)
