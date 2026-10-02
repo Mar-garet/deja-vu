@@ -97,7 +97,9 @@ Reasonix takes everything as one plugin package (`reasonix-plugin.json`,
   approval) get nothing. Reasonix stores the typed text as `raw_content`, and
   that is what deja indexes. At `tool.after` it adds the pre-tool line for a
   shell command (`bash`, or `pwsh` and `powershell` on Windows) or a file
-  write, and when a command failed, what fixed the same failure before. Both
+  write — `write_file`, `edit_file`, `multi_edit`, `notebook_edit`,
+  `delete_range`, `delete_symbol`, and `move_file` under the file it moved
+  from (#4541) — and when a command failed, what fixed the same failure before. Both
   go after the output; for output Reasonix will cut to a CI summary (first
   and last eight lines) they go in front, on one line. At
   `compaction.prepare` it adds deja's record of the folded turns, read from

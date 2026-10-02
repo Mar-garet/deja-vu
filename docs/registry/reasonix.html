@@ -129,7 +129,9 @@
 <p>approval) get nothing. Reasonix stores the typed text as <code>raw_content</code>, and</p>
 <p>that is what deja indexes. At <code>tool.after</code> it adds the pre-tool line for a</p>
 <p>shell command (<code>bash</code>, or <code>pwsh</code> and <code>powershell</code> on Windows) or a file</p>
-<p>write, and when a command failed, what fixed the same failure before. Both</p>
+<p>write — <code>write_file</code>, <code>edit_file</code>, <code>multi_edit</code>, <code>notebook_edit</code>,</p>
+<p><code>delete_range</code>, <code>delete_symbol</code>, and <code>move_file</code> under the file it moved</p>
+<p>from (#4541) — and when a command failed, what fixed the same failure before. Both</p>
 <p>go after the output; for output Reasonix will cut to a CI summary (first</p>
 <p>and last eight lines) they go in front, on one line. At</p>
 <p><code>compaction.prepare</code> it adds deja&#39;s record of the folded turns, read from</p>
