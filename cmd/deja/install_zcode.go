@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -365,6 +366,28 @@ func restoreZCodeHooksSwitch(path string, hooks map[string]any) bool {
 		}
 	}
 	return len(names) > 0
+}
+
+// zcodeHooksRun reports whether a setting.json has one of deja's hooks where
+// the runtime runs it: under hooks.events, with hooks.enabled on. A file
+// ZCode migrated from an older deja's config.json has them directly under
+// hooks, which the runtime ignores (#4429).
+func zcodeHooksRun(b []byte) bool {
+	var root struct {
+		Hooks struct {
+			Enabled bool             `json:"enabled"`
+			Events  map[string][]any `json:"events"`
+		} `json:"hooks"`
+	}
+	if json.Unmarshal(bytes.TrimPrefix(b, utf8BOM), &root) != nil || !root.Hooks.Enabled {
+		return false
+	}
+	for _, list := range root.Hooks.Events {
+		if len(withoutZCodeHooks(list)) != len(list) {
+			return true
+		}
+	}
+	return false
 }
 
 // withoutZCodeHooks is an event's list with deja's entries taken out.

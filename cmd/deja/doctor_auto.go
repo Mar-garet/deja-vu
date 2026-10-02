@@ -256,6 +256,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	// enabled record of it; the directory alone is inert.
 	case a.name == "reasonix" && !reasonixPackageEnabled():
 		state = "stale"
+	case a.name == "zcode" && !zcodeHooksRun(b):
+		state = "stale"
 	default:
 		state = "wired"
 	}
@@ -309,6 +311,8 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no %s call — `deja install %s-auto`)\n", a.name, "stale", reportPath(path), a.marker, a.name)
 		case a.name == "reasonix" && !reasonixPackageEnabled():
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no enabled record in %s — `deja install reasonix-auto`)\n", a.name, "stale", reportPath(path), reportPath(reasonixStatePath()))
+		case a.name == "zcode" && !zcodeHooksRun(b):
+			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's hook is not under hooks.events with hooks.enabled on — `deja install zcode-auto`)\n", a.name, "stale", reportPath(path))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
 		}

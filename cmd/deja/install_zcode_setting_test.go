@@ -317,3 +317,43 @@ func TestInstallZCodeBeforeFirstLaunchKeepsTheMigration(t *testing.T) {
 		t.Errorf("setting.json took config.json after the runtime's own migration had run:\n%s", b)
 	}
 }
+
+// ZCode's first-launch migration copies config.json across as it is, so a
+// machine wired by an older deja has its hooks directly under hooks, where the
+// runtime does not look, and a reader can switch hooks.enabled off. Either way
+// no hook runs, and the row said wired because the file names hook-context
+// (#4429).
+func TestDoctorZCodeHooksThatDoNotRunAreStale(t *testing.T) {
+	hermeticEnv(t)
+	home := os.Getenv("HOME")
+	dir := filepath.Join(home, ".zcode", "cli")
+	setting := filepath.Join(dir, "setting.json")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hook := `[{"hooks":[{"type":"command","command":"/usr/local/bin/deja hook-context --strict","timeout":30}]}]`
+	var row autoWiring
+	for _, a := range autoWirings() {
+		if a.name == "zcode" {
+			row = a
+		}
+	}
+	for name, body := range map[string]string{
+		"flat":     `{"hooks":{"enabled":true,"SessionStart":` + hook + `}}`,
+		"disabled": `{"hooks":{"enabled":false,"events":{"SessionStart":` + hook + `}}}`,
+	} {
+		if err := os.WriteFile(setting, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if state, _ := autoWiringState(row); state != "stale" {
+			t.Errorf("%s: state = %q, want stale", name, state)
+		}
+	}
+	// The control: the shape the runtime runs.
+	if err := os.WriteFile(setting, []byte(`{"hooks":{"enabled":true,"events":{"SessionStart":`+hook+`}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, _ := autoWiringState(row); state != "wired" {
+		t.Errorf("runtime shape: state = %q, want wired", state)
+	}
+}
