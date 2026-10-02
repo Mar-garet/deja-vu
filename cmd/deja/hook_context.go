@@ -389,7 +389,8 @@ func runHookContextMode(dir string, plain, once bool) error {
 		CWD             string `json:"cwd"`
 		// Cursor leaves cwd empty and names the project here instead.
 		WorkspaceRoots []string `json:"workspace_roots"`
-		// Grok spells all of this in camelCase. See hook_grok.go.
+		// Grok spells all of this in camelCase, and so does Copilot CLI
+		// (sessionId). See hook_grok.go.
 		grokEnvelope
 		// Once is set by a host whose session-start event is really a per-turn
 		// one. OpenClaw's before_agent_start fires on every agent run, so
@@ -411,6 +412,8 @@ func runHookContextMode(dir string, plain, once bool) error {
 	shape := hookToolClaude
 	if plain {
 		shape = hookToolPlain
+	} else if copilotHookOutput {
+		shape = hookToolCopilot
 	}
 	// The first moment this session exists, so the first recall of it — the one
 	// an agent plans against — already knows whose transcript to leave out.

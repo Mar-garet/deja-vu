@@ -187,6 +187,10 @@ func clientHooksOff(name string) string {
 			!projectSettingSays(project, false, "disableAllHooks") {
 			return hooksOffNote(name, "`disableAllHooks: true`", p)
 		}
+	case "copilot":
+		if p := copilotHooksOffIn(); p != "" {
+			return hooksOffNote(name, "`disableAllHooks: true`", p)
+		}
 	case "gemini":
 		p := filepath.Join(sources.GeminiHome(), "settings.json")
 		if jsonAt(readJSONConfig(p), "hooksConfig", "enabled") == false &&

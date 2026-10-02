@@ -965,6 +965,8 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return wroteAll(hooks, mcp), nil
 	case "copilot":
 		return installCopilotMCP(exe, uninstall)
+	case "copilot-auto":
+		return installCopilotAuto(exe, uninstall)
 	case "vscode", "copilot-chat":
 		mcp, err := installVSCodeMCP(exe, uninstall)
 		if err != nil {
@@ -2112,6 +2114,7 @@ var hookNames = map[string]bool{
 	"hook-context":      true,
 	"hook-goose":        true,
 	"hook-goose-prompt": true,
+	"hook-mcp-call":     true,
 	"hook-plan":         true,
 	"hook-precompact":   true,
 	"hook-prompt":       true,
@@ -4853,7 +4856,7 @@ func installTargetNames() []string {
 		"cline", "cline-auto",
 		"goose", "goose-auto",
 		"crush", "crush-auto",
-		"grok", "grok-auto", "copilot", "roo", "kilocode", "cherrystudio", "kiro", "senpi", "senpi-auto", "kimchi", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
+		"grok", "grok-auto", "copilot", "copilot-auto", "roo", "kilocode", "cherrystudio", "kiro", "senpi", "senpi-auto", "kimchi", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
 		// Continue keeps the server and the slash command in one assistant
 		// config, and its skill in the folder beside it; there is no hook to
 		// wire, so there is nothing an -auto target would add (#3062).

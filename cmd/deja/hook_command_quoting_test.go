@@ -125,8 +125,10 @@ func hasDejaSubcommand(cmd string) bool {
 
 // firstShellWord is the command a shell would run: the quoted span when the
 // line starts with a quote, and the first whitespace-delimited word otherwise.
+// PowerShell's call operator comes before the path it runs: `& 'C:/…' hook`.
 func firstShellWord(cmd string) string {
 	cmd = strings.TrimSpace(cmd)
+	cmd = strings.TrimSpace(strings.TrimPrefix(cmd, "& "))
 	if cmd == "" {
 		return ""
 	}

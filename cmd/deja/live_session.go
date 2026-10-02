@@ -94,6 +94,17 @@ func runHookSessionEnd(dir string, stdin io.Reader) {
 	endSessionLive(dir, input.SessionID)
 }
 
+// runHookMCPCall is Copilot CLI's preMcpToolCall hook: it stamps the session
+// that is about to call an MCP tool, so recall reads a stamp made a moment ago
+// rather than one from a sessionStart that may be past the window (#4551). It
+// prints nothing: Copilot reads a reply as the request's new _meta.
+func runHookMCPCall(dir string, stdin io.Reader, _ io.Writer) {
+	var input precompactHookInput
+	_ = json.Unmarshal(readHookPayload(stdin, hookStdinWait), &input)
+	input.adopt()
+	markSessionLive(dir, input.SessionID)
+}
+
 // readLiveSessions is every stamp in the file, whatever its age.
 func readLiveSessions(dir string) map[string]time.Time {
 	out := map[string]time.Time{}

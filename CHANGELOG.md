@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `deja install copilot-auto` adds a `sessionStart` hook to Copilot CLI, so a new or resumed session starts with the project digest, as it does in Claude Code and Gemini CLI. The hook goes under `hooks` in `~/.copilot/settings.json` (or in `config.json` while your own hooks are still there, since Copilot moves them over on start), and uninstall gives the file back byte for byte. It also wires `preMcpToolCall` and `sessionEnd`, so MCP recall leaves out the session asking it however long that session runs (#4231, #4551).
 - ZCode's older sessions, the snapshots under `~/.zcode/v2/sessions` that the current runtime leaves until you restore them, are indexed, and `deja doctor` counts them. Deleted ones are skipped, and one already restored into the CLI database is read from there (#4432).
 - pi, omp, OpenClaw, gjc, prime-agent, senpi and Kimchi sessions carry their tool calls: the files read and written, the commands run with how they ended, and the replaced text of each edit, so `deja files`, `deja how`, `deja restore` and `deja blame` answer for them. gjc's hashline edits are read too. The index rebuilds once (#4113).
 - `deja install grok-auto` wires `PostToolUse`, so a Grok Build command that fails gets the earlier fix for the same error, as Claude Code and Codex do; `deja hook-tool-after` reads grok's camelCase payload and its `output_for_prompt` (#4499).
 
 ### Fixed
 
+- deja follows `COPILOT_HOME` for Copilot CLI: sessions under it are indexed, and `deja install copilot` writes the MCP entry and the skill there instead of `~/.copilot`, which Copilot never reads when it is set. A relative value is read against the current directory, as Copilot reads it; `DEJA_COPILOT_ROOT` still overrides the session root (#4240).
 - A Codex or Cursor CLI session you quit is back in the next session's MCP recall right away instead of 20 minutes later: `deja install codex-auto` and `cursor-auto` wire the session-end hook, and the Codex plugin carries it too. Codex asks once to approve the new hook (#4545).
 - An opencode 1.x session is back in the next session's MCP recall as soon as its turn ends, instead of 20 minutes later: the plugin `deja install opencode-auto` writes, and the `opencode-deja` package, end the sessions they stamped at `session.idle` and when opencode disposes them (#4546).
 - A Claude Code or Codex sub-agent's MCP recall no longer lists the sub-agent's own transcript. The sub-agents of a live session count as live, and a Codex sub-agent's rollout now records the thread that spawned it. The index rebuilds once (#4547).

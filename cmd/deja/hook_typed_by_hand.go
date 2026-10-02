@@ -18,6 +18,7 @@ import (
 //	  hook-goose-prompt  20 to 30 ms
 //	  hook-precompact    10 to 40 ms
 //	  hook-session-end   under 10 ms
+//	  hook-mcp-call      under 10 ms
 //
 //	once per session, allowed one expensive run
 //	  hook-context       0.85 s, then 50 ms
