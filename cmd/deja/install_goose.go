@@ -305,16 +305,23 @@ func yamlBlockIndent(block string) string {
 }
 
 func gooseConfigDir() string {
+	return gooseConfigDirFor(runtime.GOOS)
+}
+
+// gooseConfigDirFor is gooseConfigDir on goos. goose takes GOOSE_PATH_ROOT and
+// XDG_CONFIG_HOME only when absolute and falls back to its default otherwise;
+// deja read a relative one against wherever it ran (#4285).
+func gooseConfigDirFor(goos string) string {
 	// Checked before XDG: Goose gives GOOSE_PATH_ROOT precedence over both.
-	if root := os.Getenv("GOOSE_PATH_ROOT"); root != "" {
+	if root := os.Getenv("GOOSE_PATH_ROOT"); filepath.IsAbs(root) {
 		return filepath.Join(root, "config")
 	}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(xdg) {
 		return filepath.Join(xdg, "goose")
 	}
 	// Goose is one of the few that does not use ~/.config on Windows: its
 	// config, data and state all sit under the Block vendor directory.
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		if appData := os.Getenv("APPDATA"); appData != "" {
 			return filepath.Join(appData, "Block", "goose", "config")
 		}

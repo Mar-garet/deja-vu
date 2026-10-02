@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A relative `GOOSE_PATH_ROOT`, `XDG_CONFIG_HOME` or `XDG_DATA_HOME` is skipped for goose the way goose skips it, so `deja install goose` and the session reader no longer use a directory under wherever deja was run (#4285).
 - In Claude Code a failing command now gets the earlier fix. Claude fires `PostToolUseFailure` for a command that exits non-zero, which `deja install claude-auto` never wired, and it rejected the hook's reply as naming the wrong event. Existing installs pick the hook up on the next upgrade; Claude Code before 2.0.56, which would ignore the whole settings file over the unknown event, is left without it (#4488).
 - A failed command keeps its `→ exit N` in Claude Code, Cherry Studio, pi, omp, gjc, prime, senpi, Kimchi, goose, Cline, Kiro CLI, Zed and Copilot Chat, so `deja how` and `deja fix` can tell it from a run whose outcome is unknown. Copilot Chat terminal runs also keep their output (#4487, #4501, #4496, #4502, #4505, #4507, #4493).
 - A failed command in Roo, Kilo Code, Continue, Amp and Antigravity keeps the exit code the client wrote for it, read only off the client's own status line or field (#4530).

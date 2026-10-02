@@ -41,12 +41,13 @@ func GooseDataDir() string {
 // is read.
 func GooseDataDirs() []string {
 	// GOOSE_PATH_ROOT relocates config, data and state together; a user who
-	// sets it has every session under it and none where we would look.
-	if root := os.Getenv("GOOSE_PATH_ROOT"); root != "" {
+	// sets it has every session under it and none where we would look. goose
+	// takes it, and XDG_DATA_HOME, only when absolute (#4285).
+	if root := os.Getenv("GOOSE_PATH_ROOT"); filepath.IsAbs(root) {
 		return []string{filepath.Join(root, "data")}
 	}
 	xdg := filepath.Join(Home(), ".local", "share")
-	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
+	if v := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(v) {
 		xdg = v
 	}
 	var out []string
