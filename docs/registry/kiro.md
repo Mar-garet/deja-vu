@@ -50,16 +50,24 @@ row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
   before that the same file held flat `{"role":…,"content":…}` lines. Both are
   read, so a store that predates the change is not lost.
 - The IDE file also carries the agent's own bookkeeping — `session_metadata`,
-  `usage_summary`, `turn_end`, `tool_call`. Those are not turns: a record whose
-  type is not one is dropped rather than attributed to a role, and a test pins
-  that.
+  `usage_summary`, `turn_end`. Those are not turns: a record whose type is not
+  one is dropped rather than attributed to a role, and a test pins that. A
+  `tool_call` record is not a turn either, but it holds the call: `toolName`
+  and `args` are read into commands (`execute_bash`, `execute_pwsh`), files,
+  edits and written lines (`fs_write` and `fs_append` with `path` and `text`,
+  `str_replace` with `oldStr`/`newStr`, `read_file`, `delete_file` with
+  `targetFile`). The engine writes one such line per state an action passes
+  through; only the one that says how it ended (`completed` or `failed`) is
+  read, a `denied` call is not, and a failed edit keeps its file but not its
+  sides (#4506).
 - **Tool calls.** The TUI writes `toolUse` parts inside an
   `AssistantMessage` and the results as a `ToolResults` record; the database
   has `tool_uses` and `ToolUseResults`. The TUI names its tools `shell`,
   `write` and `read` (`content`, `oldStr`, `newStr`, `operations[].path`); the
   headless path keeps `execute_bash`, `fs_write` and `fs_read` (`file_text`,
   `old_str`, `new_str`). Both are read into commands, files, edits and tool
-  output (#4299). Only the `Prompt` record carries a timestamp, so the reply
+  output (#4299). A command carries `→ exit N` from its result's
+  `exit_status` (#4505). Only the `Prompt` record carries a timestamp, so the reply
   and its calls take the prompt's.
 - **Not read yet.** The IDE mirrors chats into its globalStorage
   (`kiro.kiroagent/<workspace>/*.chat` beside extensionless execution records).

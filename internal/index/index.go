@@ -491,6 +491,105 @@ import (
 // a renamed Cline CLI session takes its new title (#4319), and a thin harness
 // title is not retaken from an appended turn (#4452); rows already held
 // change only on a rebuild.
+// 60 also: a failed command carries its `→ exit N` in claude, the pi family,
+// goose, cline, kiro-cli, zed and copilot-chat, and a copilot-chat terminal
+// call its output (#4487, #4501, #4496, #4502, #4505, #4507, #4493).
+// 60 also: a Claude Code PowerShell call is a command and a NotebookEdit call
+// leaves files and wrote records (#4489).
+//
+// 60 also: a codex shell_command call is a command with its exit (#4490).
+//
+// 60 also: a Copilot CLI view call leaves a files record and an apply_patch
+// call, whose arguments are the patch string, leaves files, edit and wrote
+// records (#4491).
+//
+// 60 also: a Copilot Chat copilot_readFile call leaves a files record from
+// its message uris (#4492).
+//
+// 60 also: a Gemini CLI read_many_files call leaves a files record for the
+// literal paths in include (#4494).
+//
+// 60 also: an opencode or Kilo CLI 1.x edit or write call, and a 2.x write
+// call, leaves edit and wrote records (#4495).
+//
+// 60 also: a Grok Build search_replace or write call leaves files, edit and
+// wrote records (#4497).
+//
+// 60 also: a grok-dev session in grok.db keeps its tool calls and results as
+// commands, files, edits, wrote and tool output (#4498).
+//
+// 60 also: an OpenClaw apply_patch call leaves files, edit and wrote records
+// (#4500).
+//
+// 60 also: a Cline CLI editor call leaves a wrote record of new_text, and an
+// apply_patch call files, edit and wrote records (#4503).
+//
+// 60 also: a Cline extension replace_in_file with Cline's own markers, or an
+// apply_patch under input, leaves edit and wrote records (#4504).
+//
+// 60 also: a kiro-cli --v3 or Kiro IDE tool_call record becomes commands,
+// files, edit and wrote records (#4506).
+//
+// 60 also: a Roo, Kilo Code, Continue, Amp or Antigravity command carries the
+// `→ exit N` its result reports (#4530).
+//
+// 60 also: a Crush command carries its `→ exit N`, and an edit Crush refused
+// leaves no edit or wrote records (#4532).
+//
+// 60 also: a failed ZCode Bash run carries its `→ exit N` (#4536).
+//
+// 60 also: a failed CodeWhale bash command carries its `→ exit N` (#4537).
+//
+// 60 also: a failed Command Code command carries its `→ exit N` (#4539).
+//
+// 60 also: a pi-family powershell call leaves a command record (#4523).
+//
+// 60 also: an omp or gjc edit in replace or patch mode leaves edit and wrote
+// records (#4524).
+//
+// 60 also: an omp hashline edit leaves files, edit and wrote records (#4525).
+//
+// 60 also: a prime ipython cell's details.diffs leave files, edit and wrote
+// records (#4526).
+//
+// 60 also: an Amp shell_command call is a command and an apply_patch call
+// leaves files, edit and wrote records (#4527).
+//
+// 60 also: an Antigravity write_to_file call leaves a wrote record of its
+// CodeContent once its step finishes (#4528).
+//
+// 60 also: a Continue edit_existing_file call leaves a wrote record of its
+// changes, and a canceled edit leaves none (#4529).
+//
+// 60 also: a Roo or Kilo search_and_replace call with old_string and
+// new_string leaves edit and wrote records (#4531).
+//
+// 60 also: a Roo or Kilo read_file call in the legacy files[] form leaves a
+// files record (#4531).
+//
+// 60 also: a Crush lsp_replace_symbol call leaves a wrote record of its
+// replacement (#4533).
+//
+// 60 also: a Kilo CLI background_process start or monitor is a command, and
+// notebook_read and notebook_edit leave files and wrote records (#4534).
+//
+// 60 also: a Kilo Code task's search_and_replace operations[], fast_edit_file
+// and write_file leave files, edit and wrote records, and delete_file and
+// generate_image files records (#4535).
+//
+// 60 also: a CodeWhale terminal/run or task_shell_start call is a command
+// (#4538).
+//
+// 60 also: a CodeWhale apply_patch call leaves files, edit and wrote records
+// from its unified diff or replace[] entries (#4538).
+//
+// 60 also: a Command Code shell_command with args[], powershell or
+// monitor_command call is a command, and a read_file glob is not a file
+// (#4540).
+//
+// 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
+// call leaves files records, notebook_edit a wrote record and delete_range an
+// edit record from its result's diff (#4541).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

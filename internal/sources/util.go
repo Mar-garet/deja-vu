@@ -595,6 +595,10 @@ type toolDialect struct {
 	// new_string. A dialect whose key is not set records no written side —
 	// nothing wrong, just nothing to attribute from.
 	newKey string
+	// newKeyAlt is a second name for the written text, read beside newKey:
+	// Claude's NotebookEdit writes a cell under `new_source` (#4489). Empty
+	// means newKey alone.
+	newKeyAlt string
 	// editsOldKey and editsNewKey name the same two sides inside each element
 	// of an `edits` array, when they differ from oldKey and newKey: CodeWhale's
 	// edit takes edits[{oldText,newText}] while its legacy edit_file takes
@@ -607,10 +611,22 @@ type toolDialect struct {
 	// commandKey names the argument holding the command. Empty means
 	// "command"; cline's run_commands takes "commands", a list.
 	commandKey string
+	// commandKeyAlt is a second name for it, read when commandKey is absent:
+	// Amp's Bash takes `cmd` and its shell_command `command` (#4527). Empty
+	// means commandKey alone.
+	commandKeyAlt string
+	// argsKey names an argument list that follows the command, the way the
+	// client shows it: Command Code's shell_command {command: "go", args:
+	// ["test", "./..."]} ran `go test ./...` (#4540). Empty means none.
+	argsKey string
 	// pathListKey names an argument holding several files at once — cline's
 	// read_files takes "files", whose elements each name a path under pathKey.
 	// Empty means a call names at most one file.
 	pathListKey string
+	// pathListGlobs says that list mixes globs with paths, as gemini's
+	// read_many_files include does; a glob names no file the session
+	// touched (#4494).
+	pathListGlobs bool
 }
 
 // isShellTool reports whether a call is the shell, under any name the harness
@@ -659,9 +675,24 @@ func (d toolDialect) contentSpanKey() string {
 }
 
 var claudeDialect = toolDialect{
-	pathKey:   "file_path",
-	pathTools: pathTools,
-	shellTool: "Bash",
+	pathKey:    "file_path",
+	pathKeyAlt: "notebook_path",
+	pathTools:  pathTools,
+	shellTools: claudeShellTools,
+	newKeyAlt:  "new_source",
+}
+
+// callPath is the file one call names, under the dialect's key or its
+// second name.
+func (d toolDialect) callPath(in map[string]any) string {
+	if p, _ := in[d.pathKey].(string); p != "" {
+		return p
+	}
+	if d.pathKeyAlt == "" {
+		return ""
+	}
+	p, _ := in[d.pathKeyAlt].(string)
+	return p
 }
 
 func toolPart(it any, d toolDialect) (name string, in map[string]any, ok bool) {
@@ -714,13 +745,8 @@ func toolPathsIn(v any, d toolDialect) string {
 // read_files takes `files`, an array whose elements each name a path — and
 // reading only the scalar key indexed none of those.
 func toolPathStrings(in map[string]any, d toolDialect) []string {
-	if p, _ := in[d.pathKey].(string); p != "" {
+	if p := d.callPath(in); p != "" {
 		return []string{p}
-	}
-	if d.pathKeyAlt != "" {
-		if p, _ := in[d.pathKeyAlt].(string); p != "" {
-			return []string{p}
-		}
 	}
 	if d.pathListKey == "" {
 		return nil
@@ -730,7 +756,7 @@ func toolPathStrings(in map[string]any, d toolDialect) []string {
 	for _, it := range items {
 		switch e := it.(type) {
 		case string:
-			if e != "" {
+			if e != "" && (!d.pathListGlobs || !strings.ContainsAny(e, "*?[{")) {
 				out = append(out, e)
 			}
 		case map[string]any:
@@ -759,7 +785,7 @@ func editSpansIn(v any, d toolDialect) []string {
 		if len(d.editTools) > 0 && !d.editTools[name] {
 			continue
 		}
-		path, _ := in[d.pathKey].(string)
+		path := d.callPath(in)
 		if path == "" {
 			continue
 		}
@@ -814,13 +840,18 @@ func wroteRecordsIn(v any, d toolDialect) []string {
 		if len(d.editTools) > 0 && !d.editTools[name] {
 			continue
 		}
-		path, _ := in[d.pathKey].(string)
+		path := d.callPath(in)
 		if path == "" {
 			continue
 		}
 		newText, _ := in[d.newSpanKey()].(string)
 		content, _ := in[d.contentSpanKey()].(string)
 		written := []string{newText, content}
+		// A NotebookEdit delete carries new_source and writes none of it.
+		if mode, _ := in["edit_mode"].(string); d.newKeyAlt != "" && mode != "delete" {
+			alt, _ := in[d.newKeyAlt].(string)
+			written = append(written, alt)
+		}
 		if edits, ok := in["edits"].([]any); ok {
 			for _, e := range edits {
 				em, ok := e.(map[string]any)
@@ -847,30 +878,7 @@ func commandsFromContent(v any) []string { return commandsIn(v, claudeDialect) }
 // will be answered under, so the reference parser can stamp an outcome the same
 // way the typed one does. The two must agree or the differential test in #502
 // stops meaning anything.
-func commandCallsFromContent(v any) []claudeCommand {
-	items, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	var out []claudeCommand
-	for _, it := range items {
-		name, in, ok := toolPart(it, claudeDialect)
-		if !ok || !claudeDialect.isShellTool(name) {
-			continue
-		}
-		id := ""
-		if m, ok := it.(map[string]any); ok {
-			id, _ = m["id"].(string)
-		}
-		for _, cmd := range commandStrings(in, claudeDialect) {
-			if !worthIndexing(cmd) {
-				continue
-			}
-			out = append(out, claudeCommand{ID: id, Text: "$ " + cmd})
-		}
-	}
-	return out
-}
+func commandCallsFromContent(v any) []claudeCommand { return commandCallsIn(v, claudeDialect) }
 
 // toolOutcomesFromContent is claudeToolOutcomes for the reference parser.
 func toolOutcomesFromContent(v any) []claudeToolOutcome {
@@ -892,7 +900,7 @@ func toolOutcomesFromContent(v any) []claudeToolOutcome {
 			continue
 		}
 		bad, _ := m["is_error"].(bool)
-		out = append(out, claudeToolOutcome{ID: id, Error: bad})
+		out = append(out, claudeOutcome(id, bad, m["content"]))
 	}
 	return out
 }
@@ -927,10 +935,16 @@ func commandStrings(in map[string]any, d toolDialect) []string {
 	if key == "" {
 		key = "command"
 	}
+	if _, ok := in[key]; !ok && d.commandKeyAlt != "" {
+		key = d.commandKeyAlt
+	}
 	switch v := in[key].(type) {
 	case string:
 		if strings.TrimSpace(v) == "" {
 			return nil
+		}
+		if d.argsKey != "" {
+			v += CommandArgs(in[d.argsKey])
 		}
 		return []string{v}
 	case []any:
@@ -945,6 +959,29 @@ func commandStrings(in map[string]any, d toolDialect) []string {
 		return out
 	}
 	return nil
+}
+
+// CommandArgs is an argument list as the suffix it puts on a command line,
+// " a b", read as Command Code's formatArgsSuffix shows it: a list joined by
+// spaces, or a string as it is. The tool hooks read the same arguments.
+func CommandArgs(v any) string {
+	switch a := v.(type) {
+	case string:
+		if a != "" {
+			return " " + a
+		}
+	case []any:
+		var parts []string
+		for _, it := range a {
+			if s, ok := it.(string); ok {
+				parts = append(parts, s)
+			}
+		}
+		if len(parts) > 0 {
+			return " " + strings.Join(parts, " ")
+		}
+	}
+	return ""
 }
 
 // HarnessAuthored reports whether a role marks text the harness wrote to the
