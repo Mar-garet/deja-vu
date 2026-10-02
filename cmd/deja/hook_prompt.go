@@ -184,6 +184,13 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	// Written down for the surfaces that are told no session id: this hook drops
 	// the caller's own session by hand below, and the MCP tool cannot (#3945).
 	markSessionLive(dir, input.SessionID)
+	// A turn that is only an image reaches here with no prompt so the stamp
+	// above is renewed (#4573). opencode has no text part to put an answer
+	// in, so the compaction packet waits for a turn or tool call that can
+	// carry it rather than being marked delivered and dropped.
+	if strings.TrimSpace(string(input.Prompt)) == "" {
+		return nil
+	}
 	if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "UserPromptSubmit", shape, stdout); delivered {
 		return err
 	}
