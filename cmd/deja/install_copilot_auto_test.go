@@ -217,7 +217,7 @@ func TestDoctorReportsCopilotAutoRecall(t *testing.T) {
 	if err := os.WriteFile(path, next, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := row(); !strings.Contains(got, "stale") || !strings.Contains(got, "disableAllHooks") {
+	if got := row(); !strings.Contains(got, "switched off") || !strings.Contains(got, "disableAllHooks") {
 		t.Errorf("disableAllHooks is on and the row does not say so:\n%s", got)
 	}
 

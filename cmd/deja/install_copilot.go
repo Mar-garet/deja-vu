@@ -284,23 +284,17 @@ func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool, arg
 	hooks[event] = kept
 }
 
-// copilotHooksDisabled reports whether Copilot's own switch turns every hook
-// off, which leaves deja's entry looking installed and running nothing.
-func copilotHooksDisabled() bool {
+// copilotHooksOffIn names the file whose disableAllHooks turns every Copilot
+// hook off, and "" when neither does. deja's entry stays in place and runs
+// nothing.
+func copilotHooksOffIn() string {
 	for _, name := range []string{"settings.json", "config.json"} {
-		b, err := os.ReadFile(filepath.Join(copilotHome(), name))
-		if err != nil {
-			continue
-		}
-		var root map[string]any
-		if json.Unmarshal([]byte(jsoncToJSON(string(bytes.TrimPrefix(b, utf8BOM)))), &root) != nil {
-			continue
-		}
-		if off, _ := root["disableAllHooks"].(bool); off {
-			return true
+		p := filepath.Join(copilotHome(), name)
+		if readJSONConfig(p)["disableAllHooks"] == true {
+			return p
 		}
 	}
-	return false
+	return ""
 }
 
 // copilotPowerShellCommand is the line Copilot runs on Windows. PowerShell

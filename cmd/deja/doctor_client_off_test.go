@@ -223,6 +223,10 @@ func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
 			off: func(t *testing.T) {
 				setJSON(filepath.Join(gooseConfigDir(), "settings.json"), []string{"disabledPlugins"}, []any{"deja"})(t)
 			}},
+		{name: "copilot hooks", target: "copilot-auto", section: "auto_recall", row: "copilot", key: "disableAllHooks",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.CopilotHome(), "settings.json"), []string{"disableAllHooks"}, true)(t)
+			}},
 		{name: "pi extension", target: "pi-auto", section: "auto_recall", row: "pi", key: "-extensions/deja.ts",
 			off: func(t *testing.T) {
 				setJSON(filepath.Join(sources.PiConfigDir(), "settings.json"), []string{"extensions"}, []any{"-extensions/deja.ts"})(t)
