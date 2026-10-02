@@ -209,6 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja doctor` no longer suggests `grok mcp add deja -c deja -a mcp` to a Grok Build user, whose `grok` rejects it and already reads the server from `~/.grok/config.toml`; the line shows only when the `grok` on PATH is @vibe-kit/grok-cli or there is none (#4587).
 - Under Grok Build the session-start and prompt hooks no longer claim memory arrived: grok drops what those two events return, so deja serves nothing there, the receipt stops saying "1.7 KB of context", and the "memory arrived" count no longer rises on every grok session start and prompt. Recall in grok comes from the `deja` tool and the tool-call hooks, which grok does pass on (#4588).
 - A Copilot Chat reply keeps the file and symbol names VS Code draws inline, so `deja show` reads "The bug is in retry.go, line 40: fetchPrice swallows the error." instead of "The bug is in , line 40:  swallows the error." and the names can be searched (#4589).
+- A Copilot Chat agent edit shows in `deja show` as the edited file's name where VS Code draws its pill, not as an empty code fence in the middle of the reply (#4590).
 
 ## [0.21.4] - 2026-09-29
 

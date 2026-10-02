@@ -596,6 +596,9 @@ import (
 //
 // 60 also: a Copilot Chat reply keeps the file and symbol names VS Code draws
 // inline, from its inlineReference parts (#4589).
+//
+// 60 also: a Copilot Chat agent edit reads as the edited file's name in the
+// reply, not as an empty code fence (#4590).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
