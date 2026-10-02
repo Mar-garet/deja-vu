@@ -203,6 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenClaw per-prompt recall no longer sends the same block again on every turn: the plugin read the session id off the `before_prompt_build` event, which never carries one, instead of the hook context. Run `deja install openclaw-auto` again to update the plugin (#4581).
 - Inside an OpenClaw session the deja MCP tool no longer returns the asking session as its top hit: the plugin marked the session live under OpenClaw's session key rather than the transcript id the index uses, and the forget after a compaction used the same wrong name (#4582).
 - `deja doctor` no longer calls pi's MCP entry wired when pi-mcp-adapter, the only thing in pi that reads `~/.pi/agent/mcp.json`, is not installed: the row says `no adapter` (`no-adapter` in `--json`) with the command that adds it, and `deja install pi` says the same (#4583).
+- In pi the session-start digest tells the agent to run `deja ctx` in the shell instead of calling `recall_context`, a tool pi does not have; following the old lead ended in "Tool recall_context not found". Run `deja install pi-auto` again to update the extension (#4584).
 
 ## [0.21.4] - 2026-09-29
 

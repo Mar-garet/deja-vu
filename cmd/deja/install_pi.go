@@ -185,8 +185,10 @@ export default function (pi: any) {
       if (!injected) {
         // The session goes with it: hook-context marks the one starting as
         // live, which keeps it out of its own MCP recall on this first turn
-        // (#4394, as #4246 and #4273 did for Hermes and opencode).
-        const raw = run(["hook-context"], JSON.stringify({ session_id: sessionID(), cwd: process.cwd() }));
+        // (#4394, as #4246 and #4273 did for Hermes and opencode). pi has no
+        // MCP of its own, so the lead names the shell command, not the tool
+        // (#4584).
+        const raw = run(["hook-context"], JSON.stringify({ session_id: sessionID(), cwd: process.cwd(), deja_shell: true }));
         let digest = "";
         let receipt = "";
         try {
