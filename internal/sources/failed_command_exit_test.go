@@ -83,6 +83,20 @@ insert into messages(session_id,role,content_json,created_timestamp) values ('20
  {"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"execute_command","input":{"command":"go test ./...","requires_approval":false}}]},
  {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"Command failed with exit code 1.\nOutput:\n./retry.go:12:5: undefined: backoffJitter"}]}]`)
 		}},
+		{name: "kiro-cli", kind: "kiro-cli", fixture: func(t *testing.T, dir string) string {
+			return write(t, filepath.Join(dir, "cli", "11111111-2222-4333-8444-555555555555.jsonl"), strings.Join([]string{
+				`{"version":"v1","kind":"Prompt","data":{"message_id":"m0","content":[{"kind":"text","data":"fix the retry loop"}],"meta":{"timestamp":1790848800}}}`,
+				`{"version":"v1","kind":"AssistantMessage","data":{"message_id":"m1","content":[{"kind":"toolUse","data":{"toolUseId":"t1","name":"shell","input":{"command":"go test ./..."}}}],"meta":{"timestamp":1790848801}}}`,
+				`{"version":"v1","kind":"ToolResults","data":{"message_id":"m2","content":[{"kind":"toolResult","data":{"toolUseId":"t1","content":[{"kind":"json","data":{"exit_status":"exit status: 1","stdout":"","stderr":"./retry.go:12:5: undefined: backoffJitter"}}],"status":"success"}}],"meta":{"timestamp":1790848802}}}`,
+			}, "\n")+"\n")
+		}},
+		{name: "kiro-cli no-interactive", kind: "kiro-db", fixture: func(t *testing.T, _ string) string {
+			return kiroTestDB(t, kiroDBRow("/tmp/proj", "bf73e1f5-0000-4000-8000-000000000003", `{"conversation_id":"bf73e1f5-0000-4000-8000-000000000003","history":[
+ {"user":{"content":{"Prompt":{"prompt":"fix the retry loop"}},"timestamp":"2026-10-01T10:00:00+00:00"},
+  "assistant":{"ToolUse":{"message_id":"m1","content":"Running the tests.","tool_uses":[{"id":"t1","name":"execute_bash","args":{"command":"go test ./..."}}]}}},
+ {"user":{"content":{"ToolUseResults":{"tool_use_results":[{"tool_use_id":"t1","content":[{"Json":{"exit_status":"1","stdout":"","stderr":"./retry.go:12:5: undefined: backoffJitter"}}],"status":"Success"}]}},"timestamp":null},
+  "assistant":{"Response":{"message_id":"m2","content":"The build is broken."}}}]}`, 1790848800000))
+		}},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
@@ -116,4 +130,22 @@ func assertCommand(t *testing.T, ss []model.Session, want string) {
 		}
 	}
 	t.Errorf("commands = %q, want %q among them", got, want)
+}
+
+// A kiro-cli result that lands a pass after its call is read whole when it
+// failed, or the stored call never gets its exit (#4505); a clean one is not.
+func TestKiroCLIReadsAFailedResultWithItsCall(t *testing.T) {
+	call := `{"version":"v1","kind":"AssistantMessage","data":{"message_id":"m1","content":[{"kind":"toolUse","data":{"toolUseId":"t1","name":"shell","input":{"command":"go test ./..."}}}],"meta":{"timestamp":1790848801}}}` + "\n"
+	result := func(status string) string {
+		return `{"version":"v1","kind":"ToolResults","data":{"message_id":"m2","content":[{"kind":"toolResult","data":{"toolUseId":"t1","content":[{"kind":"json","data":{"exit_status":"` + status + `","stdout":"","stderr":""}}],"status":"success"}}],"meta":{"timestamp":1790848802}}}` + "\n"
+	}
+	for status, want := range map[string]bool{"exit status: 1": false, "exit status: 0": true} {
+		p := filepath.Join(t.TempDir(), "s.jsonl")
+		if err := os.WriteFile(p, []byte(call+result(status)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := KiroCLIResumes(p, int64(len(call))); got != want {
+			t.Errorf("%s: resumes = %v, want %v", status, got, want)
+		}
+	}
 }
