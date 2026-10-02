@@ -225,6 +225,14 @@ func hookSwitchKeys() (deja, on, off string) {
 // noteHookSwitch records what was under the switch before deja wrote to it.
 func noteHookSwitch(path string, was any) {
 	deja, on, off := hookSwitchKeys()
+	// A false is the reader's whenever it is read: deja only writes true. One
+	// set after the first install replaces what that install recorded, or the
+	// uninstall turned their hooks back on (#4472).
+	if v, ok := was.(bool); ok && !v {
+		forgetHookSwitch(path)
+		noteBlockAdded(path, off)
+		return
+	}
 	// Once. A second install reads the switch deja itself set on the first, so
 	// recording again would say the reader had it on and hand it back that way
 	// — which is #2830 again, by way of an upgrade.

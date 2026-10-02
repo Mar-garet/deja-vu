@@ -262,3 +262,46 @@ func TestGeminiAutoGivesBackTheHooksSwitch(t *testing.T) {
 		t.Errorf("uninstall says it left the switch on after turning it back off:\n%s", out)
 	}
 }
+
+// A reader who had openclaw's internal hooks on when deja came, and switched
+// them off later, got "uninstall turns it back off" from the next install, and
+// the uninstall then turned them on: the record kept the first install's
+// "on". A false at install is always the reader's, since deja only ever
+// writes true (#4472).
+func TestOpenClawUninstallKeepsAnOffTheReaderSetAfterInstall(t *testing.T) {
+	for _, spelling := range []string{"json", "jsonc"} {
+		t.Run(spelling, func(t *testing.T) {
+			hermeticEnv(t)
+			path := openclawConfigPath()
+			head := ""
+			if spelling == "jsonc" {
+				head = "// mine\n"
+			}
+			writeTestFile(t, path, head+"{\n  \"hooks\": {\n    \"internal\": {\n      \"enabled\": true\n    }\n  }\n}\n")
+			if _, err := captureRun(t, "install", "openclaw-auto", "--no-index"); err != nil {
+				t.Fatalf("install: %v", err)
+			}
+			// The switch alone, as a hand edit leaves it, comments and all.
+			off := strings.Replace(fileText(t, path), "\n      \"enabled\": true", "\n      \"enabled\": false", 1)
+			if err := os.WriteFile(path, []byte(off), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if readJSONPath(t, path, "hooks", "internal", "enabled") != false {
+				t.Fatalf("the fixture did not switch internal hooks off:\n%s", fileText(t, path))
+			}
+			out, err := captureRun(t, "install", "openclaw-auto", "--no-index")
+			if err != nil {
+				t.Fatalf("second install: %v", err)
+			}
+			if !strings.Contains(out, "uninstall turns it back off") {
+				t.Errorf("install turned internal hooks on and did not say so:\n%s", out)
+			}
+			if _, err := captureRun(t, "uninstall", "openclaw-auto"); err != nil {
+				t.Fatalf("uninstall: %v", err)
+			}
+			if got := readJSONPath(t, path, "hooks", "internal", "enabled"); got != false {
+				t.Errorf("uninstall left hooks.internal.enabled %v after install said it would turn it back off:\n%s", got, fileText(t, path))
+			}
+		})
+	}
+}
