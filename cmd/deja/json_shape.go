@@ -28,6 +28,9 @@ func marshalConfigLike(old []byte, root map[string]any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// encoding/json escapes &, < and > for HTML. A config is not HTML, and a
+	// PowerShell hook line `& 'C:/…/deja.exe' …` came out as `\u0026 '…'`.
+	compact = []byte(htmlUnescapeJSON.Replace(string(compact)))
 	// MarshalIndent is Marshal and then Indent, so this is its output with
 	// the reader's order.
 	var next bytes.Buffer
@@ -36,6 +39,11 @@ func marshalConfigLike(old []byte, root map[string]any) ([]byte, error) {
 	}
 	return keepInlineBlocks(old, next.Bytes()), nil
 }
+
+// htmlUnescapeJSON undoes encoding/json's HTML escaping. Inside a JSON string
+// \u0026 and & are the same character, so this changes no value; a reader's
+// own literal "\\u0026" is escaped as \\u0026 and stays as it was.
+var htmlUnescapeJSON = strings.NewReplacer(`\u0026`, "&", `\u003c`, "<", `\u003e`, ">")
 
 // keyOrder is the order a document's objects list their keys in, by path.
 // Entries of one array need not list their keys alike, and deja adding or

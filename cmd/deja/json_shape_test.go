@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,5 +92,23 @@ func TestInstallWritesTwoSpacesIntoAConfigItCreated(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "\n  \"mcpServers\"") {
 		t.Fatalf("a config deja wrote itself is not in the house style:\n%s", b)
+	}
+}
+
+// A config is not HTML: a PowerShell hook line keeps its `&` instead of
+// coming back as `\u0026` (Copilot's hooks on Windows).
+func TestConfigWriterKeepsAmpersandsAsWritten(t *testing.T) {
+	old := []byte("{\n  \"hooks\": {}\n}\n")
+	root := map[string]any{"hooks": map[string]any{"sessionStart": []any{map[string]any{"powershell": "& 'C:/x/deja.exe' hook-context <in> out"}}}}
+	b, err := marshalConfigLike(old, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"& 'C:/x/deja.exe' hook-context <in> out"`) {
+		t.Errorf("hook line was escaped:\n%s", b)
+	}
+	var back map[string]any
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("not JSON any more: %v\n%s", err, b)
 	}
 }
