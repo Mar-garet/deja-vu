@@ -66,8 +66,11 @@
 <p><code>&lt;execute_command&gt;&lt;command&gt;…&lt;/command&gt;&lt;/execute_command&gt;</code> — and its result as</p>
 <p>user text blocks headed <code>[execute_command for &#39;…&#39;] Result:</code>. Those calls give</p>
 <p>the same records a <code>tool_use</code> block does, and the result is indexed as tool</p>
-<p>output, not as the person&#39;s words. The answer to <code>ask_followup_question</code> and</p>
-<p>the feedback on <code>attempt_completion</code> stay the person&#39;s. The retry prompt the</p>
+<p>output, not as the person&#39;s words. Only the first call of a message counts,</p>
+<p>since the client ran no other, and only in a task with no <code>tool_use</code> block at</p>
+<p>all: in a native-era task XML in the text is something the model showed. The</p>
+<p>answer to <code>ask_followup_question</code>, the feedback on <code>attempt_completion</code> and any</p>
+<p><code>&lt;feedback&gt;</code> typed beside a result stay the person&#39;s. The retry prompt the</p>
 <p>client sends when the model used no tool (&#34;[ERROR] You did not use a tool…&#34;) is</p>
 <p>not indexed as a user turn.</p>
 <p>A call names its file relative to the workspace, so the path is resolved against</p>

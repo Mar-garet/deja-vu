@@ -30,8 +30,11 @@ extension) keep each call as XML inside the assistant's text block —
 `<execute_command><command>…</command></execute_command>` — and its result as
 user text blocks headed `[execute_command for '…'] Result:`. Those calls give
 the same records a `tool_use` block does, and the result is indexed as tool
-output, not as the person's words. The answer to `ask_followup_question` and
-the feedback on `attempt_completion` stay the person's. The retry prompt the
+output, not as the person's words. Only the first call of a message counts,
+since the client ran no other, and only in a task with no `tool_use` block at
+all: in a native-era task XML in the text is something the model showed. The
+answer to `ask_followup_question`, the feedback on `attempt_completion` and any
+`<feedback>` typed beside a result stay the person's. The retry prompt the
 client sends when the model used no tool ("[ERROR] You did not use a tool…") is
 not indexed as a user turn.
 
