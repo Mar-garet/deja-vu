@@ -454,9 +454,10 @@ func allHarnesses() []Harness {
 			}, {
 				// The snapshots an older ZCode kept, one JSON file a
 				// conversation, read whole (#4432).
-				Name:  "zcode-legacy",
-				Match: ZCodeLegacyUnderRoot,
-				Parse: fullParse(ParseZCodeLegacyFile),
+				Name:    "zcode-legacy",
+				Match:   ZCodeLegacyUnderRoot,
+				Parse:   fullParse(ParseZCodeLegacyFile),
+				Sidecar: zcodeLegacySidecar,
 			}},
 		},
 		{

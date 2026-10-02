@@ -455,6 +455,9 @@ import (
 //
 // 60 also: a Roo, Kilo, Cline VS Code, Reasonix or Kimi session whose title or
 // workspace file changed alone is read again (#4446).
+//
+// 60 also: a ZCode snapshot restored into the CLI database leaves its turns
+// to the database's on the next pass (#4448).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

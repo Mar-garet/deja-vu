@@ -103,6 +103,6 @@ hand, so deja reads them: `acpSessionId`, else `taskId`, is the id, the one a
 restore gives the session, `workspacePath` names the project, and the user and
 assistant text is indexed. Files ending `.deleted.json` are skipped, as ZCode
 skips them, and a snapshot whose id is already in the CLI database is read
-from there instead. `deja resume` on a snapshot names ZCode's
+from there instead, from the first pass after the restore on (#4448). `deja resume` on a snapshot names ZCode's
 `/restore-legacy-sessions` command rather than a `zcode --resume` that would
 not find it (#4432).

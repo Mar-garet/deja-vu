@@ -104,6 +104,55 @@ func parseZCodeLegacy(path string) ([]model.Session, error) {
 	return []model.Session{s}, nil
 }
 
+// zcodeLegacySidecar fingerprints whether the CLI database holds the session
+// a snapshot was restored as. The reader skips such a snapshot, but a restore
+// leaves the file as it was, so no pass re-read it and its turns stayed beside
+// the database's (#4448).
+func zcodeLegacySidecar(p string) (int64, int64) {
+	ids := zcodeRestoredIDs(ZCodeDB())
+	if len(ids) == 0 {
+		return 0, 0
+	}
+	if id := zcodeLegacyID(p); id != "" && ids[id] {
+		return 1, 1
+	}
+	return 0, 0
+}
+
+// zcodeLegacyID is the id a snapshot is read under, kept per file state so a
+// pass does not decode every snapshot again.
+func zcodeLegacyID(p string) string {
+	fi, err := os.Lstat(p)
+	if err != nil || !fi.Mode().IsRegular() {
+		return ""
+	}
+	stamp := fmt.Sprintf("%d:%d", fi.Size(), fi.ModTime().UnixNano())
+	zcodeIDsMu.Lock()
+	c, ok := zcodeLegacyIDs[p]
+	zcodeIDsMu.Unlock()
+	if ok && c[0] == stamp {
+		return c[1]
+	}
+	id := ""
+	if b, err := os.ReadFile(p); err == nil {
+		var snap struct {
+			Meta struct {
+				TaskID       string `json:"taskId"`
+				ACPSessionID string `json:"acpSessionId"`
+			} `json:"meta"`
+		}
+		if json.Unmarshal(b, &snap) == nil {
+			id = firstNonEmpty(snap.Meta.ACPSessionID, firstNonEmpty(snap.Meta.TaskID, strings.TrimSuffix(filepath.Base(p), ".json")))
+		}
+	}
+	zcodeIDsMu.Lock()
+	zcodeLegacyIDs[p] = [2]string{stamp, id}
+	zcodeIDsMu.Unlock()
+	return id
+}
+
+var zcodeLegacyIDs = map[string][2]string{}
+
 // zcodeRestoredIDs is the session ids in the CLI database, read once for each
 // state of the file and its WAL rather than once for each snapshot.
 func zcodeRestoredIDs(db string) map[string]bool {
