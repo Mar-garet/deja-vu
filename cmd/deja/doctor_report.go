@@ -541,7 +541,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 		// the transcript reader answers zero for the database, which made the
 		// row read `parsed-zero` (#3675), and leaving the database out made it
 		// read `missing` for a CLI-only store (#4397).
-		{"zcode", []string{sources.ZCodeRoot(), sources.ZCodeDB()}, sources.ZCodeSessionFiles(), doctorProbeZCode},
+		{"zcode", []string{sources.ZCodeRoot(), sources.ZCodeDB(), sources.ZCodeLegacyRoot()}, sources.ZCodeSessionFiles(), doctorProbeZCode},
 		{"gjc", []string{sources.GjcRoot()}, sources.GjcSessionFiles(), sources.ParseGjcFile},
 		{"codewhale", sources.CodeWhaleRoots(), sources.CodeWhaleSessionFiles(), sources.ParseCodeWhaleFile},
 		{"reasonix", sources.ReasonixRoots(), sources.ReasonixSessionFiles(), sources.ParseReasonixFile},
@@ -587,6 +587,9 @@ func doctorProbeKilo(path string) ([]model.Session, error) {
 func doctorProbeZCode(path string) ([]model.Session, error) {
 	if path == sources.ZCodeDB() {
 		return sources.ParseZCodeDB(path)
+	}
+	if sources.ZCodeLegacyUnderRoot(path) {
+		return sources.ParseZCodeLegacyFile(path)
 	}
 	return sources.ParseZCodeFile(path)
 }

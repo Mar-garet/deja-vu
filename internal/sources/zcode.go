@@ -59,10 +59,10 @@ func ParseZCodeDBSince(db string, t time.Time) ([]model.Session, error) {
 	return parseOpencodeSchemaDBSince("zcode", db, t)
 }
 
-// ZCodeSessionFiles lists the transcripts, and the database when it holds
-// anything — the same pair Kilo has.
+// ZCodeSessionFiles lists the transcripts, the legacy snapshots (#4432), and
+// the database when it holds anything — the same pair Kilo has, and one more.
 func ZCodeSessionFiles() []string {
-	out := ZCodeTranscriptFiles()
+	out := append(ZCodeTranscriptFiles(), ZCodeLegacyFiles()...)
 	if fi, err := os.Stat(ZCodeDB()); err == nil && fi.Size() > 0 {
 		out = append(out, ZCodeDB())
 	}
@@ -74,10 +74,12 @@ func ZCodeUnderRoot(p string) bool {
 	return strings.HasPrefix(p, ZCodeRoot()) && strings.HasSuffix(p, ".jsonl")
 }
 
-// LoadZCode reads both stores: the transcripts with the flat-role reader, the
-// CLI database with OpenCode's, the way LoadKilo does for Kilo's two.
+// LoadZCode reads the stores: the transcripts with the flat-role reader, the
+// CLI database with OpenCode's, the way LoadKilo does for Kilo's two, and the
+// snapshots an older ZCode left.
 func LoadZCode() []model.Session {
 	ss := parseFiles(ZCodeTranscriptFiles(), ParseZCodeFile)
+	ss = append(ss, parseFiles(ZCodeLegacyFiles(), ParseZCodeLegacyFile)...)
 	dbSS, _ := ParseZCodeDB(ZCodeDB())
 	return append(ss, dbSS...)
 }

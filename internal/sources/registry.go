@@ -419,6 +419,12 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return p == ZCodeDB() },
 				Parse:     dbParse(ParseZCodeDB, ParseZCodeDBSince),
 				ParseFrom: dbParseFrom(ParseZCodeDB, ParseZCodeDBSince),
+			}, {
+				// The snapshots an older ZCode kept, one JSON file a
+				// conversation, read whole (#4432).
+				Name:  "zcode-legacy",
+				Match: ZCodeLegacyUnderRoot,
+				Parse: fullParse(ParseZCodeLegacyFile),
 			}},
 		},
 		{

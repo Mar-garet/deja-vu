@@ -975,10 +975,16 @@ func doctorHarnesses(w io.Writer, dir string) {
 		zcodeLoc = zcodeLoc + string(os.PathListSeparator) + zcodeDB
 	}
 	zcodeDetail := doctorCount(len(zcodeTranscripts), "file")
+	// And the snapshots an older ZCode left, which are read too (#4432).
+	zcodeLegacy := sources.ZCodeLegacyFiles()
+	if len(zcodeLegacy) > 0 {
+		zcodeLoc += string(os.PathListSeparator) + sources.ZCodeLegacyRoot()
+		zcodeDetail += ", " + doctorCount(len(zcodeLegacy), "legacy snapshot")
+	}
 	if zcodeHasDB {
 		zcodeDetail += ", CLI store present" + doctorDBPrereqNote(sqlite)
 	}
-	printRow("zcode", zcodeLoc, doctorExists(zcodeRoot) || zcodeHasDB, zcodeDetail)
+	printRow("zcode", zcodeLoc, doctorExists(zcodeRoot) || zcodeHasDB || len(zcodeLegacy) > 0, zcodeDetail)
 	// gjc's scope file sits in every project directory and its sub-agent
 	// passes are skipped on purpose; counted as unread, the row reported one
 	// file per project that deja had no reason to read (#4393).

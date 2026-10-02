@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ZCode's older sessions, the snapshots under `~/.zcode/v2/sessions` that the current runtime leaves until you restore them, are indexed, and `deja doctor` counts them. Deleted ones are skipped, and one already restored into the CLI database is read from there (#4432).
 - pi, omp, OpenClaw, gjc, prime-agent, senpi and Kimchi sessions carry their tool calls: the files read and written, the commands run with how they ended, and the replaced text of each edit, so `deja files`, `deja how`, `deja restore` and `deja blame` answer for them. gjc's hashline edits are read too. The index rebuilds once (#4113).
 
 ### Fixed

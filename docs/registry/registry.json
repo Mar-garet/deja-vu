@@ -809,7 +809,9 @@
         "~/.zcode/projects/*/*.jsonl",
         "${DEJA_ZCODE_ROOT}/*/*.jsonl",
         "~/.zcode/cli/db/db.sqlite",
-        "${DEJA_ZCODE_DB}"
+        "${DEJA_ZCODE_DB}",
+        "~/.zcode/v2/sessions/*/*.json",
+        "${DEJA_ZCODE_LEGACY_ROOT}/*/*.json"
       ],
       "format_kind": "jsonl+sqlite",
       "fixture_paths": [

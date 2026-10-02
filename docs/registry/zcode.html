@@ -41,7 +41,8 @@
 <li><strong>ID</strong>: <code>zcode</code></li>
 <li><strong>Store</strong>: <code>~/.zcode/projects/&lt;encoded-cwd&gt;/&lt;session&gt;.jsonl</code></li>
 <li><strong>Store (CLI database)</strong>: <code>~/.zcode/cli/db/db.sqlite</code> — OpenCode&#39;s schema</li>
-<li><strong>Read overrides</strong>: <code>DEJA_ZCODE_ROOT</code> replaces the project root; <code>DEJA_ZCODE_DB</code> names the database</li>
+<li><strong>Store (legacy snapshots)</strong>: <code>~/.zcode/v2/sessions/&lt;workspaceHash&gt;/&lt;taskId&gt;.json</code></li>
+<li><strong>Read overrides</strong>: <code>DEJA_ZCODE_ROOT</code> replaces the project root; <code>DEJA_ZCODE_DB</code> names the database; <code>DEJA_ZCODE_LEGACY_ROOT</code> replaces the snapshot root</li>
 <li><strong>Format</strong>: flat JSONL — one message per line</li>
 <li><strong>Needs</strong>: <code>sqlite3</code> for the CLI database; the transcripts need nothing</li>
 </ul>
@@ -118,6 +119,21 @@ SELECT json_extract(data, &#39;$.type&#39;) FROM part GROUP BY type</code></pre>
 <p>which is the distinction <code>DEJA_INCLUDE_SUBAGENTS</code> draws elsewhere — left alone</p>
 <p>until there is a real store to measure it against, rather than guessed at</p>
 <p>(#3675).</p>
+<h2 id="legacy-snapshots">Legacy snapshots</h2>
+<p>Before the current runtime ZCode kept each conversation as one JSON file,</p>
+<p><code>~/.zcode/v2/sessions/&lt;workspaceHash&gt;/&lt;taskId&gt;.json</code>:</p>
+<pre><code class="language-json">{&#34;meta&#34;: {&#34;taskId&#34;: &#34;…&#34;, &#34;acpSessionId&#34;: &#34;…&#34;, &#34;workspacePath&#34;: &#34;/path/to/proj&#34;,
+          &#34;title&#34;: &#34;…&#34;, &#34;createdAt&#34;: 1790000000000, &#34;updatedAt&#34;: 1790000060000},
+ &#34;messages&#34;: [{&#34;role&#34;: &#34;user&#34;, &#34;content&#34;: &#34;…&#34;, &#34;timestamp&#34;: 1790000000000}]}</code></pre>
+<p>That is the shape the 3.14.4 runtime&#39;s own restore-legacy-sessions skill scans</p>
+<p>(<code>scan-legacy-sessions.mjs</code>). The files stay until the user restores them by</p>
+<p>hand, so deja reads them: <code>acpSessionId</code>, else <code>taskId</code>, is the id, the one a</p>
+<p>restore gives the session, <code>workspacePath</code> names the project, and the user and</p>
+<p>assistant text is indexed. Files ending <code>.deleted.json</code> are skipped, as ZCode</p>
+<p>skips them, and a snapshot whose id is already in the CLI database is read</p>
+<p>from there instead. <code>deja resume</code> on a snapshot names ZCode&#39;s</p>
+<p><code>/restore-legacy-sessions</code> command rather than a <code>zcode --resume</code> that would</p>
+<p>not find it (#4432).</p>
 
 <hr>
 <p>deja reads this format and thirty-four others, and turns what it finds into memory your

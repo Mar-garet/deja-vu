@@ -181,6 +181,11 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// database stores, and reopens the session from any directory; the cd
 		// keeps the agent in the project, when it is still there (#4430). The
 		// JSONL transcripts are not in that database.
+		// A snapshot an older ZCode left is in no store the client opens until
+		// its restore-legacy-sessions command has copied it in (#4432).
+		if sources.ZCodeLegacyUnderRoot(s.Path) {
+			return "", "", fmt.Errorf("zcode session %s is a snapshot from an older ZCode; run /restore-legacy-sessions in zcode first, then `zcode --resume %s`", digest.Short(s.ID), s.ID)
+		}
 		if strings.HasSuffix(s.Path, ".jsonl") {
 			return "", "", fmt.Errorf("zcode session %s is a transcript under ~/.zcode/projects; `zcode --resume` opens only sessions from ZCode's CLI database", digest.Short(s.ID))
 		}
@@ -422,7 +427,7 @@ func resumeRecordedDir(s model.Session) string {
 	case "opencode", "kilocode":
 		return s.Path
 	case "zcode":
-		if !strings.HasSuffix(s.Path, ".jsonl") {
+		if !strings.HasSuffix(s.Path, ".jsonl") && !sources.ZCodeLegacyUnderRoot(s.Path) {
 			return s.Path
 		}
 	case "gjc", "kimchi", "senpi":
