@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -231,7 +232,36 @@ func pathMatches(recorded, want string) bool {
 	if strings.HasSuffix(recorded, "/"+strings.TrimPrefix(want, "/")) {
 		return true
 	}
-	return filepath.Base(recorded) == want
+	if filepath.Base(recorded) == want {
+		return true
+	}
+	// The same file under another name: on macOS /tmp is /private/tmp, and an
+	// agent may record either (#4593).
+	return filepath.IsAbs(filepath.FromSlash(recorded)) && filepath.IsAbs(filepath.FromSlash(want)) &&
+		path.Base(recorded) == path.Base(want) &&
+		resolvedPath(filepath.FromSlash(recorded)) == resolvedPath(filepath.FromSlash(want))
+}
+
+// resolvedPath is p with its symlinks resolved as far as it exists, so a file
+// that is gone — the usual reason to restore one — still compares by where its
+// directory really is.
+func resolvedPath(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	dir, rest := abs, ""
+	for {
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(r, rest)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return abs
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
+		dir = parent
+	}
 }
 
 // redactionNote flags a span that passed through redaction, because restoring
@@ -243,10 +273,10 @@ func redactionNote(body string) string {
 	return ""
 }
 
+// sameFile compares through symlinks: the guard let the source be written
+// over under its other name, /private/tmp for /tmp (#4593).
 func sameFile(a, b string) bool {
-	ap, err1 := filepath.Abs(a)
-	bp, err2 := filepath.Abs(b)
-	return err1 == nil && err2 == nil && ap == bp
+	return resolvedPath(a) == resolvedPath(b)
 }
 
 func shortID(id string) string {
