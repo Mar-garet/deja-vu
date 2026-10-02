@@ -66,3 +66,50 @@ func TestRestoreMatchesAPathThroughASymlink(t *testing.T) {
 		t.Errorf("the live file was overwritten: %q", b)
 	}
 }
+
+// A symlink is not the only other name a file has. A hard link, or on macOS
+// and Windows the same name in another case, is the source file too, and the
+// -o guard let both write over it.
+func TestRestoreRefusesTheSourceUnderAnyOtherName(t *testing.T) {
+	tmp := hermeticEnv(t)
+	dir := filepath.Join(tmp, "proj")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "retry.go")
+	if err := os.WriteFile(src, []byte("live work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	proj := filepath.Join(tmp, "claude", "project")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := fmt.Sprintf(`{"type":"assistant","sessionId":"claude-edit","cwd":%q,"timestamp":"2026-01-02T03:05:00Z","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":%q,"old_string":"const ceiling = 9"}}]}}`,
+		dir, src)
+	if err := os.WriteFile(filepath.Join(proj, "s.jsonl"), []byte(line+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	others := []string{}
+	hard := filepath.Join(dir, "retry-link.go")
+	if err := os.Link(src, hard); err == nil {
+		others = append(others, hard)
+	}
+	// Only where the file system folds case is this the same file.
+	upper := filepath.Join(dir, "RETRY.go")
+	if _, err := os.Stat(upper); err == nil {
+		others = append(others, upper)
+	}
+	if len(others) == 0 {
+		t.Skip("no hard links and a case-sensitive file system: no other name to try")
+	}
+	for _, out := range others {
+		_, err := captureRun(t, "restore", src, "-o", out, "--force")
+		if err == nil || !strings.Contains(err.Error(), "refusing to write over") {
+			t.Errorf("-o %s wrote over the file the span came from: %v", out, err)
+		}
+		if b, _ := os.ReadFile(src); string(b) != "live work\n" {
+			t.Fatalf("the live file was overwritten through %s: %q", out, b)
+		}
+	}
+}

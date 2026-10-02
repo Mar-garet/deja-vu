@@ -275,8 +275,15 @@ func redactionNote(body string) string {
 
 // sameFile compares through symlinks: the guard let the source be written
 // over under its other name, /private/tmp for /tmp (#4593).
+// A file that exists is also asked directly, which catches a hard link and,
+// on macOS and Windows, the same name in another case.
 func sameFile(a, b string) bool {
-	return resolvedPath(a) == resolvedPath(b)
+	if resolvedPath(a) == resolvedPath(b) {
+		return true
+	}
+	sa, err1 := os.Stat(a)
+	sb, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(sa, sb)
 }
 
 func shortID(id string) string {
