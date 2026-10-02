@@ -103,46 +103,84 @@ func (r *piReader) toolCalls(content any, t time.Time) {
 		name, _ := m["name"].(string)
 		args, _ := m["arguments"].(map[string]any)
 		id, _ := m["id"].(string)
-		if name == "" || args == nil {
-			continue
+		r.call(id, name, args, true, t)
+	}
+}
+
+// call records one tool call. applied is false for a call already known to
+// have failed, whose edit or write changed nothing.
+func (r *piReader) call(id, name string, args map[string]any, applied bool, t time.Time) {
+	if name == "" || args == nil {
+		return
+	}
+	if in, _ := args["input"].(string); name == "edit" && in != "" && args["path"] == nil {
+		r.hashline(id, in, t)
+		return
+	}
+	in := args
+	if p, _ := args["path"].(string); p != "" && r.abs(p) != p {
+		in = make(map[string]any, len(args))
+		for k, v := range args {
+			in[k] = v
 		}
-		if in, _ := args["input"].(string); name == "edit" && in != "" && args["path"] == nil {
-			r.hashline(id, in, t)
-			continue
-		}
-		in := args
-		if p, _ := args["path"].(string); p != "" && r.abs(p) != p {
-			in = make(map[string]any, len(args))
-			for k, v := range args {
-				in[k] = v
-			}
-			in["path"] = r.abs(p)
-		}
-		call := []any{map[string]any{"type": "tool_use", "name": name, "input": in}}
-		if IndexToolPaths() {
-			if p := toolPathsIn(call, piDialect); p != "" {
-				r.add(RoleFiles, p, t)
-			}
-		}
-		if IndexEdits() {
-			for _, span := range editSpansIn(call, piDialect) {
-				r.change(id, RoleEdit, span, t)
-			}
-		}
-		if IndexWrites() {
-			for _, w := range wroteRecordsIn(call, piDialect) {
-				r.change(id, RoleWrote, w, t)
-			}
-		}
-		if IndexCommands() {
-			for _, cmd := range commandsIn(call, piDialect) {
-				if id != "" {
-					r.commandAt[id] = append(r.commandAt[id], len(r.s.Messages))
-				}
-				r.add(RoleCommand, cmd, t)
-			}
+		in["path"] = r.abs(p)
+	}
+	call := []any{map[string]any{"type": "tool_use", "name": name, "input": in}}
+	if IndexToolPaths() {
+		if p := toolPathsIn(call, piDialect); p != "" {
+			r.add(RoleFiles, p, t)
 		}
 	}
+	if IndexEdits() && applied {
+		for _, span := range editSpansIn(call, piDialect) {
+			r.change(id, RoleEdit, span, t)
+		}
+	}
+	if IndexWrites() && applied {
+		for _, w := range wroteRecordsIn(call, piDialect) {
+			r.change(id, RoleWrote, w, t)
+		}
+	}
+	if IndexCommands() {
+		for _, cmd := range commandsIn(call, piDialect) {
+			if id != "" {
+				r.commandAt[id] = append(r.commandAt[id], len(r.s.Messages))
+			}
+			r.add(RoleCommand, cmd, t)
+		}
+	}
+}
+
+// evalCalls records the calls a Senpi eval cell made. With codemode loaded,
+// its default, bash, grep and powershell run only inside a cell as
+// tool.bash(...): the model's call is `eval` with JS, and what ran is listed on
+// the result under details.toolCalls, each with its args and whether it went
+// through (#4425).
+func (r *piReader) evalCalls(details map[string]any, t time.Time) {
+	calls, _ := details["toolCalls"].([]any)
+	for _, c := range calls {
+		m, _ := c.(map[string]any)
+		name, _ := m["name"].(string)
+		args, _ := m["args"].(map[string]any)
+		ok, said := m["ok"].(bool)
+		// No id: the cell's result is already in, so nothing waits for one.
+		r.call("", name, args, ok || !said, t)
+	}
+}
+
+// evalText is the text of an eval cell's result, which Senpi writes as a JSON
+// object around it: `{"text":"retries = 3\n…"}`. Anything else is left as it is.
+func evalText(txt string) string {
+	if !strings.HasPrefix(txt, "{") {
+		return txt
+	}
+	var v struct {
+		Text *string `json:"text"`
+	}
+	if json.Unmarshal([]byte(txt), &v) != nil || v.Text == nil {
+		return txt
+	}
+	return *v.Text
 }
 
 // hashline reads gjc's edit, which takes one string rather than a path and a
@@ -197,6 +235,9 @@ func (r *piReader) toolResult(msg map[string]any, t time.Time) {
 	}
 	failed, _ := msg["isError"].(bool)
 	details, _ := msg["details"].(map[string]any)
+	if name, _ := msg["toolName"].(string); name == "eval" {
+		r.evalCalls(details, t)
+	}
 	if recs, ok := r.pending[id]; ok {
 		delete(r.pending, id)
 		if !failed {

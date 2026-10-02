@@ -36,7 +36,10 @@ func ParsePiFileFromOffset(path string, offset int64) ([]model.Session, error) {
 }
 
 func parsePiFileFromOffset(path string, offset int64) ([]model.Session, error) {
-	return parsePiShaped(path, offset, "pi", piProjectName(path), false)
+	// The header's cwd names the project, the folder only when it has none:
+	// pi folds every / into a -, so the folder cannot tell my-app from my/app
+	// (#4427).
+	return parsePiShaped(path, offset, "pi", piProjectName(path), true)
 }
 
 // parsePiShaped parses a pi-format transcript (shared by pi and OpenClaw,
@@ -94,6 +97,9 @@ func (r *piReader) line(m map[string]any) {
 		t := parseTimeAny(m["timestamp"])
 		s.Touch(t)
 		txt := textFromContent(msg["content"])
+		if name, _ := msg["toolName"].(string); role == "toolResult" && name == "eval" {
+			txt = evalText(txt)
+		}
 		if txt != "" {
 			s.Messages = append(s.Messages, model.Message{Role: outRole, Text: txt, Time: t})
 		}
@@ -115,9 +121,12 @@ func applyPiHeader(s *model.Session, m map[string]any, useHeaderCwd bool) {
 	if id, _ := m["id"].(string); id != "" {
 		s.ID = id
 	}
+	// The cwd as it is, not encoded into a folder name and decoded back: that
+	// round trip is the guess between my-app and my/app the header settles
+	// (#4427).
 	if useHeaderCwd {
-		if cwd, _ := m["cwd"].(string); cwd != "" {
-			s.Project = claudeProjectName(pathToProjectKey(cwd))
+		if name := cwdProjectName(str(m["cwd"])); name != "" {
+			s.Project = name
 		}
 	}
 	// A prime-agent rlm.spawn child names its parent's transcript in the
@@ -138,8 +147,9 @@ func isPiHeader(m map[string]any) bool {
 }
 
 // PiHeaderCwd is the working directory a pi-shaped transcript's `session`
-// header records, or "" when it records none. gjc and Kimchi reopen a session
-// only from that directory, so resume runs there (#4395, #4400).
+// header records, or "" when it records none. gjc, Kimchi and Senpi reopen a
+// session only from that directory, so resume runs there (#4395, #4400,
+// #4426).
 func PiHeaderCwd(path string) string {
 	m := leadingJSONLHeader(path, math.MaxInt64, headerLookahead, isPiHeader)
 	cwd, _ := m["cwd"].(string)

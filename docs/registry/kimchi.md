@@ -11,7 +11,9 @@ parsing is pi's — including the directory per project. Its own binary builds
 that path in `getDefaultSessionDirPath`: `<agent>/sessions/--<encoded cwd>--`,
 where the encoding is the working directory with the separators replaced by
 dashes and a `--` on each end. A session file directly under the root is read
-too, and then the header's `cwd` is what names the project.
+too. Either way the header's `cwd` is what names the project, read as it is
+rather than encoded and decoded back, which could not tell `my-app` from
+`my/app` (#4427).
 
 **Last verified:** 2026-09-17
 

@@ -175,6 +175,21 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// the same field: Kilo is OpenCode vendored and a CLI session carries
 		// its own working directory — when it is still there (#4201).
 		return existingDir(s.Path), "kilo -s " + s.ID, nil
+	case "zcode":
+		// The terminal client for the ZCode runtime (zcode-app-cli 0.16.9,
+		// runtime 3.14.4) takes `--resume <sessionId>` with the sess_ id its
+		// database stores, and reopens the session from any directory; the cd
+		// keeps the agent in the project, when it is still there (#4430). The
+		// JSONL transcripts are not in that database.
+		// A snapshot an older ZCode left is in no store the client opens until
+		// its restore-legacy-sessions command has copied it in (#4432).
+		if sources.ZCodeLegacyUnderRoot(s.Path) {
+			return "", "", fmt.Errorf("zcode session %s is a snapshot from an older ZCode; run /restore-legacy-sessions in zcode first, then `zcode --resume %s`", digest.Short(s.ID), s.ID)
+		}
+		if strings.HasSuffix(s.Path, ".jsonl") {
+			return "", "", fmt.Errorf("zcode session %s is a transcript under ~/.zcode/projects; `zcode --resume` opens only sessions from ZCode's CLI database", digest.Short(s.ID))
+		}
+		return existingDir(s.Path), "zcode --resume " + s.ID, nil
 	case "continue":
 		// `cn --fork <sessionId>` loads the session by id straight out of the
 		// store deja reads — `historyManager.load` opens
@@ -217,8 +232,10 @@ func resumeCommand(s model.Session) (string, string, error) {
 	case "senpi":
 		// `--session <path|id>` takes a partial uuid, from senpi's own help, and
 		// `--fork` is beside it for the copy-instead-of-continue case. Measured
-		// on @code-yeongyu/senpi (#3670).
-		return "", "senpi --session " + s.ID, nil
+		// on @code-yeongyu/senpi (#3670). It finds the session from anywhere,
+		// but outside its project asks to fork it, as Kimchi does, so the
+		// command runs in the directory the header records (#4426).
+		return existingDir(resumeRecordedDir(s)), "senpi --session " + s.ID, nil
 	case "kimchi":
 		// Kimchi's own argument parser rewrites `--resume <selector>` to
 		// `--session <id>` (src/cli-args.ts), so the id deja indexes is the
@@ -464,23 +481,28 @@ func existingDir(p string) string {
 }
 
 // resumeRecordedDir is the directory a session recorded running in, for the
-// harnesses whose resume command goes there when it still exists: opencode and
-// Kilo keep it as the session's path, gjc and Kimchi in the transcript header.
+// harnesses whose resume command goes there when it still exists: opencode,
+// Kilo and ZCode's CLI keep it as the session's path, gjc, Kimchi and Senpi in the transcript
+// header.
 func resumeRecordedDir(s model.Session) string {
 	switch s.Harness {
 	case "opencode", "kilocode":
 		return s.Path
-	case "gjc", "kimchi":
+	case "zcode":
+		if !strings.HasSuffix(s.Path, ".jsonl") && !sources.ZCodeLegacyUnderRoot(s.Path) {
+			return s.Path
+		}
+	case "gjc", "kimchi", "senpi":
 		return sources.PiHeaderCwd(s.Path)
 	}
 	return ""
 }
 
 // resumeDirGoneNote says where a session whose directory is gone will run:
-// opencode and Kilo reopen it from anywhere, and their tools then work in the
-// directory the command is run from. Cline does the same, and its directory
-// is the manifest's rather than the store path's (#4318). gjc and Kimchi offer
-// to fork it there instead.
+// opencode, Kilo and ZCode reopen it from anywhere, and their tools then work
+// in the directory the command is run from. Cline does the same, and its
+// directory is the manifest's rather than the store path's (#4318). gjc,
+// Kimchi and Senpi offer to fork it there instead.
 func resumeDirGoneNote(s model.Session, dir string) string {
 	if dir == "" && s.Harness == "cline" && s.Path != "" {
 		if d := sources.ClineSessionDir(s.Path); d != "" {
@@ -495,7 +517,7 @@ func resumeDirGoneNote(s model.Session, dir string) string {
 	if _, err := os.Stat(recorded); !os.IsNotExist(err) {
 		return ""
 	}
-	if s.Harness == "gjc" || s.Harness == "kimchi" {
+	if s.Harness == "gjc" || s.Harness == "kimchi" || s.Harness == "senpi" {
 		return fmt.Sprintf("the directory this session ran in is gone (%s); from any other directory %s offers to fork it rather than reopen it", recorded, s.Harness)
 	}
 	return fmt.Sprintf("the directory this session ran in is gone (%s); it reopens in the one you run the command from", recorded)

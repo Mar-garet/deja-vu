@@ -43,8 +43,9 @@ func TestParseOmpFile(t *testing.T) {
 	}
 	// The header cwd is promoted to the project key, not the lossy directory
 	// name (-Code-pleasure-course would decode to pleasure/course).
-	if s.Project != claudeProjectName(pathToProjectKey("/Users/halo/Code/pleasure-course")) {
-		t.Fatalf("project = %q, want %q", s.Project, claudeProjectName(pathToProjectKey("/Users/halo/Code/pleasure-course")))
+	// Encoding the cwd and decoding it back was that guess again (#4427).
+	if s.Project != "Code/pleasure-course" {
+		t.Fatalf("project = %q, want Code/pleasure-course", s.Project)
 	}
 	// user + assistant(text only, thinking skipped) + the read's file row +
 	// tool output + assistant. The toolCall was skipped too until #4113.

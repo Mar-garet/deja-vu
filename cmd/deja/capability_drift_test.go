@@ -299,6 +299,11 @@ func plausibleSession(t *testing.T, harness string) model.Session {
 		// under this harness come from the grok-dev database and cannot resume.
 		s.Path = filepath.Join(t.TempDir(), "sessions", "workspace%2Fp", "abc123", "updates.jsonl")
 	}
+	if harness == "zcode" {
+		// The CLI database's sessions resume, and carry the directory they
+		// ran in as their path; a JSONL transcript does not (#4430).
+		s.Path = t.TempDir()
+	}
 	if harness == "roo" {
 		// Only the CLI's own store resumes, and the command carries the
 		// workspace out of history_item.json — a bare path would fail the

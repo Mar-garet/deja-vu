@@ -40,6 +40,9 @@ func TestResumeGjcAndKimchiRunInTheSessionDirectory(t *testing.T) {
 	for _, c := range []struct{ harness, cmd string }{
 		{"gjc", "gjc --resume 01a0f93c-7bdc-7074-a7dd-641dd530ce0c"},
 		{"kimchi", "kimchi --session 01a0f93c-7bdc-7074-a7dd-641dd530ce0c"},
+		// Senpi does what Kimchi does: from another directory it asks to fork
+		// the session into it (#4426).
+		{"senpi", "senpi --session 01a0f93c-7bdc-7074-a7dd-641dd530ce0c"},
 	} {
 		t.Run(c.harness, func(t *testing.T) {
 			s := model.Session{Harness: c.harness, ID: "01a0f93c-7bdc-7074-a7dd-641dd530ce0c", Path: transcript(c.harness, proj)}
