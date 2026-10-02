@@ -99,7 +99,7 @@ func ParseGrokDBSince(db string, t time.Time) ([]model.Session, error) {
 			text = grokMessageText(r.Body)
 		}
 		at := grokDBTime(r.At)
-		work := grokDBWork(r.Body, at)
+		work := grokDBWork(r.Body, r.CWD, at)
 		if strings.TrimSpace(text) == "" && len(work) == 0 {
 			continue
 		}
@@ -196,8 +196,8 @@ var grokDevDialect = toolDialect{
 // an AI SDK message: the assistant's calls are tool-call parts and each
 // result a tool-result part on a row of its own. The reader kept text parts
 // only, so a grok-dev session was its prompts and prose and nothing it did
-// (#4498).
-func grokDBWork(body string, at time.Time) []model.Message {
+// (#4498). Paths are relative to the session's cwd or absolute.
+func grokDBWork(body, cwd string, at time.Time) []model.Message {
 	var doc struct {
 		Content json.RawMessage `json:"content"`
 	}
@@ -205,10 +205,12 @@ func grokDBWork(body string, at time.Time) []model.Message {
 		return nil
 	}
 	var blocks []struct {
-		Type     string         `json:"type"`
-		ToolName string         `json:"toolName"`
-		Input    map[string]any `json:"input"`
-		Output   any            `json:"output"`
+		Type     string `json:"type"`
+		ToolName string `json:"toolName"`
+		// An object, or the raw string when the model's arguments were not
+		// JSON — which must not cost the other parts of the message.
+		Input  json.RawMessage `json:"input"`
+		Output any             `json:"output"`
 	}
 	if json.Unmarshal(doc.Content, &blocks) != nil {
 		return nil
@@ -218,9 +220,14 @@ func grokDBWork(body string, at time.Time) []model.Message {
 	for _, b := range blocks {
 		switch b.Type {
 		case "tool-call":
-			if b.ToolName != "" && b.Input != nil {
-				calls = append(calls, map[string]any{"type": "tool_use", "name": b.ToolName, "input": b.Input})
+			var in map[string]any
+			if b.ToolName == "" || json.Unmarshal(b.Input, &in) != nil || in == nil {
+				continue
 			}
+			if p, _ := in["path"].(string); p != "" {
+				in["path"] = resolveToolPath(p, cwd)
+			}
+			calls = append(calls, map[string]any{"type": "tool_use", "name": b.ToolName, "input": in})
 		case "tool-result":
 			if out := strings.TrimSpace(grokDBResultText(b.Output)); out != "" {
 				outs = append(outs, out)

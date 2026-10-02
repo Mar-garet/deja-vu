@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vshulcz/deja-vu/internal/model"
 )
@@ -219,6 +220,28 @@ func TestKiroIDECallsOnceAndOnlyWhenRun(t *testing.T) {
 	for _, f := range vocabRoles(ss, RoleFiles) {
 		if strings.Contains(f, "secret.go") {
 			t.Errorf("a denied write left a files record %q", f)
+		}
+	}
+}
+
+// grok-dev stores a call whose arguments were not valid JSON with input as
+// the raw string, and names files relative to the session's cwd. The string
+// cost every other call in its message; the relative path matched no file
+// (#4498).
+func TestGrokDBRawInputAndRelativePaths(t *testing.T) {
+	msg := map[string]any{"role": "assistant", "content": []any{
+		map[string]any{"type": "tool-call", "toolCallId": "c0", "toolName": "bash", "input": `{"command": "go test`},
+		map[string]any{"type": "tool-call", "toolCallId": "c1", "toolName": "edit_file", "input": map[string]any{"path": "retry.go", "old_string": oldLoop, "new_string": newLoop}},
+	}}
+	db := vocabSQL(t, `CREATE TABLE sessions (id TEXT PRIMARY KEY, workspace_id TEXT, title TEXT, cwd_last TEXT, created_at TEXT);
+CREATE TABLE messages (session_id TEXT, seq INTEGER, role TEXT, message_json TEXT, created_at TEXT);
+INSERT INTO sessions VALUES ('gd2','w1','fix the retry loop','/tmp/proj','2026-09-20T10:00:00.000Z');
+INSERT INTO messages VALUES ('gd2',0,'user','{"role":"user","content":"fix the retry loop"}','2026-09-20T10:00:00.000Z');
+INSERT INTO messages VALUES ('gd2',1,'assistant',`+sqlQuote(vocabJSON(msg))+`,'2026-09-20T10:00:01.000Z');`)
+	ss := vocabParse(t, func(db string) ([]model.Session, error) { return ParseGrokDBSince(db, time.Time{}) }, db)
+	for _, w := range relPatchWants {
+		if !vocabHas(ss, w) {
+			t.Errorf("missing %q; files %q, edits %q", w, vocabRoles(ss, RoleFiles), vocabRoles(ss, RoleEdit))
 		}
 	}
 }
