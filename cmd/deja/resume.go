@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/vshulcz/deja-vu/internal/digest"
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -93,9 +94,14 @@ func runResume(dir string, args []string, stdout io.Writer) error {
 // (the -Command a Windows cd wraps the line in) all read literally, so a
 // Windows path with its backslashes, an 8.3 ~ or a space goes on too (#4455).
 // A quote, $, backtick or control character has no form all of them read
-// alike, and ok is false.
+// alike, and ok is false. So do the curly quotes PowerShell closes a string
+// on, a trailing \ (fish reads \' as a quote, which turned the next quoted
+// word inside out), a leading - (an option to roo, not its value) and a byte
+// that is not UTF-8 (--exec would read it back as U+FFFD). The bare set has
+// no , or @: PowerShell reads a,b as two arguments and @x as a splat.
 func resumeWord(s string) (word string, ok bool) {
-	if s == "" || strings.ContainsAny(s, "'\"$`") {
+	if s == "" || !utf8.ValidString(s) || strings.ContainsAny(s, "'\"$`‘’‚‛“”„") ||
+		strings.HasPrefix(s, "-") || strings.HasSuffix(s, `\`) {
 		return "", false
 	}
 	bare := true
@@ -103,7 +109,7 @@ func resumeWord(s string) (word string, ok bool) {
 		if actsOnATerminal(r) {
 			return "", false
 		}
-		if !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_@%+:,./-", r) {
+		if !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+:./-", r) {
 			bare = false
 		}
 	}
