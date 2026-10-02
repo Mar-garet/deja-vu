@@ -220,7 +220,7 @@ func applyPatchRecords(patch string, resolve func(string) string, t time.Time) [
 
 // applyPatchInputs is the patch body of every apply_patch call among blocks.
 // Roo names the argument `patch`; Cline's CLI and extension name it `input`
-// (#4503, #4504).
+// (#4503, #4504), Amp `patchText` (#4527).
 func applyPatchInputs(blocks []any, d toolDialect) []string {
 	var out []string
 	for _, it := range blocks {
@@ -228,7 +228,7 @@ func applyPatchInputs(blocks []any, d toolDialect) []string {
 		if !ok || name != "apply_patch" {
 			continue
 		}
-		for _, k := range []string{"patch", "input"} {
+		for _, k := range []string{"patch", "input", "patchText"} {
 			if p, _ := in[k].(string); p != "" {
 				out = append(out, p)
 				break

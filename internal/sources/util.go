@@ -611,6 +611,10 @@ type toolDialect struct {
 	// commandKey names the argument holding the command. Empty means
 	// "command"; cline's run_commands takes "commands", a list.
 	commandKey string
+	// commandKeyAlt is a second name for it, read when commandKey is absent:
+	// Amp's Bash takes `cmd` and its shell_command `command` (#4527). Empty
+	// means commandKey alone.
+	commandKeyAlt string
 	// pathListKey names an argument holding several files at once — cline's
 	// read_files takes "files", whose elements each name a path under pathKey.
 	// Empty means a call names at most one file.
@@ -926,6 +930,9 @@ func commandStrings(in map[string]any, d toolDialect) []string {
 	key := d.commandKey
 	if key == "" {
 		key = "command"
+	}
+	if _, ok := in[key]; !ok && d.commandKeyAlt != "" {
+		key = d.commandKeyAlt
 	}
 	switch v := in[key].(type) {
 	case string:

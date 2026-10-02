@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -85,33 +86,39 @@ type ampThread struct {
 			} `json:"trees"`
 		} `json:"initial"`
 	} `json:"env"`
-	Messages []struct {
-		Role    string          `json:"role"`
-		Content json.RawMessage `json:"content"`
-		// Either shape, epoch or ISO: a type the struct did not expect failed
-		// the whole thread, and these times are optional.
-		Meta struct {
-			SentAt any `json:"sentAt"`
-		} `json:"meta"`
-		Usage struct {
-			Timestamp any `json:"timestamp"`
-		} `json:"usage"`
-	} `json:"messages"`
+	Messages []ampMessage `json:"messages"`
+}
+
+type ampMessage struct {
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+	// Either shape, epoch or ISO: a type the struct did not expect failed
+	// the whole thread, and these times are optional.
+	Meta struct {
+		SentAt any `json:"sentAt"`
+	} `json:"meta"`
+	Usage struct {
+		Timestamp any `json:"timestamp"`
+	} `json:"usage"`
 }
 
 // ampDialect is Amp's tool vocabulary, read off the 0.0.1774959077 bundle: the
 // shell is Bash and takes `cmd`, the file tools take `path`, edit_file replaces
-// old_str with new_str and create_file writes `content` (#4356).
+// old_str with new_str and create_file writes `content` (#4356). Some models
+// get shell_command {command, workdir} in place of Bash, and apply_patch
+// {patchText} beside edit_file; ampPatchRecords reads the patch (#4527).
 var ampDialect = toolDialect{
 	pathKey: "path",
 	pathTools: map[string]bool{
 		"Read": true, "read_file": true, "edit_file": true, "create_file": true, "undo_edit": true,
 	},
-	shellTool:  "Bash",
-	commandKey: "cmd",
-	editTools:  map[string]bool{"edit_file": true, "create_file": true},
-	oldKey:     "old_str",
-	newKey:     "new_str",
+	shellTool:     "Bash",
+	shellTools:    map[string]bool{"Bash": true, "shell_command": true},
+	commandKey:    "cmd",
+	commandKeyAlt: "command",
+	editTools:     map[string]bool{"edit_file": true, "create_file": true},
+	oldKey:        "old_str",
+	newKey:        "new_str",
 }
 
 // ParseAmpFile parses one Amp thread. A user turn carries meta.sentAt and an
@@ -157,6 +164,11 @@ func ParseAmpFile(path string) ([]model.Session, error) {
 		Started: created,
 		Updated: created,
 	}
+	cwd := ""
+	if len(thread.Env.Initial.Trees) > 0 {
+		cwd = ampProject(thread.Env.Initial.Trees[0].URI, "")
+	}
+	failed := ampFailedCalls(thread.Messages)
 	ts := created
 	for _, item := range thread.Messages {
 		if item.Role != "user" && item.Role != "assistant" {
@@ -187,6 +199,10 @@ func ParseAmpFile(path string) ([]model.Session, error) {
 			})
 		}
 		for _, rec := range ampWorkRecords(item.Content, ts) {
+			session.Touch(ts)
+			session.Messages = append(session.Messages, rec)
+		}
+		for _, rec := range ampPatchRecords(item.Content, failed, cwd, ts) {
 			session.Touch(ts)
 			session.Messages = append(session.Messages, rec)
 		}
@@ -229,6 +245,58 @@ func ampWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 	if IndexToolOutput() {
 		for _, body := range ampToolResults(blocks) {
 			out = append(out, model.Message{Role: RoleToolOutput, Text: capParsedMessage(body), Time: ts})
+		}
+	}
+	return out
+}
+
+// ampPatchRecords reads the apply_patch calls in one message through the shared
+// applyPatch: the files the patch names, relative ones under the thread's
+// workspace as Amp resolves them, and the lines it removed and added. A call
+// whose run ended in error, was rejected or was cancelled changed nothing
+// (#4527).
+func ampPatchRecords(raw json.RawMessage, failed map[string]bool, cwd string, ts time.Time) []model.Message {
+	if !bytes.Contains(raw, []byte(`"apply_patch"`)) {
+		return nil
+	}
+	var blocks []any
+	if json.Unmarshal(raw, &blocks) != nil {
+		return nil
+	}
+	var out []model.Message
+	for _, it := range blocks {
+		if m, ok := it.(map[string]any); ok && failed[str(m["id"])] {
+			continue
+		}
+		for _, patch := range applyPatchInputs([]any{it}, ampDialect) {
+			out = append(out, applyPatchRecords(patch, func(p string) string { return resolveToolPath(p, cwd) }, ts)...)
+		}
+	}
+	return out
+}
+
+// ampFailedCalls is the id of every call whose run did not finish done. Amp's
+// terminal states are done, error, rejected-by-user and cancelled; the result
+// arrives in the message after the call.
+func ampFailedCalls(msgs []ampMessage) map[string]bool {
+	out := map[string]bool{}
+	for _, item := range msgs {
+		if !bytes.Contains(item.Content, []byte(`"tool_result"`)) {
+			continue
+		}
+		var blocks []struct {
+			Type string `json:"type"`
+			ID   string `json:"toolUseID"`
+			Run  struct {
+				Status string `json:"status"`
+			} `json:"run"`
+		}
+		_ = json.Unmarshal(item.Content, &blocks)
+		for _, b := range blocks {
+			switch b.Run.Status {
+			case "error", "rejected-by-user", "cancelled":
+				out[b.ID] = true
+			}
 		}
 	}
 	return out

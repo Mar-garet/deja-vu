@@ -175,6 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Cline CLI session records what its editor wrote, including a file it created, and the files, replaced text and written lines of an `apply_patch` edit, so `deja blame` can attribute them (#4503).
 - A Cline VS Code task keeps both sides of a `replace_in_file` edit written with Cline's `------- SEARCH` / `+++++++ REPLACE` markers, and the files and both sides of an `apply_patch` edit, whose patch Cline passes as `input` (#4504).
 - A `kiro-cli --v3` or Kiro IDE session keeps its tool calls: the commands it ran, the files it read, wrote, appended to or deleted, and the replaced text and written lines of each edit. Only the results' text was kept (#4506).
+- An Amp thread keeps its `shell_command` runs as commands and its `apply_patch` edits as files, replaced text and written lines; a patch you rejected is left out. Only `Bash` and `edit_file` were read (#4527).
 
 ## [0.21.4] - 2026-09-29
 
