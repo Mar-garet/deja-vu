@@ -395,6 +395,7 @@ import (
 // 60 also: an aider session's id is its history path and start time rather
 // than its ordinal in the file, so a new history at the path of a deleted one
 // no longer takes the kept sessions' ids (#4332).
+// 60 also: a Zed thread gains the files its agent created with write_file (#4339).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
