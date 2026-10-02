@@ -198,3 +198,58 @@ func TestASourcesRecallKeepsAForkThatWentOn(t *testing.T) {
 		t.Errorf("the fork's recall answered with its source:\n%s", out)
 	}
 }
+
+// A real Claude Code fork opens on records the first 64 KB do not get past —
+// a 46 KB attachment ahead of the first user turn — and a fork of a compacted
+// session opens on the harness's own preamble, which the index strips before
+// it fingerprints anything. Read off the transcript, the fork either had no
+// opening or one the index never matched, and its first prompt was answered
+// with the source (#4549).
+func TestALongHeadedForksPromptRecallLeavesOutItsSource(t *testing.T) {
+	tmp := hermeticEnv(t)
+	t0 := time.Now().UTC().Add(-30 * time.Minute).Truncate(time.Millisecond).Add(316 * time.Millisecond)
+	at := func(d time.Duration) string { return t0.Add(d).Format(time.RFC3339Nano) }
+	claude := filepath.Join(tmp, "claude", "-w-p")
+	if err := os.MkdirAll(claude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(claude, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprintf("other-%d", i)
+		write(id+".jsonl", fmt.Sprintf(`{"type":"user","sessionId":%q,"cwd":"/w/p","timestamp":"2026-07-01T09:%02d:00Z","message":{"role":"user","content":"rename table%d and column%d in the billing schema"}}`, id, i, i, i)+"\n")
+	}
+	opening := "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n" + forkQuestion
+	session := func(id string, more string) string {
+		pad := strings.Repeat("x", 70<<10)
+		return fmt.Sprintf(`{"type":"attachment","uuid":"att-1","sessionId":%q,"cwd":"/w/p","timestamp":%q,"attachment":{"type":"file","content":%q}}`, id, at(time.Second), pad) + "\n" +
+			fmt.Sprintf(`{"type":"user","uuid":"u-1","sessionId":%q,"cwd":"/w/p","timestamp":%q,"isCompactSummary":true,"message":{"role":"user","content":%q}}`, id, at(0), opening) + "\n" +
+			fmt.Sprintf(`{"type":"assistant","uuid":"a-1","sessionId":%q,"cwd":"/w/p","timestamp":%q,"message":{"role":"assistant","content":"Looking at the retry loop in fetch.go now."}}`, id, at(5*time.Second)) + "\n" + more
+	}
+	const source = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	const fork = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+	write(source+".jsonl", session(source, ""))
+	dir := index.DefaultDir()
+	if err := index.Ensure(dir, "", true, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	write(fork+".jsonl", session(fork, fmt.Sprintf(`{"type":"user","uuid":"u-2","sessionId":%q,"cwd":"/w/p","timestamp":%q,"message":{"role":"user","content":%q}}`, fork, at(20*time.Minute), forkQuestion)+"\n"))
+	ask := func(sid, path string) string {
+		payload, _ := json.Marshal(map[string]string{"session_id": sid, "transcript_path": path, "cwd": "/w/p", "prompt": forkQuestion})
+		var out strings.Builder
+		if err := runHookPrompt(dir, strings.NewReader(string(payload)), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.String()
+	}
+	if out := ask(fork, filepath.Join(claude, fork+".jsonl")); strings.Contains(out, "aaaaaaaa") {
+		t.Errorf("the fork was handed its own source as history:\n%s", out)
+	}
+	if out := ask("someone-else", ""); !strings.Contains(out, "aaaaaaaa") {
+		t.Errorf("the control was not told about the source, so this proves nothing:\n%s", out)
+	}
+}

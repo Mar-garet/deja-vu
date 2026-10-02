@@ -627,27 +627,60 @@ func TranscriptHead(path, nativeSessionID string) (model.Session, error) {
 		return model.Session{}, err
 	}
 	defer func() { _ = f.Close() }()
-	buf := make([]byte, compactionHeaderBytes)
-	n, err := io.ReadFull(f, buf)
-	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
-		return model.Session{}, err
-	}
-	head := buf[:n]
-	if i := bytes.LastIndexByte(head, '\n'); i >= 0 {
-		head = head[:i+1]
-	} else if int64(n) == compactionHeaderBytes {
-		return model.Session{}, ErrTranscriptLineTooLarge
-	}
-	harness, err := compactionHarness(head, nil)
-	if err != nil {
-		return model.Session{}, err
-	}
-	s, err := parseCompactionSession(path, harness, "", head)
-	if err != nil {
-		return model.Session{}, err
+	// The window widens until it holds a timed user turn. Claude Code writes
+	// attachments ahead of the first one, and on a real fork a 46 KB one put
+	// it at byte 77,000, past a 64 KB read: the fork had no opening and its
+	// first prompt was answered with its source.
+	var s model.Session
+	for size := compactionHeaderBytes; ; size *= 4 {
+		buf := make([]byte, size)
+		n, err := io.ReadFull(f, buf)
+		if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+			return model.Session{}, err
+		}
+		whole := int64(n) < size
+		last := size >= transcriptHeadMaxBytes
+		head := buf[:n]
+		if i := bytes.LastIndexByte(head, '\n'); i >= 0 {
+			head = head[:i+1]
+		} else if !whole {
+			if last {
+				return model.Session{}, ErrTranscriptLineTooLarge
+			}
+			head = nil
+		}
+		if head != nil {
+			harness, err := compactionHarness(head, nil)
+			if err != nil {
+				return model.Session{}, err
+			}
+			s, err = parseCompactionSession(path, harness, "", head)
+			if (err == nil && hasTimedUserTurn(s)) || whole || last {
+				if err != nil {
+					return model.Session{}, err
+				}
+				break
+			}
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return model.Session{}, err
+		}
 	}
 	if s.ID != nativeSessionID {
 		return model.Session{}, fmt.Errorf("%w: got %q, want %q", ErrTranscriptIdentity, s.ID, nativeSessionID)
 	}
 	return s, nil
+}
+
+// transcriptHeadMaxBytes bounds TranscriptHead: it runs inside a hook, and a
+// session whose first user turn is further in than this opens on nothing.
+const transcriptHeadMaxBytes int64 = 1 << 20
+
+func hasTimedUserTurn(s model.Session) bool {
+	for _, m := range s.Messages {
+		if m.Role == "user" && !m.Time.IsZero() {
+			return true
+		}
+	}
+	return false
 }

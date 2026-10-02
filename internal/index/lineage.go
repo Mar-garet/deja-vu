@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/model"
+	"github.com/vshulcz/deja-vu/internal/nfcfold"
 	"github.com/vshulcz/deja-vu/internal/redact"
 )
 
@@ -174,7 +175,12 @@ func SessionOpening(s model.Session) uint64 {
 		if msg.Role != "user" || msg.Time.IsZero() {
 			continue
 		}
-		text, _ := redact.Text(strings.TrimSpace(msg.Text))
+		// The text as the index keeps it, whichever side this runs on: the
+		// manifest fingerprints stored messages, a hook a transcript read off
+		// disk, and a compacted session's first turn opens on the harness's
+		// preamble, which the index strips.
+		text, _ := redact.Text(nfcfold.Compose(strings.TrimSpace(stripSelfRecall(msg.Text))))
+		text = strings.TrimSpace(text)
 		if text == "" {
 			continue
 		}
