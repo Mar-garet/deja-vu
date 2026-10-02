@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The first `deja install goose-auto` on a machine with history no longer reports `index: built (0 sessions, 0 messages)`: writing goose's recall block started a background build that install then waited on (#4268).
 - `deja uninstall goose-auto` also removes the `plugins:` entry goose adds to `config.yaml` for deja's plugin on its first start, instead of leaving it pointing at a deleted directory (#4270).
 - An install and uninstall of `goose-auto` gives `~/.config/goose/AGENTS.md` back byte for byte instead of two newlines longer; install no longer says it created that file when it was there, and uninstall names its snapshot (#4269).
 - On Windows `deja install goose` writes to `%APPDATA%\Block\goose\config` even with `XDG_CONFIG_HOME` exported, which goose never reads there (#4286).
