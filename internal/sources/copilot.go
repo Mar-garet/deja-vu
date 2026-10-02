@@ -13,11 +13,18 @@ import (
 	"github.com/vshulcz/deja-vu/internal/model"
 )
 
+// CopilotHome is where Copilot CLI keeps its config and state: COPILOT_HOME
+// when set, ~/.copilot otherwise. Install, doctor and the session root all
+// follow it (#4240).
+func CopilotHome() string {
+	return EnvPath("COPILOT_HOME", filepath.Join(Home(), ".copilot"))
+}
+
 // CopilotRoot returns the GitHub Copilot CLI session-state root, overridable
 // via DEJA_COPILOT_ROOT. Each session lives in its own UUID directory as an
 // append-only events.jsonl.
 func CopilotRoot() string {
-	return EnvPath("DEJA_COPILOT_ROOT", filepath.Join(Home(), ".copilot", "session-state"))
+	return EnvPath("DEJA_COPILOT_ROOT", filepath.Join(CopilotHome(), "session-state"))
 }
 
 // CopilotSessionFiles lists event logs under the Copilot session root.

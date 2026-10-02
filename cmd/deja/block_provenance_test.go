@@ -55,10 +55,9 @@ func TestEveryWriterGivesBackTheBlockItMade(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
+			setTestHome(t, home)
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-			path := filepath.Join(home, filepath.FromSlash(tc.rel))
+			path := homeConfigPath(home, tc.rel)
 			if tc.rel == "" {
 				path = sources.ZedSettingsPath()
 			}

@@ -1,7 +1,8 @@
 # Copilot CLI
 
 - **ID**: `copilot`
-- **Store**: `~/.copilot/session-state/<sessionId>/events.jsonl`
+- **Store**: `${COPILOT_HOME:-~/.copilot}/session-state/<sessionId>/events.jsonl`;
+  `COPILOT_HOME` also moves the MCP config and the skill below
 - **Read override**: `DEJA_COPILOT_ROOT` (points at the `session-state` directory)
 - **Format**: append-only JSONL, one event per line, each `{type, data, timestamp}`
 
@@ -27,8 +28,9 @@ lists `codeChanges.filesModified`; deja does not read it, since the tool events
 already name every file.
 
 - **MCP**: `deja install copilot` writes `mcpServers.deja` into
-  `~/.copilot/mcp-config.json`.
-- **Skill**: `~/.copilot/skills/deja-history/SKILL.md`, loaded on demand;
+  `${COPILOT_HOME:-~/.copilot}/mcp-config.json`.
+- **Skill**: `~/.copilot/skills/deja-history/SKILL.md` (under `$COPILOT_HOME`
+  when set), loaded on demand;
   Copilot invokes a skill by name, so it is also the `/deja-history` command.
 - **Auto-recall**: none. Copilot CLI exposes no hook that can inject context,
   so MCP plus the skill is the whole install.

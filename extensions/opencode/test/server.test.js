@@ -188,3 +188,16 @@ test("the switches in the plugin's options still hold on 2.x", async () => {
     assert.equal(hooks.tool["execute.after"], undefined)
   })
 })
+
+// deja can exit before reading its stdin (a missing index, an early refusal);
+// the write then fails with EPIPE, and an unhandled error event on the pipe
+// is an uncaught exception in opencode's process. CI hit it on this test file.
+test("every write to deja's stdin has an error handler on the pipe", () => {
+  for (const rel of ["../index.js", "../../openclaw/index.mjs"]) {
+    const src = readFileSync(new URL(rel, import.meta.url), "utf8")
+    const writes = src.match(/stdin\.(end|write)\(/g) || []
+    const handlers = src.match(/stdin\.on\("error"/g) || []
+    assert.ok(writes.length > 0, `${rel} writes nothing to stdin; the check is stale`)
+    assert.ok(handlers.length > 0, `${rel} writes to deja's stdin with no error handler`)
+  }
+})

@@ -624,12 +624,12 @@ func swapIndexDir(dir, tmp string) error {
 	// From here the index is not where readers look, so this rename and the
 	// restore that may follow it share one deadline: the window a reader waits
 	// out, spent once between them rather than twice.
-	deadline := time.Now().Add(swapRenameWait)
+	deadline := swapNow().Add(swapRenameWait)
 	if err := renameWaitingUntil(tmp, dir, deadline); err != nil {
 		// Put the previous index back rather than leaving nothing, with
 		// whatever is left of that window — this runs exactly when renames on
 		// this directory are being refused.
-		floor := time.Now().Add(restoreRenameFloor)
+		floor := swapNow().Add(restoreRenameFloor)
 		if floor.After(deadline) {
 			// A little past the window rather than none of it: the restore is
 			// the one rename that must not fail, and a second rename that
@@ -655,7 +655,7 @@ func swapIndexDir(dir, tmp string) error {
 // bounded; a rename still refused at the end is reported rather than retried
 // forever, and the caller puts the previous index back.
 func renameWaiting(from, to string, wait time.Duration) error {
-	return renameWaitingUntil(from, to, time.Now().Add(wait))
+	return renameWaitingUntil(from, to, swapNow().Add(wait))
 }
 
 // renameWaitingUntil is renameWaiting against a deadline the caller keeps, so a
@@ -664,8 +664,8 @@ func renameWaiting(from, to string, wait time.Duration) error {
 // as long as a reader will wait (#2228).
 func renameWaitingUntil(from, to string, deadline time.Time) error {
 	err := renameFile(from, to)
-	for err != nil && renameHeldOpen(err) && time.Now().Before(deadline) {
-		time.Sleep(swapRenameStep)
+	for err != nil && renameHeldOpen(err) && swapNow().Before(deadline) {
+		swapSleep(swapRenameStep)
 		err = renameFile(from, to)
 	}
 	return err
@@ -727,6 +727,14 @@ const (
 // renameFile is os.Rename, indirected so a test can refuse a rename the way
 // Windows does without needing Windows.
 var renameFile = os.Rename
+
+// swapNow and swapSleep are the swap's clock, indirected so a test can hold
+// the waits to what the swap asks for: measured on a shared runner, the same
+// swap was 240ms one run and 306ms the next (#4160).
+var (
+	swapNow   = time.Now
+	swapSleep = time.Sleep
+)
 
 // recoverIndexDir finishes an interrupted swapIndexDir: if the index dir is
 // missing but its .old sibling survives, restore it.

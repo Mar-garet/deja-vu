@@ -599,6 +599,33 @@ import (
 //
 // 60 also: a Copilot Chat agent edit reads as the edited file's name in the
 // reply, not as an empty code fence (#4590).
+// 60 also: a Codex sub-agent's rollout records the thread that spawned it as
+// its parent (#4547).
+//
+// 60 also: a Codex fork records the thread it was forked from, and every
+// session keeps a fingerprint of the turn it opens with (#4549).
+//
+// 60 also: an OpenClaw 2026.7 reset or delete archive, stamped
+// 2026-10-01T15-18-21.294Z rather than with a number, is read (#4482).
+//
+// 60 also: a Codex rollout grown by records with no message moves the
+// session's updated time on an append, as a rebuild does (#4166).
+//
+// 60 also: a session whose id two files share takes its Started and Updated
+// from both, whichever sorts first (#4253).
+//
+// 60 also: a Codex rollout compressed in place, or a transcript rewritten
+// under its name in another form, is a move on an update with nothing else
+// removed; its old path and records go (#4252).
+//
+// 60 also: removing one of two transcripts that share an id re-reads the
+// other, so the runs both held stay and the row moves to it (#4310).
+//
+// 60 also: with DEJA_INCLUDE_SUBAGENTS=1, Kimi Code and Qwen Code sub-agent
+// logs are read as sub-agent sessions of their parent (#4483).
+//
+// 60 also: a goose text_editor str_replace sent as a unified diff leaves edit
+// and wrote records (#4287).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
@@ -767,6 +794,11 @@ type SessionMeta struct {
 	Kind   string `json:",omitempty"`
 	Parent string `json:",omitempty"`
 	Agent  string `json:",omitempty"`
+	// Opening identifies the turn the session opens with. A fork copies the
+	// turns it was forked from, times included, so a fork and its source open
+	// alike, and recall reads that to keep a fork's source off its page (#4549).
+	// Additive: an older manifest decodes with it zero, which matches nothing.
+	Opening uint64 `json:",omitempty"`
 	// From is the machine this session was worked on. Every imported session
 	// read as "from elsewhere" and nothing more, so with three machines
 	// exchanging history there was no way to ask what the server did, and no

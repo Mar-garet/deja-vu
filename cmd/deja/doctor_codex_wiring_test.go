@@ -217,7 +217,7 @@ func TestDoctorCodexTrustIsReadAtDejasOwnEntry(t *testing.T) {
 	}
 
 	// Control: deja's own entries approved, the user's not.
-	write(pin("session_start:1:0"), pin("user_prompt_submit:0:0"), pin("pre_tool_use:0:0"), pin("post_tool_use:0:0"), pin("pre_compact:0:0"))
+	write(pin("session_start:1:0"), pin("user_prompt_submit:0:0"), pin("pre_tool_use:0:0"), pin("post_tool_use:0:0"), pin("pre_compact:0:0"), pin("session_end:0:0"))
 	st = codexHookWiringState()
 	if st.state != "wired" || st.approved != st.pinned {
 		t.Errorf("deja's entries pinned: state %q, %d of %d approved, want wired and all", st.state, st.approved, st.pinned)
@@ -226,7 +226,7 @@ func TestDoctorCodexTrustIsReadAtDejasOwnEntry(t *testing.T) {
 		t.Error("deja's hook pinned, and install would say codex has not seen it")
 	}
 
-	// deja's SessionStart approved and the rest not: one of five runs.
+	// deja's SessionStart approved and the rest not: one of six runs.
 	write(pin("session_start:0:0"), pin("session_start:1:0"))
 	if st = codexHookWiringState(); st.state != "wired" || st.approved != 1 {
 		t.Errorf("deja's SessionStart pinned: state %q, %d approved, want wired and 1", st.state, st.approved)

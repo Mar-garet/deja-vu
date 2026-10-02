@@ -23,8 +23,10 @@ import (
 // context.append_message records; streamed assistant turns never do — they
 // have to be reconstructed from step.begin → content.part → step.end loop
 // events. Tool calls and their results arrive as loop events too (tool.call,
-// tool.result) and become work records (#655). Only the main agent is indexed;
-// sub-agents and think-parts are skipped by design (issue #248).
+// tool.result) and become work records (#655). Only the main agent is indexed
+// by default; think-parts are skipped by design (issue #248), and a sub-agent's
+// agents/<agent-id>/wire.jsonl comes in under DEJA_INCLUDE_SUBAGENTS=1, the
+// same switch as everywhere else (#4483).
 
 // KimiConfigDir is the native Kimi Code home. DEJA_KIMI_ROOT intentionally
 // does not affect it because that variable only relocates reads.
@@ -33,8 +35,10 @@ func KimiConfigDir() string { return EnvPath("KIMI_CODE_HOME", filepath.Join(Hom
 func KimiRoot() string { return EnvPath("DEJA_KIMI_ROOT", KimiConfigDir()) }
 
 func KimiSessionFiles() []string {
+	subagents := os.Getenv("DEJA_INCLUDE_SUBAGENTS") == "1"
 	return walkFiles(filepath.Join(KimiRoot(), "sessions"), func(p string) bool {
-		return filepath.Base(p) == "wire.jsonl" && filepath.Base(filepath.Dir(p)) == "main"
+		return filepath.Base(p) == "wire.jsonl" && filepath.Base(filepath.Dir(p)) == "main" ||
+			subagents && KimiSubagentFile(p)
 	})
 }
 
@@ -53,7 +57,8 @@ func KimiSidecarFiles() []string {
 
 // KimiSubagentFile reports whether p is a sub-agent's log, which Kimi writes at
 // agents/<agent-id>/wire.jsonl beside agents/main. The reader leaves those out
-// by design (#248); doctor counts them as skipped rather than unread (#4473).
+// unless DEJA_INCLUDE_SUBAGENTS=1 (#248, #4483); doctor counts them as skipped
+// rather than unread (#4473).
 func KimiSubagentFile(p string) bool {
 	dir := filepath.Dir(p)
 	return filepath.Base(p) == "wire.jsonl" && filepath.Base(dir) != "main" &&
@@ -180,11 +185,25 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 		ID:      filepath.Base(sessionDir),
 		Path:    path,
 	}
+	child := KimiSubagentFile(path)
 	if st, ok := kimiSessionState(path); ok {
 		s.Title = strings.TrimSpace(st.Title)
 		s.Project = projectName(st.WorkDir)
-		s.Touch(parseTimeAny(st.CreatedAt))
-		s.Touch(parseTimeAny(st.UpdatedAt))
+		if !child {
+			s.Touch(parseTimeAny(st.CreatedAt))
+			s.Touch(parseTimeAny(st.UpdatedAt))
+		}
+	}
+	if child {
+		// A sub-agent sits under the session that spawned it and shares its
+		// state.json: its own id, not the parent's, which would make it a
+		// second copy of the parent; no title or span from the parent's
+		// state (#4483). The agent's name leads, so the parent's id is not a
+		// prefix of it: a whole id opens the newest session it prefixes.
+		s.Kind = "subagent"
+		s.Parent = s.ID
+		s.ID = filepath.Base(filepath.Dir(path)) + "-" + s.Parent
+		s.Title = ""
 	}
 	// A Bash call and its result are separate loop events joined by
 	// toolCallId; the command record is kept by id so the exit status the
