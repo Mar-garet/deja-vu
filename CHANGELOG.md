@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja doctor` and `doctor --json` read the client's own off switches: an MCP entry turned off in goose, hermes, codex, grok or dsh config, a client deny list or MCP master switch, a client-wide hooks switch, and deja's extension or plugin disabled through the client. Those rows said `wired` (#4466, #4468, #4469, #4470).
 - On Windows, a DeepSeek TUI or Codex tool path such as `/tmp/proj/retry.go` is kept as written instead of being joined onto the session's directory as `\tmp\proj\tmp\proj\retry.go`, and `deja doctor` keeps the drive of a `file://C:/…` dsh plugin it reports missing (#4438).
 - `deja resume` on a Roo CLI task whose workspace has a space or a Windows 8.3 `~` in its path quotes the workspace after `-w` instead of leaving `-w` off, which sent the CLI to the wrong store; `--exec` passes the quoted path as one argument (#4455).
 - `deja search` stops offering `deja how` for a command that no indexed session runs twice any more. An update that left the recurring-command table empty kept the old one until a rebuild (#4441).

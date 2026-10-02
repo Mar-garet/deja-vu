@@ -1,0 +1,336 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/vshulcz/deja-vu/internal/sources"
+)
+
+// Every client keeps its own way to turn deja off without removing it: a
+// switch on the entry in a YAML or TOML config, a deny list or MCP master
+// switch beside the servers, a switch for all hooks, a disable on deja's own
+// extension or plugin. Doctor read only the JSON entry flag, so each of these
+// left the row `wired` in text and JSON while the client ran nothing (#4466,
+// #4468, #4469, #4470).
+func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	editJSON := func(t *testing.T, path string, edit func(map[string]any)) {
+		t.Helper()
+		root := map[string]any{}
+		if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) > 0 {
+			if err := json.Unmarshal([]byte(jsoncToJSON(string(b))), &root); err != nil {
+				t.Fatalf("%s: %v", path, err)
+			}
+		}
+		edit(root)
+		b, _ := json.MarshalIndent(root, "", "  ")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setJSON := func(path string, keys []string, v any) func(*testing.T) {
+		return func(t *testing.T) {
+			editJSON(t, path, func(root map[string]any) {
+				m := root
+				for _, k := range keys[:len(keys)-1] {
+					next, _ := m[k].(map[string]any)
+					if next == nil {
+						next = map[string]any{}
+						m[k] = next
+					}
+					m = next
+				}
+				m[keys[len(keys)-1]] = v
+			})
+		}
+	}
+	replace := func(path func() string, old, new string) func(*testing.T) {
+		return func(t *testing.T) {
+			b, err := os.ReadFile(path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(b), old) {
+				t.Fatalf("%s has no %q:\n%s", path(), old, b)
+			}
+			if err := os.WriteFile(path(), []byte(strings.Replace(string(b), old, new, 1)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	appendTo := func(path func() string, text string) func(*testing.T) {
+		return func(t *testing.T) {
+			b, _ := os.ReadFile(path())
+			if err := os.MkdirAll(filepath.Dir(path()), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path(), append(b, text...), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	prepend := func(path func() string, text string) func(*testing.T) {
+		return func(t *testing.T) {
+			b, _ := os.ReadFile(path())
+			if err := os.WriteFile(path(), append([]byte(text), b...), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	lazy := func(f func() string) func() string { return f }
+	codexToml := lazy(func() string { return filepath.Join(sources.CodexHome(), "config.toml") })
+	grokToml := lazy(func() string { return filepath.Join(sources.GrokHome(), "config.toml") })
+	// Codex runs no hook it has not been shown, so its row is wired only with
+	// every event trusted — the control the switch is then measured against.
+	trustCodex := func(t *testing.T) {
+		var pins strings.Builder
+		hooks := filepath.Join(sources.CodexHome(), "hooks.json")
+		for _, h := range codexHookWiring {
+			pins.WriteString("\n[hooks.state.\"" + hooks + ":" + codexEventKey(h.Event) + ":0:0\"]\ntrusted_hash = \"sha256:abc\"\n")
+		}
+		appendTo(codexToml, pins.String())(t)
+	}
+
+	cases := []struct {
+		name, target, section, row, key string
+		before                          func(*testing.T)
+		off                             func(*testing.T)
+	}{
+		// #4466: the entry's own switch, in YAML and TOML.
+		{name: "goose entry", target: "goose", section: "mcp", row: "goose", key: "extensions.deja.enabled",
+			off: replace(func() string { return filepath.Join(gooseConfigDir(), "config.yaml") }, "enabled: true", "enabled: false")},
+		{name: "hermes entry", target: "hermes", section: "mcp", row: "hermes", key: "mcp_servers.deja.enabled",
+			off: replace(func() string { return filepath.Join(sources.HermesHome(), "config.yaml") }, "enabled: true", "enabled: false")},
+		{name: "codex entry", target: "codex", section: "mcp", row: "codex", key: "[mcp_servers.deja] enabled",
+			off: appendTo(codexToml, "enabled = false\n")},
+		{name: "grok entry", target: "grok", section: "mcp", row: "grok", key: "[mcp_servers.deja] enabled",
+			off: appendTo(grokToml, "enabled = false\n")},
+		{name: "dsh row", target: "deepseek", section: "mcp", row: "deepseek", key: "mcp-deja",
+			off: replace(dshPatchPath, "- id: mcp-deja\n", "- id: mcp-deja\n      disabled: true\n")},
+		// #4468: deny lists and MCP master switches outside the entry.
+		{name: "gemini mcp disable", target: "gemini", section: "mcp", row: "gemini", key: "mcp-server-enablement.json",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.GeminiHome(), "mcp-server-enablement.json"), []string{"deja", "enabled"}, false)(t)
+			}},
+		{name: "gemini excluded", target: "gemini", section: "mcp", row: "gemini", key: "mcp.excluded",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.GeminiHome(), "settings.json"), []string{"mcp", "excluded"}, []any{"deja"})(t)
+			}},
+		{name: "gemini allowed", target: "gemini", section: "mcp", row: "gemini", key: "mcp.allowed",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.GeminiHome(), "settings.json"), []string{"mcp", "allowed"}, []any{"other"})(t)
+			}},
+		{name: "qwen excluded", target: "qwen", section: "mcp", row: "qwen", key: "mcp.excluded",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.QwenConfigDir(), "settings.json"), []string{"mcp", "excluded"}, []any{"deja"})(t)
+			}},
+		{name: "copilot", target: "copilot", section: "mcp", row: "copilot", key: "disabledMcpServers",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(filepath.Dir(copilotMCPConfigPath()), "settings.json"), []string{"disabledMcpServers"}, []any{"deja"})(t)
+			}},
+		{name: "grok disable", target: "grok", section: "mcp", row: "grok", key: "disabled_mcp_servers",
+			off: prepend(grokToml, "disabled_mcp_servers = [\"deja\"]\n\n")},
+		{name: "omp", target: "omp", section: "mcp", row: "omp", key: "disabledServers",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.OmpConfigDir(), "mcp.json"), []string{"disabledServers"}, []any{"deja"})(t)
+			}},
+		{name: "gjc", target: "gjc", section: "mcp", row: "gjc", key: "disabledServers",
+			off: func(t *testing.T) { setJSON(gjcMCPPath(), []string{"disabledServers"}, []any{"deja"})(t) }},
+		{name: "vscode", target: "vscode", section: "mcp", row: "vscode", key: "chat.mcp.access",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(filepath.Dir(doctorVSCodeMCPPath()), "settings.json"), []string{"chat.mcp.access"}, "none")(t)
+			}},
+		{name: "zcode", target: "zcode", section: "mcp", row: "zcode", key: "features.mcp",
+			off: func(t *testing.T) { setJSON(zcodeConfigPath(), []string{"features", "mcp"}, false)(t) }},
+		{name: "openclaw", target: "openclaw", section: "mcp", row: "openclaw", key: "tools.deny",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.OpenClawStateDir(), "openclaw.json"), []string{"tools", "deny"}, []any{"bundle-mcp"})(t)
+			}},
+		{name: "opencode", target: "opencode", section: "mcp", row: "opencode", key: "tools",
+			off: func(t *testing.T) {
+				setJSON(doctorOpencodeConfigPath(), []string{"tools", "deja*"}, false)(t)
+			}},
+		{name: "amp", target: "amp", section: "mcp", row: "amp", key: "amp.tools.disable",
+			off: func(t *testing.T) {
+				setJSON(sources.AmpSettingsFile(), []string{"amp.tools.disable"}, []any{"mcp__deja__*"})(t)
+			}},
+		{name: "claude project", target: "claude-code", section: "mcp", row: "claude-code", key: "disabledMcpServers",
+			off: func(t *testing.T) {
+				setJSON(sources.ClaudeJSONPath(), []string{"projects", cwd, "disabledMcpServers"}, []any{"deja"})(t)
+			}},
+		{name: "cursor project", target: "cursor", section: "mcp", row: "cursor", key: "mcp-disabled.json",
+			off: func(t *testing.T) {
+				root := gitRootOf(filepath.Join(cwd, "x"))
+				if root == "" {
+					root = cwd
+				}
+				// cursor-agent's slug: every run of non-alphanumerics one dash.
+				slug := strings.Trim(regexp.MustCompile(`[^A-Za-z0-9]+`).ReplaceAllString(root, "-"), "-")
+				path := filepath.Join(os.Getenv("HOME"), ".cursor", "projects", slug, "mcp-disabled.json")
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(`["deja"]`), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}},
+		// #4469: the client's switch for every hook.
+		{name: "claude hooks", target: "claude-auto", section: "auto_recall", row: "claude-code", key: "disableAllHooks",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.ClaudeConfigDir(), "settings.json"), []string{"disableAllHooks"}, true)(t)
+			}},
+		{name: "qwen hooks", target: "qwen-auto", section: "auto_recall", row: "qwen", key: "disableAllHooks",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.QwenConfigDir(), "settings.json"), []string{"disableAllHooks"}, true)(t)
+			}},
+		{name: "gemini hooks", target: "gemini-auto", section: "auto_recall", row: "gemini", key: "hooksConfig.enabled",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.GeminiHome(), "settings.json"), []string{"hooksConfig", "enabled"}, false)(t)
+			}},
+		{name: "codex hooks", target: "codex-auto", section: "auto_recall", row: "codex-hook", key: "[features] hooks",
+			before: trustCodex, off: appendTo(codexToml, "\n[features]\nhooks = false\n")},
+		{name: "openclaw internal hooks", target: "openclaw-auto", section: "auto_recall", row: "openclaw", key: "hooks.internal.enabled",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.OpenClawStateDir(), "openclaw.json"), []string{"hooks", "internal", "enabled"}, false)(t)
+			}},
+		// #4470: deja's own extension or plugin, disabled through the client.
+		{name: "gemini extension", target: "gemini-auto", section: "auto_recall", row: "gemini", key: "extension-enablement.json",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.GeminiHome(), "extensions", "extension-enablement.json"),
+					[]string{"deja", "overrides"}, []any{"!" + filepath.ToSlash(cwd) + "/*"})(t)
+			}},
+		{name: "openclaw hook entry", target: "openclaw-auto", section: "auto_recall", row: "openclaw", key: "hooks.internal.entries.deja-recall.enabled",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.OpenClawStateDir(), "openclaw.json"), []string{"hooks", "internal", "entries", "deja-recall", "enabled"}, false)(t)
+			}},
+		{name: "openclaw plugin", target: "openclaw-auto", section: "auto_recall", row: "openclaw", key: "plugins.entries",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.OpenClawStateDir(), "openclaw.json"), []string{"plugins", "entries", "deja", "enabled"}, false)(t)
+			}},
+		{name: "goose plugin", target: "goose-auto", section: "auto_recall", row: "goose", key: "disabledPlugins",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(gooseConfigDir(), "settings.json"), []string{"disabledPlugins"}, []any{"deja"})(t)
+			}},
+		{name: "pi extension", target: "pi-auto", section: "auto_recall", row: "pi", key: "-extensions/deja.ts",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.PiConfigDir(), "settings.json"), []string{"extensions"}, []any{"-extensions/deja.ts"})(t)
+			}},
+		{name: "senpi extension", target: "senpi-auto", section: "auto_recall", row: "senpi", key: "-extensions/deja.ts",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.SenpiConfigDir(), "settings.json"), []string{"extensions"}, []any{"-extensions/deja.ts"})(t)
+			}},
+		{name: "omp extension", target: "omp-auto", section: "auto_recall", row: "omp", key: "disabledExtensions",
+			off: appendTo(func() string { return filepath.Join(sources.OmpConfigDir(), "config.yml") },
+				"disabledExtensions:\n  - extension-module:deja\n")},
+		{name: "gjc extension", target: "gjc-auto", section: "auto_recall", row: "gjc", key: "disabledExtensions",
+			off: appendTo(func() string { return filepath.Join(sources.GjcConfigDir(), "config.yml") },
+				"disabledExtensions: [extension-module:deja]\n")},
+		{name: "cline plugin", target: "cline-auto", section: "auto_recall", row: "cline", key: "disabledPlugins",
+			off: func(t *testing.T) {
+				setJSON(filepath.Join(sources.ClineConfigDir(), "settings", "global-settings.json"), []string{"disabledPlugins"}, []any{"deja"})(t)
+			}},
+		{name: "hermes plugin", target: "hermes-auto", section: "auto_recall", row: "hermes", key: "plugins.enabled",
+			off: replace(func() string { return filepath.Join(sources.HermesHome(), "config.yaml") },
+				"  enabled:\n    - deja\n", "  enabled: []\n  disabled:\n    - deja\n")},
+		{name: "dsh auto row", target: "deepseek-auto", section: "auto_recall", row: "deepseek", key: "deja-auto",
+			off: replace(dshPatchPath, "- id: deja-auto\n", "- id: deja-auto\n      disabled: true\n")},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hermeticEnv(t)
+			bin := filepath.Join(os.Getenv("HOME"), "bin", "deja")
+			if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := installTarget(c.target, bin, false); err != nil {
+				t.Fatal(err)
+			}
+			if c.before != nil {
+				c.before(t)
+			}
+			row := func() (state string, off bool) {
+				t.Helper()
+				out, err := captureRun(t, "doctor", "--json")
+				if err != nil {
+					t.Fatal(err)
+				}
+				var report map[string]json.RawMessage
+				var rows []struct {
+					Name        string `json:"name"`
+					State       string `json:"state"`
+					SwitchedOff bool   `json:"switched_off"`
+				}
+				if err := json.Unmarshal([]byte(out), &report); err != nil {
+					t.Fatalf("doctor --json: %v", err)
+				}
+				if err := json.Unmarshal(report[c.section], &rows); err != nil {
+					t.Fatalf("doctor --json %s: %v", c.section, err)
+				}
+				for _, r := range rows {
+					if r.Name == c.row {
+						return r.State, r.SwitchedOff
+					}
+				}
+				t.Fatalf("no %s row in %s:\n%s", c.row, c.section, out)
+				return "", false
+			}
+			if state, off := row(); state != "wired" || off {
+				t.Fatalf("installed: %s switched_off=%v, want wired and on", state, off)
+			}
+			c.off(t)
+			if state, off := row(); state != "wired" || !off {
+				t.Errorf("after the client's switch: %s switched_off=%v, want wired and switched_off", state, off)
+			}
+			text, err := captureRun(t, "doctor")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(text, c.key) {
+				t.Errorf("the text report does not name %s:\n%s", c.key, text)
+			}
+		})
+	}
+}
+
+// The readers answer "off" only for what the client would read as off.
+func TestClientOffReadersStayOnWhenUnsure(t *testing.T) {
+	if _, _, found := yamlLookup("plugins:\n  enabled: [\n    deja ]\n", "plugins", "enabled"); found {
+		t.Error("a flow list over several lines read as an empty one")
+	}
+	if _, items, _ := yamlLookup("plugins:\n  enabled:\n  - spotify\n  - deja\n", "plugins", "enabled"); !anyDeja(items) {
+		t.Errorf("items at the key's own indent: %q", items)
+	}
+	if !geminiExtensionEnabled([]string{"!/elsewhere/*"}, "/work/app") {
+		t.Error("a rule for another directory turned the extension off")
+	}
+	if geminiExtensionEnabled([]string{"!/work/*"}, "/work/app") {
+		t.Error("a subdirectory rule did not reach /work/app")
+	}
+	if !geminiExtensionEnabled([]string{"!/work/*", "/work/app/"}, "/work/app") {
+		t.Error("the later rule did not win")
+	}
+	if got := piExtensionExcluded([]string{"!*", "+extensions/deja.ts"}, "/home/x/.pi/agent"); got != "" {
+		t.Errorf("a force-include lost to a glob exclude: %q", got)
+	}
+	if !dshRowDisabled("- insert:\n    - id: mcp-deja\n      disabled: true\n    - id: deja-auto\n", "mcp-deja") ||
+		dshRowDisabled("- insert:\n    - id: mcp-deja\n      disabled: true\n    - id: deja-auto\n", "deja-auto") {
+		t.Error("a row's switch read for the wrong row")
+	}
+	if tomlDejaEntriesOff("[mcp_servers.deja]\ncommand = \"deja\"\n\n[other]\nenabled = false\n") {
+		t.Error("another table's enabled read as deja's")
+	}
+}
