@@ -74,3 +74,24 @@ insert into part values ('p1', 'm1', '{"type":"text","text":"fix the retry loop,
 		t.Errorf("acp-9 read %d times once restored, want once", n)
 	}
 }
+
+// The fingerprint asks every snapshot for its id on every pass once the CLI
+// database exists, so the id comes off the meta at the head of the file, not
+// from decoding a conversation that can run to megabytes (#4448).
+func TestZCodeSnapshotIDIsReadOffTheMeta(t *testing.T) {
+	dir := t.TempDir()
+	head := filepath.Join(dir, "task-1.json")
+	if err := os.WriteFile(head, []byte(`{"meta":{"taskId":"task-1","acpSessionId":"acp-1"},"messages":[{"role":"user","content":"fix the re`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := zcodeLegacyID(head); got != "acp-1" {
+		t.Errorf("meta first: id %q, want acp-1", got)
+	}
+	tail := filepath.Join(dir, "task-2.json")
+	if err := os.WriteFile(tail, []byte(`{"messages":[{"role":"user","content":"fix it"}],"Meta":{"taskId":"task-2"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := zcodeLegacyID(tail); got != "task-2" {
+		t.Errorf("meta last: id %q, want task-2", got)
+	}
+}

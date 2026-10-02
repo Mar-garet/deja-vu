@@ -1,8 +1,10 @@
 package sources
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,16 +136,11 @@ func zcodeLegacyID(p string) string {
 		return c[1]
 	}
 	id := ""
-	if b, err := os.ReadFile(p); err == nil {
-		var snap struct {
-			Meta struct {
-				TaskID       string `json:"taskId"`
-				ACPSessionID string `json:"acpSessionId"`
-			} `json:"meta"`
+	if f, err := os.Open(p); err == nil {
+		if meta, ok := zcodeSnapshotMeta(f); ok {
+			id = firstNonEmpty(meta.ACPSessionID, firstNonEmpty(meta.TaskID, strings.TrimSuffix(filepath.Base(p), ".json")))
 		}
-		if json.Unmarshal(b, &snap) == nil {
-			id = firstNonEmpty(snap.Meta.ACPSessionID, firstNonEmpty(snap.Meta.TaskID, strings.TrimSuffix(filepath.Base(p), ".json")))
-		}
+		_ = f.Close()
 	}
 	zcodeIDsMu.Lock()
 	zcodeLegacyIDs[p] = [2]string{stamp, id}
@@ -152,6 +149,37 @@ func zcodeLegacyID(p string) string {
 }
 
 var zcodeLegacyIDs = map[string][2]string{}
+
+type zcodeSnapshotIDs struct {
+	TaskID       string `json:"taskId"`
+	ACPSessionID string `json:"acpSessionId"`
+}
+
+// zcodeSnapshotMeta decodes a snapshot's meta and stops there. The cache above
+// lives as long as the process, and each pass is a process, so this runs for
+// every snapshot on every pass: decoding the messages too cost ~120 ms a pass
+// on 100 MB of them.
+func zcodeSnapshotMeta(r io.Reader) (zcodeSnapshotIDs, bool) {
+	var meta zcodeSnapshotIDs
+	d := json.NewDecoder(bufio.NewReader(r))
+	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
+		return meta, false
+	}
+	for d.More() {
+		tok, err := d.Token()
+		if err != nil {
+			return meta, false
+		}
+		if key, _ := tok.(string); strings.EqualFold(key, "meta") {
+			return meta, d.Decode(&meta) == nil
+		}
+		var skip json.RawMessage
+		if d.Decode(&skip) != nil {
+			return meta, false
+		}
+	}
+	return meta, true
+}
 
 // zcodeRestoredIDs is the session ids in the CLI database, read once for each
 // state of the file and its WAL rather than once for each snapshot.
