@@ -252,3 +252,68 @@ func TestUninstallZCodePutsTheHooksSwitchBack(t *testing.T) {
 		t.Errorf("uninstall changed a file whose switch was already on:\n%s", got)
 	}
 }
+
+// Before ZCode's first launch, setting.json is not there and the runtime will
+// build it from config.json, minus the provider fields, but only while
+// setting.json is missing. An install that created setting.json first took
+// that migration away: the reader's servers, permissions and hooks in
+// config.json never reached the runtime. Install starts the file the way the
+// runtime would, and only when the runtime has not already done so (#4429).
+func TestInstallZCodeBeforeFirstLaunchKeepsTheMigration(t *testing.T) {
+	hermeticEnv(t)
+	home := os.Getenv("HOME")
+	dir := filepath.Join(home, ".zcode", "cli")
+	setting := filepath.Join(dir, "setting.json")
+	legacy := filepath.Join(dir, "config.json")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := `{
+    "provider": {"glm": {"apiKey": "sk-test"}},
+    "model": "glm/glm-5",
+    "permission": {"mode": "plan"},
+    "mcp": {"servers": {"docs": {"type": "stdio", "command": "docs-server"}}}
+}
+`
+	if err := os.WriteFile(legacy, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureRun(t, "install", "zcode-auto", "--no-index"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	b, err := os.ReadFile(setting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"docs"`, `"plan"`, `"deja"`, "hook-context"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("setting.json lacks %s, which the first-launch migration would have carried:\n%s", want, b)
+		}
+	}
+	for _, not := range []string{"sk-test", "glm-5"} {
+		if strings.Contains(string(b), not) {
+			t.Errorf("setting.json carries %s, a provider field the runtime leaves in config.json:\n%s", not, b)
+		}
+	}
+	if got, _ := os.ReadFile(legacy); string(got) != old {
+		t.Errorf("install changed config.json:\n%s", got)
+	}
+
+	// Once the runtime has migrated, its marker says so, and config.json is
+	// never read again: a setting.json made then starts empty.
+	if err := os.Remove(setting); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "migrations"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "migrations", "settings-v1.json"), []byte(`{"schemaVersion":1}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureRun(t, "install", "zcode-auto", "--no-index"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if b, _ := os.ReadFile(setting); strings.Contains(string(b), "docs-server") {
+		t.Errorf("setting.json took config.json after the runtime's own migration had run:\n%s", b)
+	}
+}

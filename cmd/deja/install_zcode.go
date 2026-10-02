@@ -37,6 +37,45 @@ func zcodeLegacyConfigPath() string {
 	return filepath.Join(sources.ZCodeConfigDir(), "cli", "config.json")
 }
 
+// readZCodeSetting reads the file an install edits. Before ZCode's first
+// launch setting.json is missing, and the runtime builds it from config.json,
+// minus the provider fields, only while it is: a file deja created first took
+// that migration away, and the reader's servers, permissions and hooks never
+// reached the runtime. So an install starts it the way the runtime would,
+// unless the runtime's marker says it has already migrated (#4429).
+func readZCodeSetting(path string, uninstall bool) ([]byte, map[string]any, error) {
+	old, err := readConfig(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	seeded := false
+	if len(old) == 0 && !uninstall && path == zcodeConfigPath() && !fileExists(path) &&
+		!fileExists(filepath.Join(filepath.Dir(path), "migrations", "settings-v1.json")) {
+		if b, err := readConfig(zcodeLegacyConfigPath()); err == nil && len(b) > 0 {
+			old, seeded = b, true
+		}
+	}
+	root := map[string]any{}
+	if len(old) > 0 {
+		if err := json.Unmarshal(old, &root); err != nil {
+			if seeded {
+				// The runtime refuses it too; there is nothing to carry over.
+				return nil, map[string]any{}, nil
+			}
+			return nil, nil, configParseError(path, err)
+		}
+	}
+	if seeded {
+		if root == nil {
+			root = map[string]any{}
+		}
+		delete(root, "provider")
+		delete(root, "model")
+		delete(root, "modelCatalog")
+	}
+	return old, root, nil
+}
+
 // zcodeAlsoLegacy runs an uninstall on the old file beside the one on the
 // current file, and reports the old one only when it changed.
 func zcodeAlsoLegacy(res installResult, uninstall bool, edit func(string, bool) (installResult, error)) (installResult, error) {
@@ -66,15 +105,9 @@ func installZCode(exe string, uninstall bool) (installResult, error) {
 }
 
 func zcodeServerAt(path, exe string, uninstall bool) (installResult, error) {
-	old, err := readConfig(path)
+	old, root, err := readZCodeSetting(path, uninstall)
 	if err != nil {
 		return installResult{}, err
-	}
-	root := map[string]any{}
-	if len(old) > 0 {
-		if err := json.Unmarshal(old, &root); err != nil {
-			return installResult{}, configParseError(path, err)
-		}
 	}
 	mcp, _ := root["mcp"].(map[string]any)
 	if mcp == nil {
@@ -184,15 +217,9 @@ func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
 }
 
 func zcodeHooksAt(path, exe string, uninstall bool) (installResult, error) {
-	old, err := readConfig(path)
+	old, root, err := readZCodeSetting(path, uninstall)
 	if err != nil {
 		return installResult{}, err
-	}
-	root := map[string]any{}
-	if len(old) > 0 {
-		if err := json.Unmarshal(old, &root); err != nil {
-			return installResult{}, configParseError(path, err)
-		}
 	}
 	hooks, _ := root["hooks"].(map[string]any)
 	if hooks == nil {
