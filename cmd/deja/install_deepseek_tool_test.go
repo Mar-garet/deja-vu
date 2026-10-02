@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -103,5 +104,55 @@ show(await post({ name: "bash", arguments: { command: "make serve" }, agent }, t
 	}
 	if strings.Count(got, "hook-tool") != 3 {
 		t.Errorf("deja was asked for a call that needs nothing:\n%s", got)
+	}
+}
+
+// The note is asked for while dsh goes on: a synchronous spawn held the whole
+// event loop, the web profile's other sessions included, for as long as deja
+// took, up to its ten-second timeout.
+func TestDeepSeekAutoToolNoteDoesNotBlockTheHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stub deja is a shell script")
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is needed to run the plugin dsh would run")
+	}
+	home := t.TempDir()
+	stub := filepath.Join(home, "deja")
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\ncat >/dev/null\nsleep 0.5\nprintf 'NOTE'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plugin := filepath.Join(home, "auto.js")
+	if err := os.WriteFile(plugin, []byte(dshAutoJS(stub)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	driver := `
+import plugin from "` + plugin + `";
+const listeners = {};
+plugin({ systemPrompt: { context: () => {} }, on: (name, fn) => { listeners[name] = fn } });
+let ticks = 0;
+const timer = setInterval(() => ticks++, 10);
+const d = await listeners["tools/post-execute"]({ name: "read", arguments: { file_path: "/w/a.go" }, agent: {} }, { content: [] }, async () => ({ kind: "accept" }));
+clearInterval(timer);
+console.log(ticks + " " + (d.additionalContexts || []).length);
+`
+	run := filepath.Join(home, "drive.mjs")
+	if err := os.WriteFile(run, []byte(driver), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, run).CombinedOutput()
+	if err != nil {
+		t.Fatalf("driving the plugin: %v\n%s", err, out)
+	}
+	var ticks, notes int
+	if _, err := fmt.Sscan(string(out), &ticks, &notes); err != nil {
+		t.Fatalf("driver said %q", out)
+	}
+	if notes != 1 {
+		t.Errorf("the note did not arrive: %q", out)
+	}
+	if ticks < 10 {
+		t.Errorf("the host's timers ran %d times in half a second: the call blocks the event loop", ticks)
 	}
 }
