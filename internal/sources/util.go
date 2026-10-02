@@ -744,7 +744,9 @@ func toolPathStrings(in map[string]any, d toolDialect) []string {
 	for _, it := range items {
 		switch e := it.(type) {
 		case string:
-			if e != "" {
+			// A glob names no file the session touched; gemini's
+			// read_many_files takes both in one list (#4494).
+			if e != "" && !strings.ContainsAny(e, "*?[{") {
 				out = append(out, e)
 			}
 		case map[string]any:

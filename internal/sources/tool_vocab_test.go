@@ -61,6 +61,9 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 		{"copilot-chat readFile", vocabCopilotChat, []string{
 			vocabFiles("/tmp/proj/retry.go"),
 		}},
+		{"gemini read_many_files", vocabGemini, []string{
+			vocabFiles("/tmp/proj/many_a.go\n/tmp/proj/many_b.go"),
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

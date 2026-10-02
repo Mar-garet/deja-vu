@@ -209,6 +209,9 @@ var qwenDialect = toolDialect{
 	shellTool: "run_shell_command",
 	editTools: map[string]bool{"replace": true, "edit": true, "write_file": true},
 	oldKey:    "old_string",
+	// read_many_files names no file under file_path: Gemini CLI 0.60 takes
+	// its paths and globs as a list under `include` (#4494).
+	pathListKey: "include",
 }
 
 // qwenNoteShellCalls maps the id of each shell call among parts to the
