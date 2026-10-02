@@ -70,7 +70,8 @@ type doctorComponent struct {
 
 // doctorAutoStatus is one auto-recall wiring, in the same four states the text
 // report prints: wired, stale (the file is there and nothing in it calls deja),
-// missing, and plugin (the harness carries its own). BinaryMissing is the state
+// missing, and plugin (the harness carries its own); aider adds broken, a
+// read: entry naming a context file that is gone (#4327). BinaryMissing is the state
 // an upgrade leaves — the entry is there, wired, and names a path that no
 // longer exists, so every hook exits 127 and nothing else says so.
 type doctorAutoStatus struct {
@@ -341,6 +342,9 @@ type doctorMCPStatus struct {
 	// PluginMissing marks a dsh layer that names a deja plugin file that is
 	// gone, which keeps dsh from starting at all (#4292).
 	PluginMissing bool `json:"plugin_missing,omitempty"`
+	// Note is the caveat the text row prints under a "wired" it cannot fully
+	// vouch for: Cherry Studio's, when only the import file could be read (#4344).
+	Note string `json:"note,omitempty"`
 }
 
 type doctorCommandStatus struct {
@@ -464,7 +468,7 @@ func doctorSQLite3() doctorComponent {
 // storeNeedsSQLite3 names the harnesses deja reads through the sqlite3 CLI.
 func storeNeedsSQLite3(name string) bool {
 	switch name {
-	case "opencode", "cursor", "grok", "hermes", "goose", "zed":
+	case "opencode", "cursor", "grok", "hermes", "goose", "zed", "kilocode", "zcode":
 		return true
 	}
 	return false
@@ -531,7 +535,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 		{"crush", []string{sources.CrushDataHome()}, sources.CrushDBs(), sources.ParseCrushDB},
 		{"pi", []string{sources.PiRoot()}, sources.PiSessionFiles(), sources.ParsePiFile},
 		{"omp", []string{sources.OmpRoot()}, sources.OmpSessionFiles(), sources.ParseOmpFile},
-		{"prime", []string{sources.PrimeRoot()}, sources.PrimeSessionFiles(), sources.ParsePrimeFile},
+		{"prime", sources.PrimeRoots(), sources.PrimeSessionFiles(), sources.ParsePrimeFile},
 		{"amp", []string{sources.AmpRoot()}, sources.AmpThreadFiles(), sources.ParseAmpFile},
 		{"openclaw", []string{sources.OpenClawRoot()}, sources.OpenClawStoreFiles(), parseDoctorOpenClaw},
 		{"copilot", []string{sources.CopilotRoot()}, sources.CopilotSessionFiles(), sources.ParseCopilotFile},
@@ -542,19 +546,22 @@ func doctorStoreChecks() []doctorStoreCheck {
 		// (#999).
 		{"cline", sources.ClineStoreRoots(), sources.ClineSessionFiles(), sources.ParseClineFile},
 		{"roo", sources.RooRoots(), sources.RooTaskFiles(), sources.ParseRooTask},
-		{"kilocode", sources.KiloRoots(), sources.KiloTaskFiles(), sources.ParseKiloTask},
-		{"cherrystudio", sources.CherryStudioRoots(), sources.CherryStudioSessionFiles(), sources.ParseCherryStudioFile},
+		// The extension's tasks and the CLI's database, both: built from the
+		// tasks alone, the row said "missing" with no paths on a machine whose
+		// every Kilo session is in the database (#4397).
+		{"kilocode", append(sources.KiloRoots(), sources.KiloDB()), sources.KiloSessionFiles(), doctorProbeKilo},
+		{"cherrystudio", sources.CherryStudioAllRoots(), sources.CherryStudioSessionFiles(), sources.ParseCherryStudioFile},
 		// One row for both Kiro clients: the probe picks the reader from the
 		// path, the way the ingest does.
 		{"kiro", []string{sources.KiroRoot()}, sources.KiroSessionFiles(), doctorProbeKiro},
 		{"senpi", []string{sources.SenpiRoot()}, sources.SenpiSessionFiles(), sources.ParseSenpiFile},
 		{"kimchi", []string{sources.KimchiRoot()}, sources.KimchiSessionFiles(), sources.ParseKimchiFile},
 		{"commandcode", []string{sources.CommandCodeRoot()}, sources.CommandCodeSessionFiles(), sources.ParseCommandCodeFile},
-		// The transcripts, not the file list: that list now carries the CLI
-		// database too, and the transcript reader answers zero for it — which
-		// made the row read `parsed-zero` about a store whose every session
-		// deja had just indexed (#3675). Kilo's row draws the same line.
-		{"zcode", []string{sources.ZCodeRoot()}, sources.ZCodeTranscriptFiles(), sources.ParseZCodeFile},
+		// The transcripts and the database, each probed with its own reader:
+		// the transcript reader answers zero for the database, which made the
+		// row read `parsed-zero` (#3675), and leaving the database out made it
+		// read `missing` for a CLI-only store (#4397).
+		{"zcode", []string{sources.ZCodeRoot(), sources.ZCodeDB(), sources.ZCodeLegacyRoot()}, sources.ZCodeSessionFiles(), doctorProbeZCode},
 		{"gjc", []string{sources.GjcRoot()}, sources.GjcSessionFiles(), sources.ParseGjcFile},
 		{"codewhale", sources.CodeWhaleRoots(), sources.CodeWhaleSessionFiles(), sources.ParseCodeWhaleFile},
 		{"reasonix", sources.ReasonixRoots(), sources.ReasonixSessionFiles(), sources.ParseReasonixFile},
@@ -588,6 +595,26 @@ func doctorProbeKiro(path string) ([]model.Session, error) {
 		return sources.ParseKiroIDEFile(path)
 	}
 	return sources.ParseKiroCLIFile(path)
+}
+
+// doctorProbeKilo and doctorProbeZCode read the newest file with the reader
+// its path belongs to: the CLI database through OpenCode's schema, anything
+// else as the extension task or transcript it is.
+func doctorProbeKilo(path string) ([]model.Session, error) {
+	if path == sources.KiloDB() {
+		return sources.ParseKiloDB(path)
+	}
+	return sources.ParseKiloTask(path)
+}
+
+func doctorProbeZCode(path string) ([]model.Session, error) {
+	if path == sources.ZCodeDB() {
+		return sources.ParseZCodeDB(path)
+	}
+	if sources.ZCodeLegacyUnderRoot(path) {
+		return sources.ParseZCodeLegacyFile(path)
+	}
+	return sources.ParseZCodeFile(path)
 }
 
 // doctorProbeZed reads the thread store the way the indexer does, so the row
@@ -960,11 +987,29 @@ func collectDoctorMCP() []doctorMCPStatus {
 		if state == "wired" && dejaCommandMissing(config.path) != "" {
 			row.BinaryMissing = true
 		}
-		if state == "wired" && dejaEntrySwitchedOff(config.path) {
+		if state == "wired" && (dejaEntrySwitchedOff(config.path) || doctorMCPSwitchedOff(config.name) != "") {
 			row.SwitchedOff = true
 		}
 		if state == "wired" && config.name == "deepseek" && len(dshPluginsMissing(config.path)) > 0 {
 			row.PluginMissing = true
+		}
+		// The app's own table, when it can be read, rather than the file it
+		// imports from (#4344).
+		if config.name == "cherrystudio" {
+			if known, wired, off, db, missing := cherryStudioAppWiring(); known {
+				// The import file's own flags say nothing about the app's copy.
+				row.BinaryMissing, row.SwitchedOff = false, false
+				switch {
+				case off:
+					row.State, row.Path = "disabled", db
+				case wired:
+					row.State, row.Path, row.BinaryMissing = "wired", db, missing != ""
+				case state != "config-missing":
+					row.State = "not-imported"
+				}
+			} else if state == "wired" {
+				row.Note = doctorWiringNote(config.name)
+			}
 		}
 		out = append(out, row)
 	}

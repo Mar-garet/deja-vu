@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
@@ -1325,6 +1326,51 @@ func mcpBlock(root map[string]any, key, path string) (map[string]any, bool, erro
 	return m, true, nil
 }
 
+// snapshotIfSameJSON gives back the snapshot's bytes when the file deja is
+// about to write holds the same JSON. Marshalling cannot know how the reader
+// laid out what deja did not touch: Roo's default settings have an empty
+// mcpServers object over three lines, and an uninstall wrote it back as `{}`
+// though the .bak beside it had the original (#4423). Anything that decodes
+// differently — a server added since, a file that is not JSON — keeps next.
+// So does a file deja took nothing out of: its layout now is the reader's, not
+// the snapshot's. Numbers are compared as written, not as float64s.
+func snapshotIfSameJSON(path string, old, next []byte) []byte {
+	if bytes.Equal(old, next) {
+		return next
+	}
+	want, ok := decodeJSONExact(next)
+	if !ok {
+		return next
+	}
+	if before, ok := decodeJSONExact(old); ok && reflect.DeepEqual(before, want) {
+		return next
+	}
+	bak := path + ".bak"
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		bak = resolved + ".bak"
+	}
+	b, err := os.ReadFile(bak)
+	if err != nil {
+		return next
+	}
+	b = bytes.TrimPrefix(b, utf8BOM)
+	if have, ok := decodeJSONExact(b); !ok || !reflect.DeepEqual(want, have) {
+		return next
+	}
+	return b
+}
+
+// decodeJSONExact decodes one JSON document with its numbers kept as text.
+func decodeJSONExact(b []byte) (any, bool) {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil || dec.More() {
+		return nil, false
+	}
+	return v, true
+}
+
 // dropOwnBackup removes the snapshot beside path when the snapshot is deja's
 // own wiring and nothing else. A snapshot of the reader's config stays even
 // when the live file has come back to exactly it: that copy is theirs, and
@@ -1557,6 +1603,9 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	// this is the one place that knows the file had one (#3696). The
 	// comparison is of the text, and the mark goes back on what is written.
 	bom := fileStartsWithBOM(path)
+	if removingWiring {
+		next = snapshotIfSameJSON(path, old, next)
+	}
 	if bytes.Equal(old, next) {
 		return "unchanged", nil
 	}
@@ -3845,7 +3894,9 @@ func jsoncCodeOf(line string, inBlock bool) (code string, stillInBlock bool, end
 			continue
 		}
 		b.WriteByte(c)
-		if c != ' ' && c != '\t' {
+		// A CR is the end of a CRLF line, not code: a comma after it sat
+		// alone at the start of the next line in an editor.
+		if c != ' ' && c != '\t' && c != '\r' {
 			end = i + 1
 		}
 	}
@@ -4240,15 +4291,17 @@ func updateOpencodeJSONC(old []byte, exe string, uninstall bool) ([]byte, string
 	if insert < 1 || strings.TrimSpace(stripJSONComments(lines[insert])) != "}" {
 		return nil, "", fmt.Errorf("opencode config is not laid out in a way deja can add to — add the deja server by hand")
 	}
-	comma := ""
-	for i := insert - 1; i >= 0; i-- {
-		trim := strings.TrimSpace(lines[i])
-		if trim != "" && !strings.HasPrefix(trim, "//") && !strings.HasSuffix(trim, ",") && trim != "{" {
-			lines[i] += ","
-			break
-		}
+	// The comma goes on the last line of code above the brace, and only when
+	// that code has none yet. Walking up past every line that already ended
+	// in one ran past a trailing comma on the last key and put a second comma
+	// on the line above it — in a nested config an opening brace, `"shim": {,`,
+	// which Kilo and opencode refuse to start with (#4399). At the end of the
+	// code rather than the line: after a // comment it is not a comma (#1695).
+	if i, end, code := jsoncLastCodeLine(lines[:insert]); i >= 0 &&
+		!strings.HasSuffix(code, ",") && !strings.HasSuffix(code, "{") {
+		lines[i] = lines[i][:end] + "," + lines[i][end:]
 	}
-	mcp := []string{comma + `  "mcp": {`, line, "  }"}
+	mcp := []string{`  "mcp": {`, line, "  }"}
 	out := append([]string{}, lines[:insert]...)
 	out = append(out, mcp...)
 	out = append(out, lines[insert:]...)

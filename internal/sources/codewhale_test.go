@@ -1,9 +1,11 @@
 package sources
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // The saved session is one JSON file: metadata plus messages whose content is
@@ -309,5 +311,28 @@ func TestCodeWhaleReadsAnEditInEveryShapeItRuns(t *testing.T) {
 	}
 	if len(wrote) != 3 {
 		t.Errorf("wrote = %q, want one per edit", wrote)
+	}
+}
+
+// CodeWhale's edit_file takes search/replace as its own names and folds the
+// other harnesses' spellings onto them (tools/file.rs EDIT_ALIASES). Reading
+// old_string alone left a search/replace call with a files record and no edit
+// or wrote record (#4404).
+func TestCodeWhaleReadsAnEditWrittenWithSearchAndReplace(t *testing.T) {
+	for _, keys := range [][2]string{{"search", "replace"}, {"old_string", "new_string"}, {"old_str", "new_str"}, {"oldText", "newText"}, {"old_text", "replacement"}} {
+		raw := `[{"type":"tool_use","id":"t1","name":"edit_file","input":{"path":"/tmp/proj/client.go","` +
+			keys[0] + `":"for i := 0; i <= max; i++","` + keys[1] + `":"for i := 0; i < max; i++"}}]`
+		var edit, wrote int
+		for _, m := range codeWhaleWorkRecords(json.RawMessage(raw), time.Time{}) {
+			switch m.Role {
+			case RoleEdit:
+				edit++
+			case RoleWrote:
+				wrote++
+			}
+		}
+		if edit != 1 || wrote != 1 {
+			t.Errorf("%s/%s: %d edit and %d wrote records, want one of each", keys[0], keys[1], edit, wrote)
+		}
 	}
 }

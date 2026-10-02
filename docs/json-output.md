@@ -529,6 +529,9 @@ without anyone asking, one row per harness deja can wire. `state` is `wired`,
 how a dead integration looks), `missing` (no file, or a client config such as
 Kimi's `config.toml` or Qwen's `settings.json` with no deja hook in it), or
 `plugin` (the harness carries its own).
+The `aider` row is `stale` when the context file is there and `~/.aider.conf.yml`
+has no `read:` entry for it, and `broken` when the entry is there and the file
+is not, which makes aider print an error on every start.
 `binary_missing` marks a row whose entries name a deja binary that is no longer
 there — what an upgrade leaves behind, with every hook exiting 127.
 `switched_off` marks a `wired` row the harness has turned off, so it will not
@@ -548,9 +551,18 @@ reads `missing`, since both files also carry the user's own hooks; for
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
 start the server, and `switched_off` when the entry is turned off
-(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not. The `deepseek` row carries `plugin_missing` when
+(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not. For Reasonix, `switched_off` means deja's plugin package has no enabled
+record in `plugin-packages.json`, which is what `reasonix plugin disable deja`
+leaves. The `deepseek` row carries `plugin_missing` when
 `cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh
 from starting at all.
+`cherrystudio` is read from the app's own database: `wired`
+with that database as `path` when one of its servers runs `deja mcp`, and
+`disabled` with the database as `path` when deja's server is there with its
+switch off, and `not-imported` with the import file as `path` when there is
+none. Where the database
+or sqlite3 is missing, the row falls back to the import file and carries the
+caveat in `note`.
 
 `commands` is the third thing an install writes: the `/deja` a user types, one
 row per harness. `state` is `written`, `missing`, `someone else's` for a file
@@ -580,7 +592,9 @@ every one of them.
 `ingest_files` is where those counts came from, keyed by file path: `malformed`
 lines, `clipped` messages, and `error` when nothing from that path is in the
 index at all — it would not open, or it is one document that would not parse,
-as a cline or roo task is. It
+as a cline or roo task is. Zed's `malformed` counts threads, not lines: every
+row of threads.db deja could not decode, and `reason` says why one of them was
+skipped (`thread <id>: zed: unknown data_type "brotli"`). It
 is sparse — a file with nothing to report is not in it — and absent when no file
 has anything to report. The per-harness numbers above are the sum of the files
 deja can attribute to a harness, so a path it cannot place is here and in no

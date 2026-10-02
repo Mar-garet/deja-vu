@@ -54,9 +54,11 @@ import (
 // answered, called a tool, and failed before answering.
 
 // DSHHome is the harness's own home directory, following its DSH_HOME variable.
+// dsh expands a leading ~ in it, so deja does too: taken literally,
+// DSH_HOME=~/.dsh-alt sent deja to ./~/.dsh-alt (#4390).
 func DSHHome() string {
 	if p := os.Getenv("DSH_HOME"); p != "" {
-		return p
+		return expandTilde(p)
 	}
 	return filepath.Join(Home(), ".dsh")
 }
@@ -84,8 +86,22 @@ func isDeepSeekLog(p string) bool {
 	return false
 }
 
+// DeepSeekSessionFiles leaves out Cherry Studio's dsh store. Cherry runs dsh
+// with DSH_HOME pointed into its own data dir, so a deja it starts inherits that
+// root and listed those logs under both harnesses (#4342).
 func DeepSeekSessionFiles() []string {
-	return walkFiles(DeepSeekRoot(), isDeepSeekLog)
+	files := walkFiles(DeepSeekRoot(), isDeepSeekLog)
+	cherry := cherryStudioDshRoots()
+	if len(cherry) == 0 {
+		return files
+	}
+	out := files[:0]
+	for _, p := range files {
+		if !underAnyRoot(p, cherry) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func LoadDeepSeek() []model.Session {

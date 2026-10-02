@@ -363,6 +363,7 @@ import (
 // that session's records, and only a re-read brings them back (#4213); an
 // opencode reply written during a pass is read only when its session is
 // touched again (#4207). Hermes compaction copies count once (#4296).
+//
 // 60 also: a Kiro CLI session keeps its tool calls and results, which were
 // dropped as not text (#4299).
 //
@@ -390,6 +391,61 @@ import (
 //
 // 60 also: a Crush edit, multiedit or write carries the replaced span and the
 // written lines (#4377).
+//
+// 60 also: an aider session carries the files aider added and edited and the
+// commands it ran, and an /ask question is kept once (#4324, #4325).
+//
+// 60 also: an aider session's id is its history path and start time rather
+// than its ordinal in the file, so a new history at the path of a deleted one
+// no longer takes the kept sessions' ids (#4332).
+//
+// 60 also: a Zed thread gains the files its agent created with write_file
+// (#4339).
+//
+// 60 also: a Cherry Studio reply indexed mid-stream is read whole once it
+// finishes (#4346).
+//
+// 60 also: an omp session indexed mid-way keeps its header id instead of
+// splitting off the appended turns under the file name (#4406).
+//
+// 60 also: a CodeWhale edit_file call written with search/replace, its own
+// argument names, leaves an edit and a wrote record (#4404).
+//
+// 60 also: a Kilo CLI or ZCode session doubled in the index on each pass after
+// a write to its database (#4396); the copies already held go only on a
+// rebuild.
+//
+// 60 also: a Kimchi sub-agent run is skipped rather than indexed as a session
+// of its own (#4401); runs already held go only on a rebuild.
+//
+// 60 also: pi, omp, OpenClaw, gjc, prime, senpi and Kimchi sessions carry
+// their tool calls as files, commands and edits (#4113); a finished
+// transcript is not re-read, so a rebuild.
+//
+// 60 also: a Senpi eval cell's commands, reads and edits are indexed, and its
+// result text is unwrapped (#4425).
+//
+// 60 also: a pi, Senpi, omp, OpenClaw, gjc, prime, Kimchi or Command Code session takes its
+// project from the header's cwd as it is, not decoded from the folder (#4427).
+//
+// 60 also: a ZCode CLI session keeps its Bash, Read, Edit and Write calls
+// (#4428).
+//
+// 60 also: ZCode's legacy snapshots under ~/.zcode/v2/sessions are read, and
+// one rewritten is held once (#4432).
+//
+// 60 also: Roo and Kilo extension tasks read apply_patch, search_replace,
+// edit_file and edit calls into files, edit and wrote records (#4419).
+//
+// 60 also: a Roo or Kilo extension turn is stamped at its own ts, not at the
+// task's last activity plus N seconds (#4420).
+//
+// 60 also: the Roo and Cline "You did not use a tool" retry prompt is not
+// indexed as a user turn (#4421).
+//
+// 60 also: Roo, Kilo and legacy Cline tasks from the XML tool era read their
+// calls into command, files and edit records and their results as tool
+// output (#4424).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
@@ -740,6 +796,17 @@ type FileIngest struct {
 	// the same reason as the other two: a pass that reads one transcript must
 	// not speak for what another one holds (#2022).
 	Clipped int `json:"clipped,omitempty"`
+	// ClippedSessions splits Clipped by session id. Zed keeps every thread in
+	// one threads.db, so the file's count alone put the note on every thread
+	// in it (#4340). Kept out of the JSON: the contract is the per-file count.
+	ClippedSessions map[string]int `json:"-"`
+	// Reason says why the last unusable record was skipped, for a store whose
+	// records are rows rather than lines a reader can go and look at (#4341).
+	Reason string `json:"reason,omitempty"`
+	// Unusable is those records by id. A store read from its watermark hands
+	// back only what changed, so a pass carries the rows it did not re-read
+	// instead of reporting them gone. Out of the JSON: the count is the contract.
+	Unusable map[string]string `json:"-"`
 }
 
 type manifestCore struct {

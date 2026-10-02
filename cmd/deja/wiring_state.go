@@ -639,7 +639,10 @@ func blockKey(path, name string) string { return path + "#" + name }
 
 // noteBlockAdded records that deja, not the reader, put this container there.
 func noteBlockAdded(path, name string) {
-	blocksAddedThisRun = append(blocksAddedThisRun, blockKey(path, name))
+	key := blockKey(path, name)
+	// The later of a take-back and an add in one process is the one that holds.
+	delete(blocksForgottenThisRun, key)
+	blocksAddedThisRun = append(blocksAddedThisRun, key)
 }
 
 // blockWasAdded reports whether deja added it, in this run or an earlier one.

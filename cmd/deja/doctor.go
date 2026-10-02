@@ -52,7 +52,7 @@ func defaultDoctorVersionLookup() doctorVersionLookup {
 func countSubagentFiles(seen []string) int {
 	n := 0
 	for _, p := range seen {
-		if sources.IsSubagentPath(p) {
+		if sources.IsSubagentPath(p) || sources.IsPrimeChildPath(p) {
 			n++
 		}
 	}
@@ -792,12 +792,15 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// — the one thing `doctor` exists to rule out (#701).
 	// printFilesSkippingIn is printFiles for a harness that has more than one
 	// transcript root and declines some of its own files by a rule.
-	printFilesSkippingIn := func(name, loc string, roots []string, present bool, seen []string, skipped func(string) bool) {
+	// Files named in beside are the store's own bookkeeping, as for
+	// printFilesBeside below.
+	printFilesSkippingIn := func(name, loc string, roots []string, present bool, seen []string, skipped func(string) bool, beside ...string) {
 		detail := doctorCount(len(seen), "file")
+		placed := append(append([]string{}, seen...), beside...)
 		unread := 0
 		byRule := 0
 		for _, root := range roots {
-			u, b := unplacedFiles(root, seen, skipped)
+			u, b := unplacedFiles(root, placed, skipped)
 			unread += u
 			byRule += b
 		}
@@ -818,8 +821,8 @@ func doctorHarnesses(w io.Writer, dir string) {
 		printRow(name, loc, present, detail)
 	}
 	// printFilesSkipping is its one-root form.
-	printFilesSkipping := func(name, path string, present bool, seen []string, skipped func(string) bool) {
-		printFilesSkippingIn(name, path, []string{path}, present, seen, skipped)
+	printFilesSkipping := func(name, path string, present bool, seen []string, skipped func(string) bool, beside ...string) {
+		printFilesSkippingIn(name, path, []string{path}, present, seen, skipped, beside...)
 	}
 	printFiles := func(name, path string, present bool, seen []string) {
 		printFilesSkipping(name, path, present, seen, nil)
@@ -872,7 +875,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 	ocDB := sources.OpencodeDB()
 	printRow("opencode", ocDB, doctorFilePresent(ocDB), doctorSQLiteDetail(ocDB, sqlite))
 
-	printRow("aider", doctorAiderLocation(), len(sources.AiderFiles()) > 0, doctorCount(len(sources.AiderFiles()), "file"))
+	printRow("aider", doctorAiderLocation(), len(sources.AiderFiles()) > 0, doctorAiderDetail())
 
 	// The row names the store and counts what is under `tmp`, where the chats
 	// are: Antigravity keeps its own store in a sibling directory of the same
@@ -959,7 +962,8 @@ func doctorHarnesses(w io.Writer, dir string) {
 	senpiRoot := sources.SenpiRoot()
 	printFiles("senpi", senpiRoot, doctorExists(senpiRoot), sources.SenpiSessionFiles())
 	kimchiRoot := sources.KimchiRoot()
-	printFiles("kimchi", kimchiRoot, doctorExists(kimchiRoot), sources.KimchiSessionFiles())
+	// Its sub-agent runs are skipped on purpose and named as such (#4401).
+	printFilesSkipping("kimchi", kimchiRoot, doctorExists(kimchiRoot), sources.KimchiSessionFiles(), sources.KimchiSubagentFile)
 	commandRoot := sources.CommandCodeRoot()
 	// The checkpoint stream beside each transcript is named rather than left to
 	// the unread count: it is not a conversation, and "1 not recognised here"
@@ -980,12 +984,22 @@ func doctorHarnesses(w io.Writer, dir string) {
 		zcodeLoc = zcodeLoc + string(os.PathListSeparator) + zcodeDB
 	}
 	zcodeDetail := doctorCount(len(zcodeTranscripts), "file")
+	// And the snapshots an older ZCode left, which are read too (#4432).
+	zcodeLegacy := sources.ZCodeLegacyFiles()
+	if len(zcodeLegacy) > 0 {
+		zcodeLoc += string(os.PathListSeparator) + sources.ZCodeLegacyRoot()
+		zcodeDetail += ", " + doctorCount(len(zcodeLegacy), "legacy snapshot")
+	}
 	if zcodeHasDB {
 		zcodeDetail += ", CLI store present" + doctorDBPrereqNote(sqlite)
 	}
-	printRow("zcode", zcodeLoc, doctorExists(zcodeRoot) || zcodeHasDB, zcodeDetail)
+	printRow("zcode", zcodeLoc, doctorExists(zcodeRoot) || zcodeHasDB || len(zcodeLegacy) > 0, zcodeDetail)
+	// gjc's scope file sits in every project directory and its sub-agent
+	// passes are skipped on purpose; counted as unread, the row reported one
+	// file per project that deja had no reason to read (#4393).
 	gjcRoot := sources.GjcRoot()
-	printFiles("gjc", gjcRoot, doctorExists(gjcRoot), sources.GjcSessionFiles())
+	printFilesSkipping("gjc", gjcRoot, doctorExists(gjcRoot), sources.GjcSessionFiles(),
+		sources.GjcSubagentPath, sources.GjcScopeFiles()...)
 
 	// Kiro's two clients write different files under one root, and the row says
 	// which of them answered: a CLI user and an IDE user have nothing in common
@@ -1011,7 +1025,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// the row names the roots it found rather than the app directory (#3644).
 	cherryFiles := len(sources.CherryStudioSessionFiles())
 	cherryLoc := "CherryStudio/Data/Agents/.claude"
-	if roots := sources.CherryStudioRoots(); len(roots) > 0 {
+	if roots := sources.CherryStudioAllRoots(); len(roots) > 0 {
 		cherryLoc = strings.Join(roots, string(os.PathListSeparator))
 	}
 	printRow("cherrystudio", cherryLoc, cherryFiles > 0, doctorCount(cherryFiles, "file"))
@@ -1187,6 +1201,19 @@ func doctorAiderLocation() string {
 	return loc
 }
 
+// doctorAiderDetail says where the history is when none was found: aider
+// writes it at the git root of each project, and $HOME holds one only for a
+// launch from $HOME (#4326).
+func doctorAiderDetail() string {
+	n := len(sources.AiderFiles())
+	if n > 0 {
+		return doctorCount(n, "file")
+	}
+	return doctorCount(0, "file") + " — " + aiderNoHistoryHint
+}
+
+const aiderNoHistoryHint = "aider writes .aider.chat.history.md in each project; start it there as `deja aider` or list project dirs in DEJA_AIDER_ROOTS"
+
 func doctorAntigravityLocation() string {
 	if roots := sources.AntigravityRoots(); len(roots) > 0 {
 		return strings.Join(roots, string(os.PathListSeparator))
@@ -1361,6 +1388,9 @@ func doctorMCP(w io.Writer) {
 		if status != "wired" && c.name == "codex" && codexPluginInstalled() {
 			status = "plugin"
 		}
+		if c.name == "cherrystudio" && doctorCherryStudioMCP(w, status, c.path) {
+			continue
+		}
 		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", c.name, status, guidanceStatus(guidanceHarness(c.name)), reportPath(c.path))
 		// One "wired" can be two registrations: a hand add under another name
 		// — the project is called deja-vu, after all — plus the `deja` a later
@@ -1378,8 +1408,11 @@ func doctorMCP(w io.Writer) {
 		// healthy while no memory arrived (#2216).
 		if status == "wired" {
 			if missing := dejaCommandMissing(c.path); missing != "" {
-				fmt.Fprintf(w, "  %-12s %s\n", "",
-					"points at "+missing+", which is not there — `deja install "+c.name+"` rewrites it for this binary")
+				fix := "`deja install " + c.name + "` rewrites it for this binary"
+				if c.name == "cherrystudio" {
+					fix += ", then re-import it in Settings → MCP"
+				}
+				fmt.Fprintf(w, "  %-12s %s\n", "", "points at "+missing+", which is not there — "+fix)
 			} else if other := otherBinaryNote(c.path, c.name); other != "" {
 				// The quieter half: the binary is there and is neither this one
 				// nor the deja on PATH. Two harnesses on the machine this was
@@ -1406,6 +1439,9 @@ func doctorMCP(w io.Writer) {
 			if note := zedUnreachableNote(c.path); note != "" {
 				fmt.Fprintf(w, "  %-12s %s\n", "", note)
 			}
+		}
+		if note := doctorMCPSwitchedOff(c.name); note != "" && status == "wired" {
+			fmt.Fprintf(w, "  %-12s %s\n", "", note)
 		}
 		if note := doctorWiringNote(c.name); note != "" && status == "wired" {
 			fmt.Fprintf(w, "  %-12s %s\n", "", note)
@@ -1763,6 +1799,44 @@ func jsonKeyOpening(trimmed string) (string, bool) {
 		return "", false
 	}
 	return key, true
+}
+
+// doctorCherryStudioMCP prints the cherrystudio row from the app's own server
+// table when it can be read, and reports false when it cannot, leaving the
+// import-file row and its caveat to the caller. The import file existing says
+// nothing about the app having the server (#4344).
+func doctorCherryStudioMCP(w io.Writer, fileStatus, importPath string) bool {
+	known, wired, off, db, missing := cherryStudioAppWiring()
+	if !known {
+		return false
+	}
+	guidance := guidanceStatus(guidanceHarness("cherrystudio"))
+	if off {
+		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", "cherrystudio", "disabled", guidance, reportPath(db))
+		fmt.Fprintf(w, "  %-12s %s\n", "", "Cherry Studio has deja's server switched off, so it never starts — turn it on in Settings → MCP")
+		return true
+	}
+	if !wired {
+		status := "not imported"
+		if fileStatus == "config missing" {
+			status = fileStatus
+		}
+		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", "cherrystudio", status, guidance, reportPath(importPath))
+		fix := "`deja install cherrystudio`, then import " + reportPath(importPath)
+		if status == "not imported" {
+			fix = "import this file"
+		}
+		fmt.Fprintf(w, "  %-12s %s\n", "", "Cherry Studio has no deja server — "+fix+" in Settings → MCP → Import from JSON")
+		return true
+	}
+	fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", "cherrystudio", "wired", guidance, reportPath(db))
+	if missing != "" {
+		// Rewriting the import file does not reach the app: its copy keeps
+		// the dead path until the server is re-imported or edited.
+		fmt.Fprintf(w, "  %-12s %s\n", "", "points at "+missing+", which is not there — `deja install cherrystudio`, then re-import "+
+			reportPath(importPath)+" in Settings → MCP (or fix the command there)")
+	}
+	return true
 }
 
 // doctorWiringNote adds what "wired" cannot promise for a given harness. Three
@@ -2522,8 +2596,8 @@ func doctorIndex(w io.Writer, idx doctorIndexReport, dir string) {
 			clipped = fmt.Sprintf(", %d message%s stored short of the transcript (over 64 KB)",
 				e.ClippedMessages, pluralS(e.ClippedMessages))
 		}
-		fmt.Fprintf(w, "  ingest   %s: %d unusable line%s skipped, %d path%s unreadable%s — see `deja doctor --json`\n",
-			h, e.MalformedLines, pluralS(e.MalformedLines), e.FailedFiles, pluralS(e.FailedFiles), clipped)
+		fmt.Fprintf(w, "  ingest   %s: %d unusable %s%s skipped, %d path%s unreadable%s — see `deja doctor --json`\n",
+			h, e.MalformedLines, sources.SkippedNoun(h), pluralS(e.MalformedLines), e.FailedFiles, pluralS(e.FailedFiles), clipped)
 	}
 	reportFutureDated(w, dir)
 }

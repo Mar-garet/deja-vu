@@ -276,33 +276,50 @@ func scanJSONL(path string, fn func(map[string]any)) error {
 // The header is handed over again on every resume. That is safe because it is
 // metadata: the parsers read it into fields they set rather than append to.
 func scanJSONLWithHeaderFromOffset(path string, offset int64, fn func(map[string]any)) error {
+	return scanJSONLWithHeaderFromOffsetFunc(path, offset, 1, func(map[string]any) bool { return true }, fn)
+}
+
+// scanJSONLWithHeaderFromOffsetFunc is scanJSONLWithHeaderFromOffset for a
+// format whose header need not be line 1: isHeader picks it out of the first
+// lookahead lines. omp writes a title slot before its session record, and
+// taking line 1 left an omp session split in two on every resume (#4406).
+func scanJSONLWithHeaderFromOffsetFunc(path string, offset int64, lookahead int, isHeader func(map[string]any) bool, fn func(map[string]any)) error {
 	if offset > 0 {
-		if header, err := firstJSONLRecord(path); err == nil && header != nil {
+		if header := leadingJSONLHeader(path, offset, lookahead, isHeader); header != nil {
 			fn(header)
 		}
 	}
 	return scanJSONLFromOffset(path, offset, fn)
 }
 
-// firstJSONLRecord decodes the first line of a JSONL file, or nil when there
-// is none to read.
-func firstJSONLRecord(path string) (map[string]any, error) {
+// headerLookahead is how many leading lines may come before a header.
+const headerLookahead = 4
+
+// leadingJSONLHeader decodes the first of a JSONL file's leading lines that
+// isHeader accepts, looking no further than lookahead lines or the offset, or
+// nil when none is there.
+func leadingJSONLHeader(path string, offset int64, lookahead int, isHeader func(map[string]any) bool) map[string]any {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 	defer f.Close()
-	line, err := bufio.NewReaderSize(f, 1024*1024).ReadBytes('\n')
-	if line = trimJSONSpace(line); len(line) == 0 {
-		return nil, err
+	r := bufio.NewReaderSize(io.LimitReader(f, offset), 1024*1024)
+	for range lookahead {
+		line, err := r.ReadBytes('\n')
+		if line = trimJSONSpace(line); len(line) > 0 {
+			var m map[string]any
+			d := json.NewDecoder(strings.NewReader(string(line)))
+			d.UseNumber()
+			if d.Decode(&m) == nil && isHeader(m) {
+				return m
+			}
+		}
+		if err != nil {
+			return nil
+		}
 	}
-	var m map[string]any
-	d := json.NewDecoder(strings.NewReader(string(line)))
-	d.UseNumber()
-	if d.Decode(&m) != nil {
-		return nil, nil
-	}
-	return m, nil
+	return nil
 }
 
 func scanJSONLFromOffset(path string, offset int64, fn func(map[string]any)) error {
@@ -497,9 +514,13 @@ func parseFiles(files []string, parse func(string) ([]model.Session, error)) []m
 // `file_path` and its shell tool `Bash`, Cursor names them `path` and `Shell`.
 // Both were read off transcripts the vendor's own CLI had just written.
 type toolDialect struct {
-	pathKey   string
-	pathTools map[string]bool
-	shellTool string
+	pathKey string
+	// pathKeyAlt is a second name for the file argument, read when pathKey is
+	// absent. Roo's newer edit tools take `file_path` where its older ones take
+	// `path` (#4419). Empty means pathKey alone.
+	pathKeyAlt string
+	pathTools  map[string]bool
+	shellTool  string
 	// shellTools names every alias the shell tool answers to, when a harness
 	// has more than one. CodeWhale's canonical name is exec_shell and it also
 	// takes bash and Bash, so a run recorded under an alias was no command at
@@ -640,6 +661,11 @@ func toolPathsIn(v any, d toolDialect) string {
 func toolPathStrings(in map[string]any, d toolDialect) []string {
 	if p, _ := in[d.pathKey].(string); p != "" {
 		return []string{p}
+	}
+	if d.pathKeyAlt != "" {
+		if p, _ := in[d.pathKeyAlt].(string); p != "" {
+			return []string{p}
+		}
 	}
 	if d.pathListKey == "" {
 		return nil

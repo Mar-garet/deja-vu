@@ -779,9 +779,10 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 }
 
 // clippedMessageNote says that a message in this session was stored short of
-// what the transcript holds. The count is the store's, not this session's —
-// deja records it per file at ingest — so the line names the session's own
-// file and leaves the arithmetic to `deja doctor`.
+// what the transcript holds. deja records the count per file at ingest, and a
+// store like Zed's threads.db keeps every session in one file, so the file's
+// count put the note on every session in it (#4340). The file says a clip
+// happened; the per-session split says which of its sessions holds it.
 func clippedMessageNote(dir string, s model.Session) string {
 	if s.Path == "" {
 		return ""
@@ -791,8 +792,16 @@ func clippedMessageNote(dir string, s model.Session) string {
 	if !ok || e.Clipped == 0 {
 		return ""
 	}
+	n := e.ClippedSessions[s.ID]
+	if e.ClippedSessions == nil {
+		// A store built before the split: the file's count is all there is.
+		n = e.Clipped
+	}
+	if n == 0 {
+		return ""
+	}
 	return fmt.Sprintf("deja: %s stored short of what the transcript holds — the rest of %s is in the file itself",
-		pluralMessages(e.Clipped), pluralThem(e.Clipped))
+		pluralMessages(n), pluralThem(n))
 }
 
 func pluralMessages(n int) string {
@@ -3308,7 +3317,7 @@ func printSources(dir string) {
 		{"cline", sources.ClineSessionsDir(), append([]string{sources.ClineSessionsDir()}, sources.ClineLegacyRoots()...), sources.ClineSessionFiles, sources.LoadCline},
 		{"roo", strings.Join(sources.RooRoots(), string(os.PathListSeparator)), sources.RooRoots(), sources.RooTaskFiles, sources.LoadRoo},
 		{"kilocode", strings.Join(sources.KiloRoots(), string(os.PathListSeparator)), sources.KiloRoots(), sources.KiloSessionFiles, sources.LoadKilo},
-		{"cherrystudio", strings.Join(sources.CherryStudioRoots(), string(os.PathListSeparator)), sources.CherryStudioRoots(), sources.CherryStudioSessionFiles, sources.LoadCherryStudio},
+		{"cherrystudio", strings.Join(sources.CherryStudioAllRoots(), string(os.PathListSeparator)), sources.CherryStudioAllRoots(), sources.CherryStudioSessionFiles, sources.LoadCherryStudio},
 		{"kiro", sources.KiroRoot(), []string{sources.KiroRoot()}, sources.KiroSessionFiles, sources.LoadKiro},
 		{"senpi", sources.SenpiRoot(), []string{sources.SenpiRoot()}, sources.SenpiSessionFiles, sources.LoadSenpi},
 		{"kimchi", sources.KimchiRoot(), []string{sources.KimchiRoot()}, sources.KimchiSessionFiles, sources.LoadKimchi},
@@ -3318,7 +3327,7 @@ func printSources(dir string) {
 		{"continue", filepath.Join(sources.ContinueRoot(), "sessions"), []string{filepath.Join(sources.ContinueRoot(), "sessions")}, sources.ContinueSessionFiles, sources.LoadContinue},
 		{"pi", sources.PiRoot(), []string{sources.PiRoot()}, sources.PiSessionFiles, sources.LoadPi},
 		{"omp", sources.OmpRoot(), []string{sources.OmpRoot()}, sources.OmpSessionFiles, sources.LoadOmp},
-		{"prime", sources.PrimeRoot(), []string{sources.PrimeRoot()}, sources.PrimeSessionFiles, sources.LoadPrime},
+		{"prime", sources.PrimeRoot(), sources.PrimeRoots(), sources.PrimeSessionFiles, sources.LoadPrime},
 		{"amp", sources.AmpRoot(), []string{sources.AmpRoot()}, sources.AmpThreadFiles, sources.LoadAmp},
 		{"openclaw", sources.OpenClawRoot(), []string{sources.OpenClawRoot()}, sources.OpenClawStoreFiles, sources.LoadOpenClaw},
 		{"codewhale", sources.CodeWhaleRoot(), sources.CodeWhaleRoots(), sources.CodeWhaleSessionFiles, sources.LoadCodeWhale},
@@ -3435,6 +3444,9 @@ func printSources(dir string) {
 		note += fmt.Sprintf("\texcluded-sessions=%d", excluded)
 	}
 	note += unreadNote("aider")
+	if len(rawAiderSessions) == 0 && !skipAider {
+		note += "\tnote=" + aiderNoHistoryHint
+	}
 	if !skipAider {
 		fmt.Printf("aider\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", aiderLocation, sources.CountSessions(aiderSessions), aiderMessages, humanBytes(aiderSize), aiderRedactions, note)
 	}

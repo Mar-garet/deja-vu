@@ -248,6 +248,7 @@ func codeWhaleWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 		return nil
 	}
 	codeWhaleFoldEdits(blocks)
+	codeWhaleFoldEditKeys(blocks)
 	var out []model.Message
 	if IndexToolPaths() {
 		if p := toolPathsIn(blocks, codeWhaleDialect); p != "" {
@@ -301,6 +302,37 @@ func codeWhaleFoldEdits(blocks []any) {
 			in["edits"] = append(edits, map[string]any{"oldText": oldText, "newText": newText})
 			delete(in, "oldText")
 			delete(in, "newText")
+		}
+	}
+}
+
+// codeWhaleEditKeys are the spellings CodeWhale's edit_file folds onto its own
+// search and replace before it runs (tools/file.rs EDIT_ALIASES), mapped here
+// onto the dialect's old_string and new_string. search/replace is the
+// canonical pair, so a call written that way had no edit and no wrote record
+// (#4404).
+var codeWhaleEditKeys = [][2]string{
+	{"search", "old_string"}, {"replace", "new_string"},
+	{"old_str", "old_string"}, {"new_str", "new_string"},
+	{"oldText", "old_string"}, {"newText", "new_string"},
+	{"old_text", "old_string"}, {"new_text", "new_string"},
+	{"replacement", "new_string"},
+}
+
+// codeWhaleFoldEditKeys rewrites an edit_file call's arguments onto the keys
+// the dialect reads. The transcript keeps what the model sent.
+func codeWhaleFoldEditKeys(blocks []any) {
+	for _, it := range blocks {
+		name, in, ok := toolPart(it, codeWhaleDialect)
+		if !ok || name != "edit_file" {
+			continue
+		}
+		for _, k := range codeWhaleEditKeys {
+			if v, ok := in[k[0]]; ok {
+				if _, set := in[k[1]]; !set {
+					in[k[1]] = v
+				}
+			}
 		}
 	}
 }

@@ -20,7 +20,23 @@ there — the SEARCH body is the replaced span `deja restore` hands back, the
 REPLACE body becomes the hashed written lines line-level blame matches. A
 `search_and_replace` with `use_regex` records neither side, because a pattern is
 not text the file held, and a block whose closing marker never arrives records
-nothing rather than guessing where it ended.
+nothing rather than guessing where it ended. Current Roo also offers
+`search_replace`, `edit_file` and `edit`, which take `old_string` and
+`new_string` under `file_path`, and `apply_patch`, whose paths and `-`/`+` lines
+are read out of the patch body.
+
+Tasks from before native tool calling (Roo 3.20, and the legacy Cline
+extension) keep each call as XML inside the assistant's text block —
+`<execute_command><command>…</command></execute_command>` — and its result as
+user text blocks headed `[execute_command for '…'] Result:`. Those calls give
+the same records a `tool_use` block does, and the result is indexed as tool
+output, not as the person's words. Only the first call of a message counts,
+since the client ran no other, and only in a task with no `tool_use` block at
+all: in a native-era task XML in the text is something the model showed. The
+answer to `ask_followup_question`, the feedback on `attempt_completion` and any
+`<feedback>` typed beside a result stay the person's. The retry prompt the
+client sends when the model used no tool ("[ERROR] You did not use a tool…") is
+not indexed as a user turn.
 
 A call names its file relative to the workspace, so the path is resolved against
 the `workspace` in `history_item.json` before it is recorded — a one-segment
@@ -34,8 +50,10 @@ the wrong root.
 - **Skill**: the shared `~/.agents/skills/deja-history/SKILL.md`.
 - **Command**: `~/.roo/commands/deja.md`, invoked as `/deja`.
 - **Auto-recall**: none; Roo has no released lifecycle hooks.
-- **Resume**: `roo --session-id <uuid>`, run in the task's workspace, for tasks
-  the CLI created. Editor tasks reopen from the extension's history UI.
+- **Resume**: `roo -w <workspace> --session-id <uuid>`, run in the task's
+  workspace, for tasks the CLI created. The `-w` matters: without it the CLI
+  looks under the real path of its cwd, and a task created with `-w /tmp/...`
+  on macOS recorded the symlinked path. Editor tasks reopen from the extension's history UI.
 - **Handoff**: paste.
 
 **Last verified:** 2026-09-07

@@ -238,7 +238,7 @@ func parseOpencodeLayouts(harness, db, where1, where2 string, limit int) ([]mode
 		if schema.legacy {
 			w = opencodeNotMoved + w
 		}
-		n, err := readOpencodeRows(harness, db, opencodeV1Query(w, limit), by)
+		n, err := readOpencodeRows(harness, db, opencodeV1Query(harness, w, limit), by)
 		if err != nil {
 			return nil, err
 		}
@@ -287,7 +287,7 @@ func parseOpencodeLayouts(harness, db, where1, where2 string, limit int) ([]mode
 
 // opencodeV1Query is the 1.x projection: sessions in `session`, turns in
 // `message`, their content in `part`.
-func opencodeV1Query(where string, limit int) string {
+func opencodeV1Query(harness, where string, limit int) string {
 	lim := ""
 	if limit > 0 {
 		lim = fmt.Sprintf(" limit %d", limit)
@@ -330,14 +330,15 @@ func opencodeV1Query(where string, limit int) string {
 		`when 'true' then 1 ` +
 		`when 'integer' then json_extract(m.data,'$.summary') ` +
 		`when 'text' then substr(json_extract(m.data,'$.summary'),1,8) end,` +
-		`'path',json_extract(p.data,'$.state.input.filePath'),` +
+		`'path',` + opencodeV1Path(harness) + `,` +
 		`'cmd',json_extract(p.data,'$.state.input.command'),` +
 		`'patch',json_extract(p.data,'$.state.input.patchText'),` +
+		zcodeV1Fields(harness) +
 		// The output of a bash call and its exit status. Only bash: `read`
 		// output is 119 MB of file contents on this store against 49 MB of
 		// command output, and #547 measured file bodies as the weakest slice
 		// deja could index. What a command printed is where the errors live.
-		`'out',case when json_extract(p.data,'$.tool')='bash' ` +
+		`'out',case when json_extract(p.data,'$.tool') in ('bash','Bash') ` +
 		`then json_extract(p.data,'$.state.output') end,` +
 		`'exit',json_extract(p.data,'$.state.metadata.exit'),` +
 		`'pt',json_extract(p.data,'$.time.start'),` +
@@ -371,8 +372,49 @@ func opencodeV1Query(where string, limit int) string {
 		` or (instr(substr(p.data,1,200),'"tool":"bash"')>0 ` +
 		`and json_extract(p.data,'$.tool')='bash')` +
 		` or (instr(substr(p.data,1,200),'"tool":"apply_patch"')>0 ` +
-		`and json_extract(p.data,'$.tool')='apply_patch'))` + where + ` order by s.id,m.time_created,p.id` + lim
+		`and json_extract(p.data,'$.tool')='apply_patch')` + zcodeV1Tools(harness) + `)` +
+		where + ` order by s.id,m.time_created,p.id` + lim
 	return q
+}
+
+// zcodeV1Fields and zcodeV1Tools read ZCode's tool parts, which sit in
+// OpenCode's schema under Claude Code's names and arguments: Bash {command},
+// Read {file_path}, Edit {file_path, old_string, new_string} and Write
+// {file_path, content}. Matched only for ZCode, so opencode's own query gains
+// no clause; read as opencode's were, ZCode sessions were text alone (#4428).
+func zcodeV1Fields(harness string) string {
+	if harness != "zcode" {
+		return ""
+	}
+	return `'editpath',case when json_extract(p.data,'$.tool') in ('Edit','Write') ` +
+		`then json_extract(p.data,'$.state.input.file_path') end,` +
+		`'old',json_extract(p.data,'$.state.input.old_string'),` +
+		`'new',coalesce(json_extract(p.data,'$.state.input.new_string'),` +
+		`case when json_extract(p.data,'$.tool')='Write' then json_extract(p.data,'$.state.input.content') end),` +
+		// An Edit ZCode refused — "File has not been read yet" — changed
+		// nothing, and is not recorded as if it had.
+		`'refused',case when json_extract(p.data,'$.state.status')='error' then 1 end,`
+}
+
+// opencodeV1Path is the file a read opened: `filePath` in opencode's read,
+// `file_path` in ZCode's Read.
+func opencodeV1Path(harness string) string {
+	if harness != "zcode" {
+		return `json_extract(p.data,'$.state.input.filePath')`
+	}
+	return `coalesce(json_extract(p.data,'$.state.input.filePath'),case when json_extract(p.data,'$.tool')='Read' ` +
+		`then json_extract(p.data,'$.state.input.file_path') end)`
+}
+
+func zcodeV1Tools(harness string) string {
+	if harness != "zcode" {
+		return ""
+	}
+	var b strings.Builder
+	for _, name := range []string{"Bash", "Read", "Edit", "Write"} {
+		fmt.Fprintf(&b, ` or (instr(substr(p.data,1,200),'"tool":"%s"')>0 and json_extract(p.data,'$.tool')='%s')`, name, name)
+	}
+	return b.String()
 }
 
 // readOpencodeRows runs one projection and folds its rows into by, keyed by
@@ -454,6 +496,9 @@ func readOpencodeRows(harness, db, q string, by map[string]*model.Session) (int,
 		// An `edit` call hands back the text it replaced and the text it wrote,
 		// so both sides are recorded the way every other harness's edit is.
 		if old, nw := str(r["old"]), str(r["new"]); old != "" || nw != "" {
+			if opencodeSynthetic(r["refused"]) {
+				continue
+			}
 			path := str(r["editpath"])
 			t := partTime(r)
 			if path != "" && old != "" && IndexEdits() {

@@ -20,7 +20,7 @@ func TestInstallUninstallGivesTheConfigBackByteForByte(t *testing.T) {
 	}{
 		{"kiro", ".kiro/settings/mcp.json", kiroAdd},
 		{"cursor", ".cursor/mcp.json", kiroAdd},
-		{"zcode", ".zcode/cli/config.json", "{\n  \"theme\": \"dark\",\n  \"mcp\": {\n    \"servers\": {\n      \"other\": {\n        \"type\": \"stdio\",\n        \"command\": \"/bin/echo\",\n        \"args\": [\n          \"hi\"\n        ]\n      }\n    }\n  },\n  \"editor\": \"vim\"\n}\n"},
+		{"zcode", ".zcode/cli/setting.json", "{\n  \"theme\": \"dark\",\n  \"mcp\": {\n    \"servers\": {\n      \"other\": {\n        \"type\": \"stdio\",\n        \"command\": \"/bin/echo\",\n        \"args\": [\n          \"hi\"\n        ]\n      }\n    }\n  },\n  \"editor\": \"vim\"\n}\n"},
 	} {
 		t.Run(tc.target, func(t *testing.T) {
 			home := t.TempDir()

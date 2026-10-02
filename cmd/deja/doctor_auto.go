@@ -242,6 +242,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	switch {
 	case harnessPluginCarriesRecall(a.name) && (err != nil || !strings.Contains(string(b), a.marker)):
 		state = "plugin"
+	case a.name == "aider" && aiderWiring(err == nil) != "":
+		state = aiderWiring(err == nil)
 	case autoUnwired(a, b, err):
 		state = "missing"
 	case a.marker != "" && !strings.Contains(string(b), a.marker):
@@ -256,6 +258,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	// enabled record of it; the directory alone is inert.
 	case a.name == "reasonix" && !reasonixPackageEnabled():
 		state = "stale"
+	case a.name == "zcode" && !zcodeHooksRun(b):
+		state = "stale"
 	default:
 		state = "wired"
 	}
@@ -268,6 +272,23 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		binaryMissing = true
 	}
 	return state, binaryMissing
+}
+
+// aiderWiring is the aider row's state when the context file and the read:
+// entry that makes aider load it disagree, and "" when they agree. The file
+// alone said wired while aider loaded nothing, and the entry alone said missing
+// — the word for never installed — while every start printed an error (#4327).
+func aiderWiring(fileThere bool) string {
+	// readConfig, for the byte order mark install writes back.
+	b, _ := readConfig(aiderConfPath())
+	named := aiderConfReadsContext(string(b))
+	switch {
+	case named && !fileThere:
+		return "broken"
+	case !named && fileThere:
+		return "stale"
+	}
+	return ""
 }
 
 // autoWiringSwitchedOff is the line under a wired row whose harness has turned
@@ -327,6 +348,10 @@ func doctorAutoRecall(w io.Writer) {
 			continue
 		}
 		switch {
+		case a.name == "aider" && aiderWiring(err == nil) == "broken":
+			fmt.Fprintf(w, "  %-12s %-11s %s  (%s reads it and it is not there — aider prints an error on every start; `deja install aider` writes it)\n", a.name, "broken", reportPath(path), reportPath(aiderConfPath()))
+		case a.name == "aider" && aiderWiring(err == nil) == "stale":
+			fmt.Fprintf(w, "  %-12s %-11s %s  (no read: entry for it in %s, so aider never loads it — `deja install aider`)\n", a.name, "stale", reportPath(path), reportPath(aiderConfPath()))
 		case err != nil:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "missing", reportPath(path), note)
 			// Missing here is not "never installed" when the layer still names
@@ -346,6 +371,8 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no %s call — `deja install %s-auto`)\n", a.name, "stale", reportPath(path), a.marker, a.name)
 		case a.name == "reasonix" && !reasonixPackageEnabled():
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no enabled record in %s — `deja install reasonix-auto`)\n", a.name, "stale", reportPath(path), reportPath(reasonixStatePath()))
+		case a.name == "zcode" && !zcodeHooksRun(b):
+			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's hook is not under hooks.events with hooks.enabled on — `deja install zcode-auto`)\n", a.name, "stale", reportPath(path))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
 			if off := autoWiringSwitchedOff(a.name); off != "" {

@@ -33,6 +33,10 @@ type FileKind struct {
 	// ParseFrom resumes an incremental parse: offset for append-only text logs,
 	// sinceNano for db-backed kinds. nil means the kind is not incremental.
 	ParseFrom func(path string, offset, sinceNano int64) ([]model.Session, error)
+	// Resumes reports whether the bytes from offset can be read on their own
+	// and added to what is stored. nil means always. A kind whose new lines can
+	// rewrite a record already stored says no, and the file is read whole.
+	Resumes func(path string, offset int64) bool
 }
 
 func sinceTime(nano int64) time.Time { return time.Unix(0, nano) }
@@ -354,16 +358,32 @@ func allHarnesses() []Harness {
 		{
 			// Cherry Studio runs Claude Code sessions from a desktop app and
 			// writes them in Claude's own format, with a snapshot per stream
-			// chunk that the reader collapses (#3644).
+			// chunk that the reader collapses (#3644). Its pi and dsh agents
+			// keep stock pi and dsh logs beside them (#4342); this entry sits
+			// before deepseek's, whose kind matches a log by name alone.
 			Name: "cherrystudio", Load: LoadCherryStudio, Files: CherryStudioSessionFiles,
-			Kinds: []FileKind{{
-				Name: "cherrystudio",
-				Match: func(p string) bool {
-					return strings.HasSuffix(p, ".jsonl") && CherryStudioUnderRoot(p)
+			Kinds: []FileKind{
+				{
+					Name: "cherrystudio",
+					Match: func(p string) bool {
+						return strings.HasSuffix(p, ".jsonl") && CherryStudioUnderRoot(p)
+					},
+					Parse:     fullParse(ParseCherryStudioFile),
+					ParseFrom: offsetParse(ParseCherryStudioFileFromOffset),
+					Resumes:   CherryStudioResumes,
 				},
-				Parse:     fullParse(ParseCherryStudioFile),
-				ParseFrom: offsetParse(ParseCherryStudioFileFromOffset),
-			}},
+				{
+					Name:      "cherrystudio-pi",
+					Match:     cherryStudioPiFile,
+					Parse:     fullParse(ParseCherryStudioFile),
+					ParseFrom: offsetParse(ParseCherryStudioPiFileFromOffset),
+				},
+				{
+					Name:  "cherrystudio-dsh",
+					Match: cherryStudioDshFile,
+					Parse: fullParse(ParseCherryStudioDshFile),
+				},
+			},
 		},
 		{
 			// Senpi and Kimchi are pi descendants and kept its envelope, so
@@ -389,7 +409,7 @@ func allHarnesses() []Harness {
 			Name: "kimchi", Load: LoadKimchi, Files: KimchiSessionFiles,
 			Kinds: []FileKind{{
 				Name:      "kimchi",
-				Match:     func(p string) bool { return underRoot(p, KimchiRoot(), ".jsonl") },
+				Match:     KimchiUnderRoot,
 				Parse:     fullParse(ParseKimchiFile),
 				ParseFrom: offsetParse(ParseKimchiFileFromOffset),
 			}},
@@ -419,6 +439,12 @@ func allHarnesses() []Harness {
 				Match:     func(p string) bool { return p == ZCodeDB() },
 				Parse:     dbParse(ParseZCodeDB, ParseZCodeDBSince),
 				ParseFrom: dbParseFrom(ParseZCodeDB, ParseZCodeDBSince),
+			}, {
+				// The snapshots an older ZCode kept, one JSON file a
+				// conversation, read whole (#4432).
+				Name:  "zcode-legacy",
+				Match: ZCodeLegacyUnderRoot,
+				Parse: fullParse(ParseZCodeLegacyFile),
 			}},
 		},
 		{
@@ -522,7 +548,7 @@ func allHarnesses() []Harness {
 			Name: "prime", Load: LoadPrime, Files: PrimeSessionFiles,
 			Kinds: []FileKind{{
 				Name:      "prime",
-				Match:     func(p string) bool { return strings.HasSuffix(p, ".jsonl") && strings.HasPrefix(p, PrimeRoot()) },
+				Match:     isPrimeFile,
 				Parse:     fullParse(ParsePrimeFile),
 				ParseFrom: offsetParse(ParsePrimeFileFromOffset),
 			}},
