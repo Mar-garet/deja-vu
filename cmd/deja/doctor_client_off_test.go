@@ -665,3 +665,42 @@ func TestProjectSettingsTurnTheHooksSwitchBackOn(t *testing.T) {
 		})
 	}
 }
+
+// Two switches the first pass missed: codex still reads `codex_hooks`, the
+// feature's old key, and VS Code's `registry` access blocks a server it has
+// no gallery entry for, which deja's never has (#4468, #4469).
+func TestCodexLegacyHooksKeyAndVSCodeRegistryAccess(t *testing.T) {
+	write := func(t *testing.T, p, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("codex_hooks", func(t *testing.T) {
+		hermeticEnv(t)
+		p := filepath.Join(sources.CodexHome(), "config.toml")
+		write(t, p, "[features]\ncodex_hooks = false\n")
+		if clientHooksOff("codex-hook") == "" {
+			t.Error("`codex_hooks = false` does not read as off")
+		}
+		write(t, p, "[features]\ncodex_hooks = false\nhooks = true\n")
+		if note := clientHooksOff("codex-hook"); note != "" {
+			t.Errorf("the current key set on still reads as off: %q", note)
+		}
+	})
+	t.Run("vscode registry", func(t *testing.T) {
+		hermeticEnv(t)
+		p := filepath.Join(filepath.Dir(doctorVSCodeMCPPath()), "settings.json")
+		write(t, p, `{"chat.mcp.access":"registry"}`)
+		if clientMCPDenied("vscode") == "" {
+			t.Error("`registry` access does not read as off")
+		}
+		write(t, p, `{"chat.mcp.access":"all"}`)
+		if note := clientMCPDenied("vscode"); note != "" {
+			t.Errorf("`all` reads as off: %q", note)
+		}
+	})
+}

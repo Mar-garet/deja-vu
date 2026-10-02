@@ -106,7 +106,9 @@ func clientMCPDenied(name string) string {
 	case "vscode":
 		p := filepath.Join(filepath.Dir(doctorVSCodeMCPPath()), "settings.json")
 		root := readJSONConfig(p)
-		if root["chat.mcp.access"] == "none" || root["chat.mcp.enabled"] == false {
+		// `registry` starts only servers from the MCP gallery, and deja's
+		// entry is a local one.
+		if access := root["chat.mcp.access"]; access == "none" || access == "registry" || root["chat.mcp.enabled"] == false {
 			return mcpOffNote(name, "`chat.mcp.access` is off", p)
 		}
 	case "zcode":
@@ -205,8 +207,15 @@ func clientHooksOff(name string) string {
 		}
 	case "codex-hook":
 		p := filepath.Join(sources.CodexHome(), "config.toml")
-		if b, err := readConfig(p); err == nil && tomlTableValue(string(b), "features", "hooks") == "false" {
-			return hooksOffNote("codex", "`[features] hooks = false`", p)
+		if b, err := readConfig(p); err == nil {
+			// codex_hooks is the key's old name, still read; the current one
+			// set at all is taken to decide.
+			switch hooks := tomlTableValue(string(b), "features", "hooks"); {
+			case hooks == "false":
+				return hooksOffNote("codex", "`[features] hooks = false`", p)
+			case hooks == "" && tomlTableValue(string(b), "features", "codex_hooks") == "false":
+				return hooksOffNote("codex", "`[features] codex_hooks = false`", p)
+			}
 		}
 	case "openclaw":
 		p := filepath.Join(sources.OpenClawStateDir(), "openclaw.json")
