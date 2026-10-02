@@ -310,6 +310,11 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 			base = fi.ModTime()
 		}
 	}
+	contents := make([]json.RawMessage, len(turns))
+	for i, m := range turns {
+		contents[i] = m.Content
+	}
+	xmlEra := rooXMLEra(contents)
 	for ti, m := range turns {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
@@ -319,14 +324,14 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 		if m.Role == "user" {
 			// A result of the XML era is a text block, not a tool_result
 			// (#4424), so the person's words are what is left beside it.
-			results, words := rooUserTurn(m.Content)
+			results, words := rooUserTurn(m.Content, xmlEra)
 			tool := append(clineTurnToolOutput(m.Content, ts), rooLegacyToolOutput(results, ts)...)
 			if len(tool) > 0 {
 				s.Touch(ts)
 				s.Messages = append(s.Messages, tool...)
 			}
 			text = unwrapClineTask(words)
-		} else if work := rooWorkRecords(m.Content, ts, workspace); len(work) > 0 {
+		} else if work := rooWorkRecords(m.Content, ts, workspace, xmlEra); len(work) > 0 {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, work...)
 		}
@@ -378,7 +383,7 @@ var rooDialect = toolDialect{
 
 // rooWorkRecords is clineWorkRecords for the task files: the command a call
 // ran and the files it named, under the same switches.
-func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string) []model.Message {
+func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string, xmlEra bool) []model.Message {
 	var blocks []any
 	if json.Unmarshal(raw, &blocks) != nil {
 		var s string
@@ -387,7 +392,9 @@ func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string) []model
 		}
 		blocks = []any{map[string]any{"type": "text", "text": s}}
 	}
-	blocks = rooWithXMLCalls(blocks)
+	if xmlEra {
+		blocks = rooWithXMLCalls(blocks)
+	}
 	var out []model.Message
 	if IndexToolPaths() {
 		if p := rooResolvePaths(rooPatchPaths(blocks, toolPathsIn(blocks, rooDialect)), workspace); p != "" {

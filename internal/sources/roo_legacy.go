@@ -3,6 +3,7 @@ package sources
 import (
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +23,15 @@ import (
 var rooXMLTools = []string{"execute_command", "read_file", "write_to_file", "apply_diff",
 	"insert_content", "search_and_replace", "replace_in_file"}
 
+// rooXMLOtherTools are the calls of that era that leave no record. They are
+// still looked for: one of them first in a message is the call the client ran,
+// and a record tool after it was not.
+var rooXMLOtherTools = []string{"list_files", "search_files", "list_code_definition_names",
+	"browser_action", "ask_followup_question", "attempt_completion", "use_mcp_tool",
+	"access_mcp_resource", "switch_mode", "new_task", "fetch_instructions", "codebase_search",
+	"update_todo_list", "run_slash_command", "plan_mode_respond", "new_rule", "condense",
+	"report_bug", "load_mcp_documentation", "web_fetch", "focus_chain"}
+
 var (
 	rooXMLParam = regexp.MustCompile(`<([a-z_]+)>`)
 	rooXMLPath  = regexp.MustCompile(`<path>([^<]*)</path>`)
@@ -30,42 +40,42 @@ var (
 // rooXMLCalls reads the XML calls in an assistant's text into blocks of the
 // tool_use shape, so the same records come out of them that come out of a
 // native call. A call whose closing tag never arrives was cut off mid-stream
-// and is not one the client ran.
+// and is not one the client ran, and neither is any after the first: the
+// client ran one per message and answered the rest "was not executed because
+// a tool has already been used in this message".
 func rooXMLCalls(text string) []any {
-	var out []any
-	for pos := 0; pos < len(text); {
-		name, at := "", -1
-		for _, n := range rooXMLTools {
-			if i := strings.Index(text[pos:], "<"+n+">"); i >= 0 && (at < 0 || i < at) {
+	name, at := "", -1
+	for _, list := range [][]string{rooXMLTools, rooXMLOtherTools} {
+		for _, n := range list {
+			if i := strings.Index(text, "<"+n+">"); i >= 0 && (at < 0 || i < at) {
 				name, at = n, i
 			}
 		}
-		if at < 0 {
-			break
-		}
-		start := pos + at + len(name) + 2
-		end := strings.Index(text[start:], "</"+name+">")
-		if end < 0 {
-			break
-		}
-		body := text[start : start+end]
-		pos = start + end + len(name) + 3
-		in := rooXMLParams(body)
-		// read_file of that era takes several files at once under <args>,
-		// each a <file><path>; one call per path keeps the shared readers.
-		if args, ok := in["args"].(string); ok && name == "read_file" {
-			for _, m := range rooXMLPath.FindAllStringSubmatch(args, -1) {
-				if p := strings.TrimSpace(m[1]); p != "" {
-					out = append(out, map[string]any{"type": "tool_use", "name": name, "input": map[string]any{"path": p}})
-				}
-			}
-			continue
-		}
-		if len(in) > 0 {
-			out = append(out, map[string]any{"type": "tool_use", "name": name, "input": in})
-		}
 	}
-	return out
+	if at < 0 || !slices.Contains(rooXMLTools, name) {
+		return nil
+	}
+	start := at + len(name) + 2
+	end := strings.Index(text[start:], "</"+name+">")
+	if end < 0 {
+		return nil
+	}
+	in := rooXMLParams(text[start : start+end])
+	// read_file of that era takes several files at once under <args>,
+	// each a <file><path>; one call per path keeps the shared readers.
+	if args, ok := in["args"].(string); ok && name == "read_file" {
+		var out []any
+		for _, m := range rooXMLPath.FindAllStringSubmatch(args, -1) {
+			if p := strings.TrimSpace(m[1]); p != "" {
+				out = append(out, map[string]any{"type": "tool_use", "name": name, "input": map[string]any{"path": p}})
+			}
+		}
+		return out
+	}
+	if len(in) == 0 {
+		return nil
+	}
+	return []any{map[string]any{"type": "tool_use", "name": name, "input": in}}
 }
 
 // rooXMLParams reads the parameters of one call. The values are not escaped —
@@ -103,6 +113,28 @@ func rooXMLParams(body string) map[string]any {
 	return in
 }
 
+// rooXMLEra reports whether a task is from the XML era: no turn of it holds a
+// tool_use or tool_result block. In a task of the native era XML in the text
+// is something the model showed — a reply about the old format, a snippet in
+// a code fence — and a "[x] Result:" line is something somebody typed, so
+// neither is read as a call or a result.
+func rooXMLEra(contents []json.RawMessage) bool {
+	for _, raw := range contents {
+		var blocks []struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &blocks) != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b.Type == "tool_use" || b.Type == "tool_result" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // rooWithXMLCalls adds the XML calls of an assistant turn to its blocks, for a
 // turn that has no native call of its own: a client that wrote tool_use
 // blocks did not also run what its text quotes.
@@ -117,8 +149,10 @@ func rooWithXMLCalls(blocks []any) []any {
 		case "tool_use":
 			return blocks
 		case "text":
-			s, _ := m["text"].(string)
-			calls = append(calls, rooXMLCalls(s)...)
+			if len(calls) == 0 {
+				s, _ := m["text"].(string)
+				calls = rooXMLCalls(s)
+			}
 		}
 	}
 	return append(blocks, calls...)
@@ -133,16 +167,21 @@ var rooResultHeader = regexp.MustCompile(`(?s)^\[([a-z_]+)(?: for '.*?')?\] Resu
 // person's words, without the header.
 var rooAnswerTools = map[string]bool{"ask_followup_question": true, "attempt_completion": true}
 
+// rooFeedback is what the person typed beside a result: approving or denying
+// a call, or while a command ran, the client wraps it in <feedback>.
+var rooFeedback = regexp.MustCompile(`(?s)<feedback>\s*(.*?)\s*</feedback>`)
+
 // rooUserTurn splits a user turn's text blocks into what tools printed and
 // what the person wrote. A result runs from its header to the next header or
-// to the host's environment_details block. A turn in any other shape is all
-// the person's.
-func rooUserTurn(raw json.RawMessage) (results []string, words string) {
+// to the host's environment_details block, and the feedback inside it is the
+// person's. A turn in any other shape, or of a task that is not from the XML
+// era, is all the person's.
+func rooUserTurn(raw json.RawMessage, xmlEra bool) (results []string, words string) {
 	var blocks []struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}
-	if json.Unmarshal(raw, &blocks) != nil {
+	if !xmlEra || json.Unmarshal(raw, &blocks) != nil {
 		return nil, clineContentText(raw)
 	}
 	var parts []string
@@ -179,6 +218,11 @@ func rooUserTurn(raw json.RawMessage) (results []string, words string) {
 	}
 	kept := results[:0]
 	for _, r := range results {
+		for _, m := range rooFeedback.FindAllStringSubmatch(r, -1) {
+			if m[1] != "" {
+				parts = append(parts, m[1])
+			}
+		}
 		if r != "" {
 			kept = append(kept, r)
 		}

@@ -324,6 +324,11 @@ func parseRooShapedTask(path, harness string) ([]model.Session, error) {
 			base = fi.ModTime()
 		}
 	}
+	contents := make([]json.RawMessage, len(turns))
+	for i, m := range turns {
+		contents[i] = m.Content
+	}
+	xmlEra := rooXMLEra(contents)
 	for ti, m := range turns {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
@@ -339,14 +344,14 @@ func parseRooShapedTask(path, harness string) ([]model.Session, error) {
 		if m.Role == "user" {
 			// A result of the XML era is a text block, not a tool_result
 			// (#4424), so the person's words are what is left beside it.
-			results, words := rooUserTurn(m.Content)
+			results, words := rooUserTurn(m.Content, xmlEra)
 			tool := append(clineTurnToolOutput(m.Content, ts), rooLegacyToolOutput(results, ts)...)
 			if len(tool) > 0 {
 				s.Touch(ts)
 				s.Messages = append(s.Messages, tool...)
 			}
 			text = unwrapClineTask(words)
-		} else if work := rooWorkRecords(m.Content, ts, item.Workspace); len(work) > 0 {
+		} else if work := rooWorkRecords(m.Content, ts, item.Workspace, xmlEra); len(work) > 0 {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, work...)
 		}
