@@ -327,7 +327,16 @@ func resumeCommand(s model.Session) (string, string, error) {
 		// terminal: `roo --session-id`, scoped to the workspace the task was
 		// in. Editor tasks live under the host's globalStorage, the CLI never
 		// lists them, and there is still no command for those.
+		//
+		// The CLI looks a task up under the workspace it is handed, and with
+		// no -w that is the real path of its cwd. A task created with -w
+		// through a symlink (/tmp on macOS) recorded the link, so a plain cd
+		// answered "Session not found" (#4422). The path goes on the command
+		// as one word, so one that would need quoting keeps the cd alone.
 		if id, ws := sources.RooCLITask(s.Path); id != "" {
+			if ws != "" && reasonixPathPattern.MatchString(ws) {
+				return ws, "roo -w " + ws + " --session-id " + id, nil
+			}
 			return ws, "roo --session-id " + id, nil
 		}
 		return "", "", fmt.Errorf("roo tasks from the VS Code extension reopen from its history UI; only the ones the roo CLI created take --session-id")
