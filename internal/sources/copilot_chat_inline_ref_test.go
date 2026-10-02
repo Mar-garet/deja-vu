@@ -84,3 +84,17 @@ func TestCopilotChatAgentEditNamesTheFileInsteadOfAnEmptyFence(t *testing.T) {
 		t.Errorf("a code block with code in it changed: %q, want %q", got, want)
 	}
 }
+
+// A reference to the workspace root or a URI string with an escaped space
+// reads as a name, not "/" or "%20".
+func TestCopilotChatInlineReferenceOddPaths(t *testing.T) {
+	got, _ := copilotChatAssistantText(t, `[
+		{"value":"see "},
+		{"kind":"inlineReference","inlineReference":{"$mid":1,"path":"/","scheme":"file"}},
+		{"value":"and "},
+		{"kind":"inlineReference","inlineReference":"file:///tmp/proj/my%20notes.md"}
+	]`)
+	if want := "see and my notes.md"; got != want {
+		t.Errorf("assistant text = %q, want %q", got, want)
+	}
+}

@@ -717,8 +717,8 @@ func copilotChatEditFence(parts []any, i int) ([]any, int, bool) {
 	if kind, _ := cb["kind"].(string); kind != "codeblockUri" {
 		return nil, 0, false
 	}
-	p := copilotChatRefPath(cb["uri"])
-	if p == "" {
+	name := copilotChatBaseName(copilotChatRefPath(cb["uri"]))
+	if name == "" {
 		return nil, 0, false
 	}
 	k := i + 2
@@ -733,7 +733,7 @@ func copilotChatEditFence(parts []any, i int) ([]any, int, bool) {
 	if !ok {
 		return nil, 0, false
 	}
-	fold := []any{before + "\n" + copilotChatBaseName(p) + "\n"}
+	fold := []any{before + "\n" + name + "\n"}
 	fold = append(fold, parts[i+1:k]...)
 	if after != "" {
 		fold = append(fold, after)
@@ -793,7 +793,18 @@ func copilotChatCutCloseFence(text string) (string, bool) {
 // copilotChatBaseName is a file's name out of a path or URI path, whichever
 // separator it was written with.
 func copilotChatBaseName(p string) string {
-	return path.Base(strings.ReplaceAll(p, "\\", "/"))
+	// A URI written as a string keeps its escapes; the object form's path
+	// does not.
+	if strings.Contains(p, "://") {
+		if u, err := url.PathUnescape(p); err == nil {
+			p = u
+		}
+	}
+	base := path.Base(strings.ReplaceAll(p, "\\", "/"))
+	if base == "/" || base == "." {
+		return ""
+	}
+	return base
 }
 
 func copilotChatWalkPart(part any, t time.Time, speech *[]string, extras *[]model.Message) {
