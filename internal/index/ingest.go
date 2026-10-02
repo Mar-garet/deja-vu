@@ -2679,6 +2679,15 @@ func attributeSession(held SessionMeta, s model.Session) (owns, collided bool) {
 			return !newIsHist, false
 		}
 	}
+	// A ZCode snapshot restored into the CLI database is the same
+	// conversation there under the same id, and the snapshot stays on disk
+	// unchanged, so an incremental pass never re-reads it to skip it. The
+	// database owns the row (#4432).
+	if s.Harness == "zcode" {
+		if newIsSnap, heldIsSnap := isZCodeSnapshot(s.Path), isZCodeSnapshot(held.Path); newIsSnap != heldIsSnap {
+			return !newIsSnap, false
+		}
+	}
 	return s.Path < held.Path, true
 }
 
@@ -2735,6 +2744,13 @@ func holdsText(s model.Session) bool {
 // rollout. Named, for the reason isGooseStore gives.
 func isCodexHistory(path string) bool {
 	return strings.EqualFold(filepath.Base(path), "history.jsonl")
+}
+
+// isZCodeSnapshot reports whether a ZCode session's path is a snapshot an
+// older ZCode left: the CLI database's sessions carry their directory and the
+// transcripts end in .jsonl.
+func isZCodeSnapshot(path string) bool {
+	return strings.EqualFold(filepath.Ext(path), ".json")
 }
 
 // isOpencodeDiff reports whether a path is one of opencode's per-session diff
