@@ -37,6 +37,12 @@ type FileKind struct {
 	// and added to what is stored. nil means always. A kind whose new lines can
 	// rewrite a record already stored says no, and the file is read whole.
 	Resumes func(path string, offset int64) bool
+	// Sidecar fingerprints the files beside a transcript that the reader takes
+	// the session's title, workspace or clock from. The agent writes them
+	// without touching the transcript, late or on a rename, so the fingerprint
+	// is part of the file state and a change re-reads the session (#4319,
+	// #4446). nil when the transcript holds it all.
+	Sidecar func(path string) (size, stamp int64)
 }
 
 func sinceTime(nano int64) time.Time { return time.Unix(0, nano) }
@@ -245,6 +251,7 @@ func allHarnesses() []Harness {
 				Parse:     fullParse(ParseGrokFile),
 				ParseFrom: offsetParse(ParseGrokFileFromOffset),
 				Resumes:   GrokResumes,
+				Sidecar:   besideSidecar("summary.json"),
 			}, {
 				// The maintained CLI writes no session files at all: one
 				// SQLite store beside the config, like opencode's.
@@ -328,6 +335,7 @@ func allHarnesses() []Harness {
 				Parse:     fullParse(ParseKimiFile),
 				ParseFrom: offsetParse(ParseKimiFileFromOffset),
 				Resumes:   KimiResumes,
+				Sidecar:   kimiSidecar,
 			}},
 		},
 		{
@@ -337,7 +345,8 @@ func allHarnesses() []Harness {
 				Match: func(p string) bool {
 					return strings.HasSuffix(p, ".messages.json") && strings.HasPrefix(p, ClineSessionsDir())
 				},
-				Parse: fullParse(ParseClineFile),
+				Parse:   fullParse(ParseClineFile),
+				Sidecar: clineSDKSidecar,
 			}, {
 				Name: "cline-vscode",
 				Match: func(p string) bool {
@@ -354,7 +363,8 @@ func allHarnesses() []Harness {
 					}
 					return false
 				},
-				Parse: fullParse(ParseClineFile),
+				Parse:   fullParse(ParseClineFile),
+				Sidecar: clineVSCodeSidecar,
 			}},
 		},
 		{
@@ -483,7 +493,8 @@ func allHarnesses() []Harness {
 				Match: func(p string) bool {
 					return hasBase(p, "api_conversation_history.json") && kiloUnderTasks(p)
 				},
-				Parse: fullParse(ParseKiloTask),
+				Parse:   fullParse(ParseKiloTask),
+				Sidecar: besideSidecar("history_item.json"),
 			}, {
 				Name:      "kilocode-db",
 				Match:     func(p string) bool { return p == KiloDB() },
@@ -506,7 +517,8 @@ func allHarnesses() []Harness {
 					}
 					return false
 				},
-				Parse: fullParse(ParseRooTask),
+				Parse:   fullParse(ParseRooTask),
+				Sidecar: besideSidecar("history_item.json"),
 			}},
 		},
 		{
@@ -619,9 +631,10 @@ func allHarnesses() []Harness {
 			// upsert or a history replace rewrites what came before.
 			Name: "reasonix", Load: LoadReasonix, Files: ReasonixSessionFiles,
 			Kinds: []FileKind{{
-				Name:  "reasonix",
-				Match: IsReasonixSession,
-				Parse: fullParse(ParseReasonixFile),
+				Name:    "reasonix",
+				Match:   IsReasonixSession,
+				Parse:   fullParse(ParseReasonixFile),
+				Sidecar: reasonixSidecar,
 			}},
 		},
 		{

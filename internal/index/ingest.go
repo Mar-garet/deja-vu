@@ -5013,14 +5013,10 @@ func currentFilesWith(h string, old map[string]FileState) map[string]FileState {
 					fs.PrefixSample = filePrefixSample(p, fs.SafeSize)
 				}
 			}
-			kind := harnessForPath(p)
-			if meta := metadataFileFor(kind, p); meta != "" {
-				if summary, err := os.Lstat(meta); err == nil && summary.Mode()&os.ModeSymlink == 0 && !summary.IsDir() {
-					fs.MetadataSize = summary.Size()
-					fs.MetadataMTime = summary.ModTime().UnixNano()
-				}
+			if k, ok := kindForPath(p); ok && k.Sidecar != nil {
+				fs.MetadataSize, fs.MetadataMTime = k.Sidecar(p)
 			}
-			if kind == "grok" {
+			if harnessForPath(p) == "grok" {
 				if cwd, err := os.Lstat(filepath.Join(filepath.Dir(filepath.Dir(p)), ".cwd")); err == nil && cwd.Mode()&os.ModeSymlink == 0 && !cwd.IsDir() {
 					fs.CWDSize = cwd.Size()
 					fs.CWDMTime = cwd.ModTime().UnixNano()
@@ -5031,24 +5027,6 @@ func currentFilesWith(h string, old map[string]FileState) map[string]FileState {
 	}
 	injectHermesPG(out, old)
 	return out
-}
-
-// metadataFileFor is the file beside a transcript that holds the session's
-// title, which the agent can rewrite without touching the transcript: grok's
-// summary.json, and the <id>.json manifest a Cline CLI rename rewrites alone
-// (#4319). Its size and mtime are part of the file state, so a rename alone
-// re-reads the session.
-func metadataFileFor(kind, p string) string {
-	switch kind {
-	case "grok":
-		return filepath.Join(filepath.Dir(p), "summary.json")
-	case "cline-sdk":
-		// Named after the session directory, the one the reader opens for
-		// every transcript in it, not after the transcript.
-		dir := filepath.Dir(p)
-		return filepath.Join(dir, filepath.Base(dir)+".json")
-	}
-	return ""
 }
 
 // injectHermesPG adds the Postgres-backed Hermes store, which has no inode to

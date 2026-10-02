@@ -452,6 +452,9 @@ import (
 //
 // 60 also: a kiro-cli reply or tool call appended after a pass takes the
 // Prompt's time, not 0001-01-01 (#4444).
+//
+// 60 also: a Roo, Kilo, Cline VS Code, Reasonix or Kimi session whose title or
+// workspace file changed alone is read again (#4446).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
