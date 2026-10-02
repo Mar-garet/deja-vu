@@ -101,6 +101,9 @@ func OpenClawSidecarFiles() []string {
 		switch {
 		case strings.HasSuffix(p, ".trajectory-path.json"), strings.HasSuffix(p, ".trajectory.jsonl"):
 			return true
+		case filepath.Base(p) == ".usage-cost-cache.json":
+			// The usage cost cache (#4477).
+			return true
 		case filepath.Base(p) == "sessions.json":
 			return true
 		case openclawCheckpointRE.MatchString(p):
