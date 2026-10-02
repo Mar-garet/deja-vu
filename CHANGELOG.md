@@ -233,6 +233,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Gemini session resumed into a second file keeps its latest time when only the transcript changes again; an update moved it back to the transcript's own last turn until a rebuild (#4574).
 - A Crush command the user denied is no longer indexed as one that ran, and a denied edit or view no longer lists its file as touched (#4575).
 - An omp patch edit that moves a file records the lines it wrote under the new path, and lists both paths, so `deja blame` and `restore` find the moved file (#4576).
+- `deja install codex-auto` says when some of its hooks still need approving in codex, as after an upgrade that adds SessionEnd; it spoke only when none were approved (#4572).
 
 ## [0.21.4] - 2026-09-29
 

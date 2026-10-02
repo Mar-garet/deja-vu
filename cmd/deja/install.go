@@ -1165,8 +1165,20 @@ func installCodexAuto(exe string, uninstall bool) (installResult, error) {
 	// because this is the moment someone is watching, and because the state it
 	// warns about is invisible: everything on disk looks right and no memory
 	// arrives.
-	if err == nil && !uninstall && !codexHasSeenItsHook() {
-		fmt.Println("codex: open codex once and approve the hook (/hooks) — until then it runs nothing, `codex exec` included")
+	if err == nil && !uninstall {
+		if !codexHasSeenItsHook() {
+			fmt.Println("codex: open codex once and approve the hook (/hooks) — until then it runs nothing, `codex exec` included")
+		} else if st := codexHookWiringState(); st.state == "wired" && st.approved < st.pinned {
+			// Trust is per hook, so a machine that approved the older ones
+			// runs those and skips one this install added: SessionEnd, on an
+			// upgrade past #4545. Only doctor said so (#4572).
+			n := st.pinned - st.approved
+			verb, them := "are", "them"
+			if n == 1 {
+				verb, them = "is", "it"
+			}
+			fmt.Printf("codex: %d of %d hooks %s new or changed — open codex once and approve %s (/hooks); until then codex runs only the others\n", n, st.pinned, verb, them)
+		}
 	}
 	return res, err
 }
