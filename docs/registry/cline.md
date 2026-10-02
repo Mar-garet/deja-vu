@@ -21,7 +21,9 @@ output whether it is a string or the CLI's list of
 it (#4315). The legacy extension's store takes
 the Roo path for those, since its tools are Roo's — see
 [Roo Code](roo.md) for the SEARCH/REPLACE shape and the workspace-relative
-paths. The legacy `<task>...</task>` user envelope is unwrapped so the tags are
+paths. Two spellings are Cline's own: `replace_in_file` blocks are marked
+`------- SEARCH` / `=======` / `+++++++ REPLACE`, and `apply_patch` names its
+patch `input` where Roo's names it `patch`. The legacy `<task>...</task>` user envelope is unwrapped so the tags are
 not indexed.
 
 - **MCP**: `deja install cline` writes `mcpServers.deja` into

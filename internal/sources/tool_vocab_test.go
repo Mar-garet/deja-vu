@@ -94,6 +94,10 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 			vocabWrote("/tmp/proj/jitter.go", jitter),
 			vocabEdit("/tmp/proj/retry.go", oldLoop),
 		}, patchWants...)},
+		{"cline-vscode replace_in_file and apply_patch", vocabClineVSCode(patch), append([]string{
+			vocabEdit("/tmp/proj/backoff.go", "for retries := 0; ; retries++ {"),
+			vocabWrote("/tmp/proj/backoff.go", "for attempt := 0; attempt < maxAttempts; attempt++ {"),
+		}, patchWants...)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

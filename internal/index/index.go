@@ -515,6 +515,9 @@ import (
 //
 // 60 also: a Cline CLI editor call leaves a wrote record of new_text, and an
 // apply_patch call files, edit and wrote records (#4503).
+//
+// 60 also: a Cline extension replace_in_file with Cline's own markers, or an
+// apply_patch under input, leaves edit and wrote records (#4504).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
