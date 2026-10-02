@@ -206,6 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In pi the session-start digest tells the agent to run `deja ctx` in the shell instead of calling `recall_context`, a tool pi does not have; following the old lead ended in "Tool recall_context not found". Run `deja install pi-auto` again to update the extension (#4584).
 - `deja show` no longer says a plain `grok -p` session has no recorded parent: Grok Build marks every scripted run "headless", which deja took for a spawn kind, and those sessions are no longer kept out of `deja rules` candidates as subagents either (#4585).
 - `deja doctor` no longer reports a fully indexed Grok Build store as having files it does not recognise: `usage.json` and `tool_definitions.json`, which grok 1.0.41 writes into every session, are counted as grok's own (#4586).
+- `deja doctor` no longer suggests `grok mcp add deja -c deja -a mcp` to a Grok Build user, whose `grok` rejects it and already reads the server from `~/.grok/config.toml`; the line shows only when the `grok` on PATH is @vibe-kit/grok-cli or there is none (#4587).
 
 ## [0.21.4] - 2026-09-29
 

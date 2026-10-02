@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1871,6 +1872,12 @@ func doctorCherryStudioMCP(w io.Writer, fileStatus, importPath string) bool {
 func doctorWiringNote(name string) string {
 	switch name {
 	case "grok":
+		// Grok Build rejects that command ("unexpected argument '-c'") and
+		// reads the server from config.toml already, so the line is for a
+		// machine whose grok is the vibe-kit CLI, or that has none (#4587).
+		if !grokOnPathIsVibeKit() {
+			return ""
+		}
 		return "@vibe-kit/grok-cli reads MCP only from <cwd>/.grok/settings.json — run `grok mcp add deja -c deja -a mcp` in a project to wire that one"
 	case "cherrystudio":
 		// The only target whose "wired" is about a file the app has not read
@@ -1885,6 +1892,28 @@ func doctorWiringNote(name string) string {
 		return "one settings file per editor — `deja install " + name + "` writes every host that has the extension"
 	}
 	return ""
+}
+
+// grokOnPathIsVibeKit reports whether the `grok` on PATH is
+// @vibe-kit/grok-cli, or whether there is no grok to ask. Read off where the
+// command resolves to, or off a small launcher script that names the package,
+// so doctor runs nothing to find out.
+func grokOnPathIsVibeKit() bool {
+	p, err := exec.LookPath("grok")
+	if err != nil {
+		return true
+	}
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		p = r
+	}
+	if strings.Contains(filepath.ToSlash(p), "@vibe-kit/") {
+		return true
+	}
+	if st, err := os.Stat(p); err == nil && st.Size() < 64<<10 {
+		b, _ := os.ReadFile(p)
+		return bytes.Contains(b, []byte("@vibe-kit/grok-cli"))
+	}
+	return false
 }
 
 type doctorMCPConfig struct {
