@@ -79,3 +79,29 @@ func TestCrushExitWhenOutputHoldsACwdTag(t *testing.T) {
 		t.Errorf("records = %q, want %q", got, want)
 	}
 }
+
+// A call the user denied never ran: crush stores "User denied permission" with
+// is_error as its result. It left a command record as if it had run, and a
+// denied edit its files record (#4575). A call that ran and failed keeps both.
+func TestCrushDeniedCallLeavesNoRecord(t *testing.T) {
+	edit := `{"file_path":"/tmp/proj/retry.go","old_string":"\tfor {","new_string":"\tfor i := 0; i < 3; i++ {"}`
+	got := crushJoinRecords(t, "denied", [][]any{
+		{"call", "c1", "bash", `{"command":"git push --force origin main"}`, false},
+		{"result", "c1", "bash", "User denied permission", true},
+		{"call", "c2", "edit", edit, false},
+		{"result", "c2", "edit", "User denied permission", true},
+		{"call", "c3", "view", `{"file_path":"/etc/hosts"}`, false},
+		{"result", "c3", "view", "User denied permission", true},
+		{"call", "c4", "bash", `{"command":"go vet ./retry"}`, false},
+		{"result", "c4", "bash", "boom\nExit code 1\n\n<cwd>/tmp/proj</cwd>", false},
+		{"call", "c5", "edit", edit, false},
+		{"result", "c5", "edit", "old_string not found in file", true},
+	})
+	want := []string{
+		"command go vet ./retry  → exit 1",
+		"files /tmp/proj/retry.go",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("records =\n%q\nwant\n%q", got, want)
+	}
+}

@@ -231,6 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The line `deja resume` prints no longer runs part of the session's directory name. On Windows a curly single quote in it is escaped, and a `$`, backtick or double quote leaves the cd out; elsewhere a backslash does, since fish reads it differently. deja then says where to run the command (#4591).
 - A Kimi session renamed to a short title just as a new turn arrives takes the new title, where it kept the old one until a rebuild (#4592).
 - A Gemini session resumed into a second file keeps its latest time when only the transcript changes again; an update moved it back to the transcript's own last turn until a rebuild (#4574).
+- A Crush command the user denied is no longer indexed as one that ran, and a denied edit or view no longer lists its file as touched (#4575).
 
 ## [0.21.4] - 2026-09-29
 

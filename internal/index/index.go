@@ -624,6 +624,9 @@ import (
 // 60 also: a row shared by two files keeps the span of the one that does not
 // own it, so reading the owner again leaves Updated where a rebuild has it
 // (#4574).
+//
+// 60 also: a Crush call the user denied leaves no command, files, edit or
+// wrote record (#4575).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
