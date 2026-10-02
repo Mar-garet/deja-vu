@@ -353,10 +353,15 @@ test("the plugin ends the sessions it stamped, at idle and at dispose", async ()
     assert.equal(ended().length, 0, "a busy status ended the session")
     await hooks.event({ event: { type: "session.idle", properties: { sessionID: "ses_F" } } })
     assert.deepEqual(ended(), ['hook-session-end {"session_id":"ses_F"}'])
+    await hooks["experimental.chat.messages.transform"](
+      { sessionID: "ses_G" },
+      { messages: [{ info: { role: "user", sessionID: "ses_G" }, parts: [{ type: "text", text: "the flaky test" }] }] },
+    )
     rmSync(calls, { force: true })
     assert.equal(typeof hooks.dispose, "function", "no dispose: opencode run exits with the session stamped")
     await hooks.dispose()
-    assert.deepEqual(ended(), ['hook-session-end {"session_id":"ses_F"}'])
+    // idle already ended ses_F; dispose ends only what is still live.
+    assert.deepEqual(ended(), ['hook-session-end {"session_id":"ses_G"}'])
   })
 })
 

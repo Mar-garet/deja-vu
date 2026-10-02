@@ -781,7 +781,10 @@ export const DejaRecall = async ({ $, client, directory }) => {
     event: async ({ event }) => {
       try {
         const id = event?.type === "session.idle" ? event.properties?.sessionID : ""
-        if (id) await endSession(id)
+        if (!id) return
+        await endSession(id)
+        // Ended, so dispose does not spawn deja for it again on the way out.
+        live.delete(id)
       } catch {
         // memory is optional: never break the session over it
       }

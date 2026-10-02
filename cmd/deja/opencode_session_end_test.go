@@ -43,6 +43,8 @@ await hooks.event({ event: { type: "session.status", properties: { sessionID: "s
 console.log("busy:" + ran.filter((c) => c.includes("hook-session-end")).length);
 await hooks.event({ event: { type: "session.idle", properties: { sessionID: "ses_F" } } });
 console.log("idle:" + JSON.stringify(ran.filter((c) => c.includes("hook-session-end"))));
+await hooks["experimental.chat.messages.transform"]({ sessionID: "ses_G" },
+  { messages: [{ info: { role: "user", sessionID: "ses_G" }, parts: [{ type: "text", text: "the flaky test" }] }] });
 ran.length = 0;
 if (typeof hooks.dispose !== "function") { console.log("NODISPOSE"); process.exit(0) }
 await hooks.dispose();
@@ -64,15 +66,20 @@ console.log("dispose:" + JSON.stringify(ran.filter((c) => c.includes("hook-sessi
 	if !strings.Contains(got, "busy:0") {
 		t.Errorf("a busy status ended the session:\n%s", got)
 	}
-	for _, phase := range []string{"idle:", "dispose:"} {
+	// idle ends ses_F; dispose ends only what is still live, ses_G, and does
+	// not spawn deja for ses_F a second time.
+	for _, c := range []struct{ phase, ends, not string }{{"idle:", "ses_F", ""}, {"dispose:", "ses_G", "ses_F"}} {
 		line := ""
 		for _, l := range strings.Split(got, "\n") {
-			if strings.HasPrefix(l, phase) {
+			if strings.HasPrefix(l, c.phase) {
 				line = l
 			}
 		}
-		if !strings.Contains(line, `\"session_id\":\"ses_F\"`) || !strings.Contains(line, "/usr/local/bin/deja") {
-			t.Errorf("%s did not end ses_F through hook-session-end: %q\n%s", phase, line, got)
+		if !strings.Contains(line, `\"session_id\":\"`+c.ends+`\"`) || !strings.Contains(line, "/usr/local/bin/deja") {
+			t.Errorf("%s did not end %s through hook-session-end: %q\n%s", c.phase, c.ends, line, got)
+		}
+		if c.not != "" && strings.Contains(line, c.not) {
+			t.Errorf("%s ended %s again: %q", c.phase, c.not, line)
 		}
 	}
 }
