@@ -491,9 +491,11 @@ import (
 // a renamed Cline CLI session takes its new title (#4319), and a thin harness
 // title is not retaken from an appended turn (#4452); rows already held
 // change only on a rebuild.
+//
 // 60 also: a failed command carries its `→ exit N` in claude, the pi family,
 // goose, cline, kiro-cli, zed and copilot-chat, and a copilot-chat terminal
 // call its output (#4487, #4501, #4496, #4502, #4505, #4507, #4493).
+//
 // 60 also: a Claude Code PowerShell call is a command and a NotebookEdit call
 // leaves files and wrote records (#4489).
 //
@@ -590,6 +592,15 @@ import (
 // 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
 // call leaves files records, notebook_edit a wrote record and delete_range an
 // edit record from its result's diff (#4541).
+//
+// 60 also: a Grok Build `grok -p` session, which grok marks "headless", is no
+// longer stored with that as its spawn kind (#4585).
+//
+// 60 also: a Copilot Chat reply keeps the file and symbol names VS Code draws
+// inline, from its inlineReference parts (#4589).
+//
+// 60 also: a Copilot Chat agent edit reads as the edited file's name in the
+// reply, not as an empty code fence (#4590).
 //
 // 60 also: a Codex sub-agent's rollout records the thread that spawned it as
 // its parent (#4547).

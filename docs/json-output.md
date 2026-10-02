@@ -567,7 +567,9 @@ directory) doctor runs in. For Reasonix, `switched_off` means deja's plugin pack
 record in `plugin-packages.json`, which is what `reasonix plugin disable deja`
 leaves. The `deepseek` row carries `plugin_missing` when
 `cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh
-from starting at all.
+from starting at all. The `pi` row is `no-adapter`, with the fix in `note`,
+when `mcp.json` declares deja and pi's packages do not include
+pi-mcp-adapter, the only thing in pi that reads that file.
 `cherrystudio` is read from the app's own database: `wired`
 with that database as `path` when one of its servers runs `deja mcp`, and
 `disabled` with the database as `path` when deja's server is there with its

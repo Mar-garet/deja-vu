@@ -162,7 +162,7 @@
 <li>The bootstrap event fires in gateway mode, and only when the agent workspace is first bootstrapped — not once per session. Tested under <code>openclaw agent --local</code>, the pack looks dead; that is what the plugin half is for.</li>
 <li>There is no way to answer a failed command in the turn that produced it. <code>before_tool_call</code> can block a tool or rewrite its arguments; <code>after_tool_call</code> only observes; a message returned from <code>tool_result_persist</code> never reached the model in either mode; and <code>enqueueNextTurnInjection</code> returned nothing and drained nothing on the next turn, locally or through the gateway. So the repair other harnesses get beside the error has nowhere to go here.</li>
 </ul>
-<p><code>plugins.allow</code> is left alone: it is advisory, leaving it costs one warning at startup, and writing to it would be deja deciding what you trust.</p>
+<p><code>plugins.allow</code> is left alone: writing to it would be deja deciding what you trust. The plugin's directory goes into <code>plugins.load.paths</code> instead, which OpenClaw counts as provenance, so it starts without the two <code>[plugins]</code> warnings about an untracked plugin.</p>
 
 <h2>What arrives</h2>
 <p>At bootstrap, a short digest of what this machine has done on the project — decisions, the commands that worked, the errors that recurred — as one more entry in the Project Context. On each prompt, when your history already answers it, the plugin says so in front of the model; silence is the common case, and an injection is capped at about 1.5 KB per prompt and 4 KB per tool call. <a href="token-cost.html">What memory costs</a> has the measured comparison.</p>

@@ -266,6 +266,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		state = "stale"
 	case a.name == "zcode" && !zcodeHooksRun(b):
 		state = "stale"
+	case a.name == "openclaw" && openclawPluginMissing():
+		state = "stale"
 	default:
 		state = "wired"
 	}
@@ -278,6 +280,21 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		binaryMissing = true
 	}
 	return state, binaryMissing
+}
+
+// openclawPluginDir is where openclaw-auto puts deja's plugin.
+func openclawPluginDir() string {
+	return filepath.Join(sources.OpenClawStateDir(), "extensions", openclawPluginID)
+}
+
+// openclawPluginMissing reports whether the plugin half of openclaw-auto is
+// gone. The row's file is the hook pack, which fires only in gateway mode; the
+// plugin carries the digest and per-prompt recall under `openclaw agent
+// --local` and `openclaw chat`, and OpenClaw says nothing when the entry in
+// openclaw.json names a plugin that is not there (#4580).
+func openclawPluginMissing() bool {
+	_, err := os.Stat(filepath.Join(openclawPluginDir(), "index.mjs"))
+	return err != nil
 }
 
 // aiderWiring is the aider row's state when the context file and the read:
@@ -379,6 +396,8 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no enabled record in %s — `deja install reasonix-auto`)\n", a.name, "stale", reportPath(path), reportPath(reasonixStatePath()))
 		case a.name == "zcode" && !zcodeHooksRun(b):
 			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's hook is not under hooks.events with hooks.enabled on — `deja install zcode-auto`)\n", a.name, "stale", reportPath(path))
+		case a.name == "openclaw" && openclawPluginMissing():
+			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's plugin is not in %s — `openclaw agent --local` and `openclaw chat` get no recall; `deja install openclaw-auto`)\n", a.name, "stale", reportPath(path), reportPath(openclawPluginDir()))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
 			if off := autoWiringSwitchedOff(a.name); off != "" {

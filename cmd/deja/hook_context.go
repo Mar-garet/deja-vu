@@ -400,6 +400,10 @@ func runHookContextMode(dir string, plain, once bool) error {
 		// question, so a first turn with nothing to say has nothing new to say
 		// on the second either.
 		Once bool `json:"deja_once"`
+		// Shell is set by a host with no deja tool for the agent to call: pi
+		// has no MCP of its own, and a lead naming recall_context sent the
+		// model to "Tool recall_context not found" on every first turn (#4584).
+		Shell bool `json:"deja_shell"`
 	}
 	// Best effort, as every hook is — but not silent about it. A payload deja
 	// cannot decode carries the session this injection went to, and losing it
@@ -418,6 +422,20 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// The first moment this session exists, so the first recall of it — the one
 	// an agent plans against — already knows whose transcript to leave out.
 	markSessionLive(dir, input.SessionID)
+	// Grok shows the receipt and drops the context, so nothing is served,
+	// claimed or logged as arrived; a note about the index still goes to the
+	// user, which is the part grok does show (#4588).
+	if grokDropsContext() {
+		if !plain {
+			if line := joinNotes(rewireNote(rewired), joinNotes(stuckWiringNote(stuckWiring), buildNotice(dir))); line != "" {
+				var resp sessionStartHookResponse
+				resp.HookSpecificOutput.HookEventName = "SessionStart"
+				resp.SystemMessage = line
+				emitHookResponse(resp)
+			}
+		}
+		return nil
+	}
 	if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "SessionStart", shape, os.Stdout); delivered {
 		return err
 	}
@@ -536,6 +554,9 @@ func runHookContextMode(dir string, plain, once bool) error {
 		if ev := compactEvidence(dir, input.SessionID, hookCWD(hookProjectPath(input.CWD, input.WorkspaceRoots))); ev != "" {
 			lead += "\n" + ev + "\n"
 		}
+	}
+	if input.Shell {
+		lead = shellRecallLead(lead)
 	}
 	digest = lead + digest
 	if tip := limitHandoffTip(dir); tip != "" {
@@ -1563,6 +1584,12 @@ func startLead(narrow string) string {
 		return wideRecallLead
 	}
 	return narrow
+}
+
+// shellRecallLead points a lead at the shell command instead of the tool, for
+// a harness whose agent has no deja tool to call (#4584).
+func shellRecallLead(lead string) string {
+	return strings.ReplaceAll(lead, "call recall_context with", "run `deja ctx` in the shell with")
 }
 
 // wideRecallLead is sessionStartLead for DEJA_RECALL=aggressive, where the

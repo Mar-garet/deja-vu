@@ -493,6 +493,19 @@ func jsoncRemoveKey(text, blockKey, key string, dropFrom int) (string, error) {
 			return text, nil
 		}
 		cut := zedEntrySpan(text, chain)
+		// A block that was the last key leaves the comma in front of it
+		// dangling, the same as a last scalar below.
+		if text[cut[1]-1] != ',' {
+			blank := stripJSONComments(text)
+			for i := cut[0] - 1; i >= 0; i-- {
+				if c := blank[i]; c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+					continue
+				} else if c == ',' {
+					cut[0] = i
+				}
+				break
+			}
+		}
 		return closeEmptied(text[:cut[0]]+text[cut[1]:], keys), nil
 	}
 	block, have := walkJSONCKeys(text, open, keys)
@@ -500,6 +513,9 @@ func jsoncRemoveKey(text, blockKey, key string, dropFrom int) (string, error) {
 		return text, nil
 	}
 	at := jsoncScalarValue(text, block, key)
+	if at == nil {
+		at = jsoncListValue(text, block, key)
+	}
 	if at == nil {
 		return text, nil
 	}
@@ -585,6 +601,66 @@ func jsoncScalarValue(text string, block *zedSpan, key string) *[2]int {
 				}
 				span := [2]int{v, stop}
 				return &span
+			}
+			i = end - 1
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+		}
+	}
+	return nil
+}
+
+// jsoncListValue is where a list setting's value sits inside a block, from
+// its '[' to one past the matching ']', or nil when the key is not there or
+// holds something else. OpenClaw's plugins.load.paths is the one deja edits
+// (#4579).
+func jsoncListValue(text string, block *zedSpan, key string) *[2]int {
+	want := `"` + key + `"`
+	depth := 0
+	for i := block.valueOpen + 1; i < block.valueEnd-1; i++ {
+		if j := zedSkipComment(text, i); j != i {
+			i = j - 1
+			continue
+		}
+		switch text[i] {
+		case '"':
+			end := zedStringEnd(text, i)
+			if end < 0 {
+				return nil
+			}
+			if depth == 0 && text[i:end] == want && jsoncIsKey(text, end) {
+				v := end
+				for v < len(text) && (text[v] == ' ' || text[v] == '\t' || text[v] == '\n' || text[v] == '\r' || text[v] == ':') {
+					v++
+				}
+				if v >= len(text) || text[v] != '[' {
+					return nil
+				}
+				level := 0
+				for k := v; k < block.valueEnd-1; k++ {
+					if j := zedSkipComment(text, k); j != k {
+						k = j - 1
+						continue
+					}
+					switch text[k] {
+					case '"':
+						e := zedStringEnd(text, k)
+						if e < 0 {
+							return nil
+						}
+						k = e - 1
+					case '[', '{':
+						level++
+					case ']', '}':
+						level--
+						if level == 0 {
+							return &[2]int{v, k + 1}
+						}
+					}
+				}
+				return nil
 			}
 			i = end - 1
 		case '{', '[':
