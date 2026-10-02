@@ -161,18 +161,24 @@ func TestContinueEditExistingFileWrote(t *testing.T) {
 	}
 	changes := "// ... existing code ...\n" + newLoop + "\n\t# ... rest of code ...\n<!-- … unchanged markup … -->"
 	canceled := "func canceledChange() error { return nil }"
+	pending := "func neverAccepted() error { return nil }"
 	body := `{"sessionId":"s1","title":"fix the retry loop","workspaceDirectory":"/tmp/proj","history":[` +
 		`{"message":{"role":"user","content":"fix the retry loop"},"contextItems":[]},` +
 		`{"message":{"role":"assistant","content":"","toolCalls":[]},"contextItems":[],"toolCallStates":[` +
 		st("c1", "done", map[string]any{"filepath": "retry.go", "changes": changes}) + "," +
-		st("c2", "canceled", map[string]any{"filepath": "other.go", "changes": canceled}) + `]}]}`
+		st("c2", "canceled", map[string]any{"filepath": "other.go", "changes": canceled}) + "," +
+		// Still awaiting approval, or a diff not yet accepted, when the
+		// session was saved (core ToolStatus generated, calling).
+		st("c3", "generated", map[string]any{"filepath": "pending.go", "changes": pending}) + "," +
+		st("c4", "calling", map[string]any{"filepath": "pending.go", "content": pending}) + `]}]}`
 	p := vocabWrite(t, filepath.Join(t.TempDir(), "sessions", "s1.json"), body)
 	vocabCheck(t, vocabParse(t, ParseContinueFile, p), []string{
-		vocabFiles("retry.go\nother.go"),
+		vocabFiles("retry.go\nother.go\npending.go"),
 		vocabWrote("retry.go", newLoop),
 	}, []string{
 		vocabWrote("retry.go", changes),
 		vocabWrote("other.go", canceled),
+		vocabWrote("pending.go", pending),
 	})
 }
 

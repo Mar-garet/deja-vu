@@ -266,7 +266,11 @@ func continueToolWork(states []continueToolCallSt, at time.Time) []model.Message
 			}
 			path = ""
 		case "Edit", "MultiEdit", "Write", "single_find_and_replace", "multi_edit", "create_new_file", "edit_existing_file":
-			if st.Status == "errored" || st.Status == "canceled" || path == "" || strings.ContainsAny(path, "\n\r") {
+			// Only a call that finished: errored and canceled changed nothing,
+			// and generating, generated (awaiting approval) and calling (a
+			// diff not yet accepted) may never. A state with no status is
+			// older than the field.
+			if (st.Status != "" && st.Status != "done") || path == "" || strings.ContainsAny(path, "\n\r") {
 				break
 			}
 			olds := []string{str(args["old_string"])}
