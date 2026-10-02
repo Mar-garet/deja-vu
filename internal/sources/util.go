@@ -944,7 +944,7 @@ func commandStrings(in map[string]any, d toolDialect) []string {
 			return nil
 		}
 		if d.argsKey != "" {
-			v += commandArgs(in[d.argsKey])
+			v += CommandArgs(in[d.argsKey])
 		}
 		return []string{v}
 	case []any:
@@ -961,10 +961,10 @@ func commandStrings(in map[string]any, d toolDialect) []string {
 	return nil
 }
 
-// commandArgs is an argument list as the suffix it puts on a command line,
+// CommandArgs is an argument list as the suffix it puts on a command line,
 // " a b", read as Command Code's formatArgsSuffix shows it: a list joined by
-// spaces, or a string as it is.
-func commandArgs(v any) string {
+// spaces, or a string as it is. The tool hooks read the same arguments.
+func CommandArgs(v any) string {
 	switch a := v.(type) {
 	case string:
 		if a != "" {

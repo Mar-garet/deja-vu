@@ -95,7 +95,9 @@
 <p>600-second maximum. And the tool matcher is a regex over Command Code&#39;s own</p>
 <p>display names — <code>SHELL</code>, <code>READ</code>, <code>EDIT</code>, <code>WRITE</code>, <code>SEARCH</code>, <code>GLOB</code>, <code>LIST</code></p>
 <p>— so a Claude-shaped <code>Bash</code> matcher never fires at all. Both are pinned by</p>
-<p>tests.</p>
+<p>tests. The matcher is case-insensitive, so <code>SHELL</code> also fires on</p>
+<p><code>powershell</code>; the hook payload carries the internal tool name and</p>
+<p><code>tool_input.args</code> after <code>command</code>, and both are read (#4540).</p>
 <ul>
 <li>There is no per-prompt event: the four documented are <code>SessionStart</code>,</li>
 </ul>

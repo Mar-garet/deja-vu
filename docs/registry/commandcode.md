@@ -54,7 +54,9 @@ next time it opens the session and keeps the old copy as `<session>.v2.bak`.
   600-second maximum. And the tool matcher is a regex over Command Code's own
   display names — `SHELL`, `READ`, `EDIT`, `WRITE`, `SEARCH`, `GLOB`, `LIST`
   — so a Claude-shaped `Bash` matcher never fires at all. Both are pinned by
-  tests.
+  tests. The matcher is case-insensitive, so `SHELL` also fires on
+  `powershell`; the hook payload carries the internal tool name and
+  `tool_input.args` after `command`, and both are read (#4540).
 - There is no per-prompt event: the four documented are `SessionStart`,
   `PreToolUse`, `PostToolUse` and `Stop`, so the digest rides SessionStart and
   the rest is the tool-time pair.
