@@ -750,6 +750,13 @@ type FileIngest struct {
 	// one threads.db, so the file's count alone put the note on every thread
 	// in it (#4340). Kept out of the JSON: the contract is the per-file count.
 	ClippedSessions map[string]int `json:"-"`
+	// Reason says why the last unusable record was skipped, for a store whose
+	// records are rows rather than lines a reader can go and look at (#4341).
+	Reason string `json:"reason,omitempty"`
+	// Unusable is those records by id. A store read from its watermark hands
+	// back only what changed, so a pass carries the rows it did not re-read
+	// instead of reporting them gone. Out of the JSON: the count is the contract.
+	Unusable map[string]string `json:"-"`
 }
 
 type manifestCore struct {
