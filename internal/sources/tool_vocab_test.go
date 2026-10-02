@@ -72,6 +72,13 @@ func TestToolVocabularyAcrossReaders(t *testing.T) {
 		{"opencode 2.x write", vocabOpencodeV2, []string{
 			vocabWrote("/tmp/proj/backoff.go", jitter),
 		}},
+		{"grok search_replace and write", vocabGrok, []string{
+			vocabFiles("/tmp/proj/retry.go"),
+			vocabEdit("/tmp/proj/retry.go", oldLoop),
+			vocabWrote("/tmp/proj/retry.go", newLoop),
+			vocabFiles("/tmp/proj/jitter.go"),
+			vocabWrote("/tmp/proj/jitter.go", jitter),
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

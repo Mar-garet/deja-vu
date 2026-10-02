@@ -166,6 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A file Copilot Chat read with `copilot_readFile`, or checked with `copilot_getErrors`, is recorded. VS Code keeps those paths only in the tool's message, where deja did not look (#4492).
 - A Gemini CLI `read_many_files` call records the files it names under `include`; globs are left out (#4494).
 - An opencode session whose changes went through `edit` or `write` keeps them: the replaced text and the written lines, on 1.x stores (and Kilo CLI's) and for `write` on 2.x, so `deja restore` and `blame` answer for those files. Which tool opencode hands a model decided whether a session had any (#4495).
+- A Grok Build session keeps what `search_replace` and `write` changed: the file, the replaced text and the written lines. Only `read_file` and the shell were read, so every edit was a bare title (#4497).
 
 ## [0.21.4] - 2026-09-29
 

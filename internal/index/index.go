@@ -503,6 +503,9 @@ import (
 //
 // 60 also: an opencode or Kilo CLI 1.x edit or write call, and a 2.x write
 // call, leaves edit and wrote records (#4495).
+//
+// 60 also: a Grok Build search_replace or write call leaves files, edit and
+// wrote records (#4497).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
