@@ -794,8 +794,16 @@ func copilotChatCutCloseFence(text string) (string, bool) {
 // separator it was written with.
 func copilotChatBaseName(p string) string {
 	// A URI written as a string keeps its escapes; the object form's path
-	// does not.
-	if strings.Contains(p, "://") {
+	// does not. The scheme is not part of the name: file:/// is the root, and
+	// untitled:Untitled-1 is a buffer VS Code calls Untitled-1. A one-letter
+	// scheme is a Windows drive.
+	if u, err := url.Parse(p); err == nil && len(u.Scheme) > 1 {
+		if u.Opaque != "" {
+			p = u.Opaque
+		} else {
+			p = u.Path
+		}
+	} else if strings.Contains(p, "://") {
 		if u, err := url.PathUnescape(p); err == nil {
 			p = u
 		}

@@ -98,3 +98,17 @@ func TestCopilotChatInlineReferenceOddPaths(t *testing.T) {
 		t.Errorf("assistant text = %q, want %q", got, want)
 	}
 }
+
+// A URI string is named by its path, not its scheme: the workspace root is
+// not "file:", and an untitled buffer is "Untitled-1".
+func TestCopilotChatInlineReferenceURIScheme(t *testing.T) {
+	got, _ := copilotChatAssistantText(t, `[
+		{"value":"see "},
+		{"kind":"inlineReference","inlineReference":"file:///"},
+		{"value":"and "},
+		{"kind":"inlineReference","inlineReference":"untitled:Untitled-1"}
+	]`)
+	if want := "see and Untitled-1"; got != want {
+		t.Errorf("assistant text = %q, want %q", got, want)
+	}
+}
