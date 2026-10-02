@@ -16,7 +16,9 @@ import (
 // copilotHome is Copilot CLI's own directory, $COPILOT_HOME or ~/.copilot.
 func copilotHome() string { return sources.CopilotHome() }
 
-// copilotMCPConfigPath is where Copilot CLI reads its MCP servers.
+// copilotMCPConfigPath is where Copilot CLI reads its MCP servers. Doctor reads
+// the same file install writes; it used to read the guidance skill instead and
+// said wired with no server registered (#4232).
 func copilotMCPConfigPath() string { return filepath.Join(copilotHome(), "mcp-config.json") }
 
 // copilotManagedHeader is what Copilot CLI 1.0.79 writes at the top of the
