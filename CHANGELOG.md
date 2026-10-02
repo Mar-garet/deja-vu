@@ -187,6 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A CodeWhale `apply_patch` edit keeps its files, replaced text and written lines, from a unified diff or from whole-file `replace` entries, so `deja restore` and `blame` see it; at most the `path` argument was recorded. A patch that failed is left out (#4538).
 - A Command Code session keeps commands run through `shell_command` with an `args` list, `powershell` and `monitor_command`, the arguments included, and a glob in `read_file`'s `paths` is no longer stored as a file the session read (#4540).
 - Command Code's tool hooks speak for `powershell` and look a `shell_command` up with its `args`, not by the bare program name; the hook fired on both and said nothing or looked up the wrong command (#4540).
+- A Reasonix session keeps the files it changed with `notebook_edit`, `delete_range`, `delete_symbol` and `move_file` (both paths), the cell a notebook edit wrote and the lines a `delete_range` removed, so `deja files`, `blame` and `restore` see them (#4541).
 
 ## [0.21.4] - 2026-09-29
 

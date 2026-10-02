@@ -564,6 +564,10 @@ import (
 // 60 also: a Command Code shell_command with args[], powershell or
 // monitor_command call is a command, and a read_file glob is not a file
 // (#4540).
+//
+// 60 also: a Reasonix notebook_edit, delete_range, delete_symbol or move_file
+// call leaves files records, notebook_edit a wrote record and delete_range an
+// edit record from its result's diff (#4541).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

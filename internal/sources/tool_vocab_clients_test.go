@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vshulcz/deja-vu/internal/model"
 )
@@ -371,5 +372,80 @@ func TestCommandCodeShellArgsAndReadGlobs(t *testing.T) {
 		vocabFiles("/tmp/proj/retry.go"),
 	}, []string{
 		vocabFiles("/tmp/proj/retry.go\n/tmp/proj/**/*_test.go"),
+	})
+}
+
+// Reasonix 1.39.6: notebook_edit {path, new_source, edit_mode}, delete_range
+// {path, start_anchor, end_anchor} whose result is a unified diff,
+// delete_symbol {path, name, kind} and move_file {source_path,
+// destination_path}. A delete_range that failed returns an error, not a
+// diff (#4541).
+func TestReasonixFileTools(t *testing.T) {
+	cell := "retries = compute_backoff_with_jitter(attempt, base=0.5)"
+	dropped := "dropped = legacy_cell(attempt)"
+	rangeDiff := "--- a/retry.go\n+++ b/retry.go\n@@\n-func legacyRetry() error {\n-\treturn errGiveUp\n-}\n"
+	calls := []any{
+		toolCall("c1", "notebook_edit", map[string]any{"path": "/tmp/proj/retry.ipynb", "cell_number": 0, "new_source": cell, "edit_mode": "replace"}),
+		toolCall("c2", "notebook_edit", map[string]any{"path": "/tmp/proj/old.ipynb", "cell_number": 1, "new_source": dropped, "edit_mode": "delete"}),
+		toolCall("c3", "delete_range", map[string]any{"path": "/tmp/proj/retry.go", "start_anchor": "func legacyRetry() error {", "end_anchor": "}"}),
+		toolCall("c4", "delete_range", map[string]any{"path": "/tmp/proj/backoff.go", "start_anchor": "func gone() {", "end_anchor": "}"}),
+		toolCall("c5", "delete_symbol", map[string]any{"path": "/tmp/proj/symbols.go", "name": "legacyRetry", "kind": "func"}),
+		toolCall("c6", "move_file", map[string]any{"source_path": "/tmp/proj/jitter.go", "destination_path": "/tmp/proj/backoff/jitter.go"}),
+	}
+	results := []string{"edited cell 0", "deleted cell 1", rangeDiff, "start_anchor not found in /tmp/proj/backoff.go", "deleted", "moved"}
+	want := []string{
+		vocabWrote("/tmp/proj/retry.ipynb", cell),
+		vocabEdit("/tmp/proj/retry.go", "func legacyRetry() error {\n\treturn errGiveUp\n}"),
+	}
+	unwanted := []string{vocabWrote("/tmp/proj/old.ipynb", dropped)}
+	// v1 puts all the calls' files in one record and v4 one per call, so the
+	// files are checked as a set.
+	files := []string{"/tmp/proj/retry.ipynb", "/tmp/proj/old.ipynb", "/tmp/proj/retry.go", "/tmp/proj/backoff.go",
+		"/tmp/proj/symbols.go", "/tmp/proj/jitter.go", "/tmp/proj/backoff/jitter.go"}
+	check := func(t *testing.T, ss []model.Session) {
+		t.Helper()
+		vocabCheck(t, ss, want, unwanted)
+		got := map[string]bool{}
+		for _, p := range vocabRoles(ss, RoleFiles) {
+			for _, f := range strings.Split(p, "\n") {
+				got[f] = true
+			}
+		}
+		for _, f := range files {
+			if !got[f] {
+				t.Errorf("no files record for %s", f)
+			}
+		}
+	}
+
+	t.Run("v1 jsonl", func(t *testing.T) {
+		root := t.TempDir()
+		clearReasonixEnv(t, root)
+		t.Setenv("DEJA_REASONIX_ROOT", root)
+		p := filepath.Join(root, "projects", "-tmp-proj", "sessions", "20261001-100000.000000000-deepseek-chat.jsonl")
+		lines := []any{
+			map[string]any{"role": "user", "content": "fix the retry loop"},
+			map[string]any{"role": "assistant", "content": "", "tool_calls": calls},
+		}
+		for i, r := range results {
+			lines = append(lines, map[string]any{"role": "tool", "tool_call_id": fmt.Sprintf("c%d", i+1), "content": r})
+		}
+		writeJSONLines(t, p, lines...)
+		writeJSONDoc(t, p+".meta", map[string]any{"workspace_root": "/tmp/proj", "created_at": "2026-10-01T10:00:00Z"})
+		check(t, vocabParse(t, ParseReasonixFile, p))
+	})
+	t.Run("v4 events.frames", func(t *testing.T) {
+		root := t.TempDir()
+		clearReasonixEnv(t, root)
+		t.Setenv("DEJA_REASONIX_ROOT", root)
+		id := "839559938275e9a3ebde5a804aa24edd"
+		t0 := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+		l := newRxLog(t, filepath.Join(root, "projects", "-tmp-proj", "sessions-v4", id), id, t0, nil)
+		l.batch(t0.Add(time.Second), rxMsg(map[string]any{"role": "user", "id": "m1", "origin": "user", "content": "fix the retry loop"}))
+		l.batch(t0.Add(2*time.Second), rxMsg(map[string]any{"role": "assistant", "id": "m2", "content": "", "tool_calls": calls}))
+		for i, r := range results {
+			l.batch(t0.Add(time.Duration(3+i)*time.Second), rxMsg(map[string]any{"role": "tool", "id": fmt.Sprintf("r%d", i), "tool_call_id": fmt.Sprintf("c%d", i+1), "content": r}))
+		}
+		check(t, vocabParse(t, ParseReasonixFile, l.save()))
 	})
 }
