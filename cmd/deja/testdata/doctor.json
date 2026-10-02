@@ -684,6 +684,16 @@
       "path": "<tmp>/home/.reasonix/plugins/deja/commands/deja.md"
     },
     {
+      "name": "continue",
+      "state": "missing",
+      "path": "<tmp>/home/.continue/config.yaml"
+    },
+    {
+      "name": "goose",
+      "state": "missing",
+      "path": "<tmp>/home/.config/goose/config.yaml"
+    },
+    {
       "name": "antigravity",
       "state": "missing",
       "path": "<tmp>/home/.gemini/config/plugins/deja/skills/deja-history/SKILL.md"

@@ -299,6 +299,14 @@ func ReadCommands(dir string) []CommandUse {
 // making the whole answer empty: a command run in an allowed project and a
 // withheld one still has a settled line the reader may see.
 func CommandSettled(dir, cmd string, projects []string, allow func(string) bool) string {
+	return CommandSettledOutside(dir, cmd, projects, allow, "")
+}
+
+// CommandSettledOutside is CommandSettled for a caller inside session self:
+// the table keeps only the newest session per project, and once self has run
+// the command and been indexed that is self, whose own words are no history to
+// it. Its project then has nothing to say (#4380).
+func CommandSettledOutside(dir, cmd string, projects []string, allow func(string) bool, self string) string {
 	use, ok := CommandHistory(dir, cmd)
 	if !ok || len(use.ByProject) == 0 {
 		return ""
@@ -315,7 +323,7 @@ func CommandSettled(dir, cmd string, projects []string, allow func(string) bool)
 		if allow != nil && !allow(proj) {
 			continue
 		}
-		if meta, ok := m.Sessions[pu.LastSession]; ok && meta.Settled != "" {
+		if meta, ok := m.Sessions[pu.LastSession]; ok && meta.Settled != "" && (self == "" || meta.ID != self) {
 			return meta.Settled
 		}
 	}
@@ -344,6 +352,33 @@ func CommandHistory(dir, cmd string) (CommandUse, bool) {
 		}
 	}
 	return CommandUse{}, false
+}
+
+// CommandHistoryOutside is CommandHistory without session self, for the hook
+// answering inside it: a project whose newest run is self counts one session
+// fewer and loses its date, which was self's (#4380).
+func CommandHistoryOutside(dir, cmd, self string) (CommandUse, bool) {
+	use, ok := CommandHistory(dir, cmd)
+	if !ok || self == "" || len(use.ByProject) == 0 {
+		return use, ok
+	}
+	m, err := readManifestCached(dir)
+	if err != nil {
+		return use, ok
+	}
+	by := make(map[string]ProjectUse, len(use.ByProject))
+	for proj, pu := range use.ByProject {
+		if meta, found := m.Sessions[pu.LastSession]; found && meta.ID == self {
+			pu.Sessions--
+			pu.Last, pu.LastSession = time.Time{}, ""
+			if pu.Sessions <= 0 {
+				continue
+			}
+		}
+		by[proj] = pu
+	}
+	use.ByProject = by
+	return use, ok
 }
 
 // SessionRanCommand reports whether this session ran the command, comparing the

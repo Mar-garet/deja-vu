@@ -972,9 +972,19 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 // just rewired the MCP entry, and named the hook file while doing it (#2396).
 // The first write that changed something is the answer; anything else it
 // changed rides along in the note, and when nothing changed the last write
-// stands, since that is the file the target is named for.
+// stands, since that is the file the target is named for — unless only an
+// earlier one has something to say. Kiro's switched-off MCP entry read as an
+// unchanged steering file, with the note gone (#4302).
 func wroteAll(rs ...installResult) installResult {
 	out := rs[len(rs)-1]
+	if out.Note == "" {
+		for i := len(rs) - 1; i >= 0; i-- {
+			if rs[i].Path != "" && rs[i].Note != "" {
+				out = rs[i]
+				break
+			}
+		}
+	}
 	for _, r := range rs {
 		if r.Path != "" && r.Action != "unchanged" {
 			out = r
@@ -993,6 +1003,12 @@ func wroteAll(rs ...installResult) installResult {
 		out.also = append(out.also, r.Path)
 		out.also = append(out.also, r.also...)
 		if r.Action == "unchanged" {
+			// A write that changed nothing can still have something to say: an
+			// entry left switched off is off whether or not this run touched
+			// the file, and dropping the note read as a clean install (#4302).
+			if r.Note != "" {
+				also = append(also, fmt.Sprintf("%s unchanged — %s", shortHome(r.Path), r.Note))
+			}
 			continue
 		}
 		line := fmt.Sprintf("also %s %s", r.Action, shortHome(r.Path))
@@ -4396,6 +4412,16 @@ func withAutoTargets(targets []string) []string {
 // two commands away lists its three valid values.
 func unknownTargetError(target string) error {
 	names := installTargetNames()
+	// `kiro-auto` is one edit from `kimi-auto`, and following that hint wires a
+	// different agent. A known target with `-auto` on it is someone asking for
+	// recall wiring that target does not have (#4301).
+	if base, ok := strings.CutSuffix(strings.ToLower(strings.TrimSpace(target)), "-auto"); ok && base != "" {
+		for _, n := range names {
+			if n == base {
+				return fmt.Errorf("unknown target %q — %s has no -auto target; `deja install %s` wires it", target, base, base)
+			}
+		}
+	}
 	if near := nearestTarget(target, names); near != "" {
 		return fmt.Errorf("unknown target %q — did you mean %q? (`deja install --all` wires every agent it finds)", target, near)
 	}

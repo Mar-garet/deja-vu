@@ -153,7 +153,7 @@ func TestCodeWhaleSessionFilesSkipItsBookkeeping(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "checkpoints"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"01JA7Q.json", "offline_queue.json", "owners.json", "notes.txt"} {
+	for _, name := range []string{"01JA7Q.json", "offline_queue.json", "session_boot_owners.json", "notes.txt"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte("{}"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +168,7 @@ func TestCodeWhaleSessionFilesSkipItsBookkeeping(t *testing.T) {
 	if !isCodeWhaleSession(filepath.Join(root, "01JA7Q.json")) {
 		t.Error("the transcript does not match its own kind")
 	}
-	for _, name := range []string{"offline_queue.json", "owners.json"} {
+	for _, name := range []string{"offline_queue.json", "session_boot_owners.json"} {
 		if isCodeWhaleSession(filepath.Join(root, name)) {
 			t.Errorf("%s matches as a transcript", name)
 		}
@@ -199,5 +199,115 @@ func TestCodeWhaleReadsTheLegacyRootUnlessHomeIsExplicit(t *testing.T) {
 	t.Setenv("CODEWHALE_HOME", filepath.Join(home, "isolated"))
 	if roots := CodeWhaleRoots(); len(roots) != 1 {
 		t.Fatalf("roots = %v, want only the explicit home", roots)
+	}
+}
+
+// Since 0.9.6 new CodeWhale turns use one small toolbox — read, write, edit,
+// bash — and edit takes edits[{oldText,newText}]. Knowing only the older names
+// left a session with its commands and none of the files it read or changed
+// (#4360).
+func TestCodeWhaleReadsTheSmallToolbox(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DEJA_CODEWHALE_ROOT", root)
+	path := filepath.Join(root, "0d6f.json")
+	body := `{"metadata":{"id":"0d6f","title":"retry","created_at":"2026-09-30T10:00:00Z","workspace":"/tmp/proj"},
+"messages":[
+ {"role":"user","content":[{"type":"text","text":"fix the retry loop in client.go"}]},
+ {"role":"assistant","content":[
+  {"type":"tool_use","id":"call_1","name":"bash","input":{"command":"go test ./...","cwd":"/tmp/proj"}},
+  {"type":"tool_use","id":"call_2","name":"read","input":{"path":"/tmp/proj/client.go"}},
+  {"type":"tool_use","id":"call_3","name":"edit","input":{"path":"/tmp/proj/client.go","edits":[{"oldText":"for i := 0; i <= max; i++","newText":"for i := 0; i < max; i++"}]}},
+  {"type":"tool_use","id":"call_4","name":"write","input":{"path":"/tmp/proj/retry_test.go","content":"func TestRetryStopsAtMax(t *testing.T) { if got := retry(3); got != 3 { t.Fatal(got) } }\n"}}
+ ]}
+]}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseCodeWhaleFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v, %d sessions", err, len(ss))
+	}
+	byRole := map[string][]string{}
+	for _, m := range ss[0].Messages {
+		byRole[m.Role] = append(byRole[m.Role], m.Text)
+	}
+	if got := byRole[RoleCommand]; len(got) != 1 || got[0] != "$ go test ./..." {
+		t.Errorf("commands = %q", got)
+	}
+	if got := byRole[RoleFiles]; len(got) != 1 || got[0] != "/tmp/proj/client.go\n/tmp/proj/retry_test.go" {
+		t.Errorf("files = %q, want what read, edit and write named", got)
+	}
+	if got := byRole[RoleEdit]; len(got) != 1 || got[0] != "/tmp/proj/client.go\nfor i := 0; i <= max; i++" {
+		t.Errorf("edits = %q, want the span from edits[].oldText", got)
+	}
+	if got := byRole[RoleWrote]; len(got) != 2 {
+		t.Errorf("wrote = %q, want the edit's newText and the written file", got)
+	}
+}
+
+// CodeWhale keeps session_boot_owners.json, a map of session id to boot id,
+// beside the transcripts. Under any other name it was walked as a transcript
+// and doctor counted one file too many (#4361).
+func TestCodeWhaleSkipsTheBootOwnersLedger(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DEJA_CODEWHALE_ROOT", root)
+	for name, body := range map[string]string{
+		"0d6f.json":                `{"metadata":{"id":"0d6f"},"messages":[]}`,
+		"session_boot_owners.json": `{"0d6f":"boot_1a2b3c4d5e6f"}`,
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := CodeWhaleSessionFiles(); len(got) != 1 || filepath.Base(got[0]) != "0d6f.json" {
+		t.Errorf("session files = %v, want the transcript alone", got)
+	}
+	ledger := filepath.Join(root, "session_boot_owners.json")
+	if isCodeWhaleSession(ledger) {
+		t.Error("the boot-owners ledger matches as a transcript")
+	}
+	if got := CodeWhaleSidecarFiles(); len(got) != 1 || got[0] != ledger {
+		t.Errorf("sidecars = %v, want the ledger placed", got)
+	}
+}
+
+// edit takes its edits the way models send them, and CodeWhale folds two
+// shapes onto edits[] before running: the array as a JSON string, and a single
+// top-level oldText/newText. The transcript keeps what the model sent, so
+// reading only the array lost those edits (#4360).
+func TestCodeWhaleReadsAnEditInEveryShapeItRuns(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DEJA_CODEWHALE_ROOT", root)
+	path := filepath.Join(root, "0d70.json")
+	body := `{"metadata":{"id":"0d70","title":"retry","created_at":"2026-09-30T10:00:00Z","workspace":"/tmp/proj"},
+"messages":[
+ {"role":"user","content":[{"type":"text","text":"fix the retry loop"}]},
+ {"role":"assistant","content":[
+  {"type":"tool_use","id":"call_1","name":"edit","input":{"path":"/tmp/proj/client.go","edits":"[{\"oldText\":\"i <= max\",\"newText\":\"for attempt := 0; attempt < maxRetries; attempt++\"},{\"oldText\":\"sleep(1)\",\"newText\":\"time.Sleep(backoff * time.Duration(attempt))\"}]"}},
+  {"type":"tool_use","id":"call_2","name":"edit","input":{"path":"/tmp/proj/server.go","oldText":"retries := 0","newText":"retries := defaultRetriesForServer"}}
+ ]}
+]}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseCodeWhaleFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v, %d sessions", err, len(ss))
+	}
+	var edits, wrote []string
+	for _, m := range ss[0].Messages {
+		switch m.Role {
+		case RoleEdit:
+			edits = append(edits, m.Text)
+		case RoleWrote:
+			wrote = append(wrote, m.Text)
+		}
+	}
+	want := []string{"/tmp/proj/client.go\ni <= max", "/tmp/proj/client.go\nsleep(1)", "/tmp/proj/server.go\nretries := 0"}
+	if len(edits) != len(want) || edits[0] != want[0] || edits[1] != want[1] || edits[2] != want[2] {
+		t.Errorf("edits = %q, want %q", edits, want)
+	}
+	if len(wrote) != 3 {
+		t.Errorf("wrote = %q, want one per edit", wrote)
 	}
 }

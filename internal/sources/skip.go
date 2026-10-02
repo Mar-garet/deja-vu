@@ -79,6 +79,10 @@ func SkipReason(harness string) string {
 		present = anyFileExists(OpenClawAgentDBs())
 	case "zcode":
 		present = fileExists(ZCodeDB())
+	case "kiro":
+		// Only the headless CLI's database needs sqlite3; the transcripts
+		// are JSONL (#4300).
+		present = fileExists(KiroDB())
 	}
 	// Checked after the store: a harness with no database on this machine has
 	// nothing to explain, and asking sqlite3 would cost a process for nothing.

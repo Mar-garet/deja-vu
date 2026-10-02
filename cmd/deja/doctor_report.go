@@ -51,7 +51,10 @@ type doctorStore struct {
 	// the files-against-sessions pair, and a reader of --json could see
 	// neither: a store's session count of zero reads as "nothing written yet"
 	// rather than "five files never opened" (#3747).
+	// Note is why a missing store may hold no files on a machine that runs
+	// the harness: current Amp keeps its threads on ampcode.com (#4355).
 	NeverRead int    `json:"never_read,omitempty"`
+	Note      string `json:"note,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Denied    string `json:"denied,omitempty"`
 	Skipped   string `json:"skipped,omitempty"`
@@ -75,6 +78,9 @@ type doctorAutoStatus struct {
 	State         string `json:"state"`
 	Path          string `json:"path,omitempty"`
 	BinaryMissing bool   `json:"binary_missing,omitempty"`
+	// SwitchedOff marks a wired row the user turned off in the harness, the
+	// key the mcp rows use: the file is ours and the harness skips it (#4359).
+	SwitchedOff bool `json:"switched_off,omitempty"`
 }
 
 // doctorIndexReport is the index component. It carries stale_stores, which
@@ -329,6 +335,12 @@ type doctorMCPStatus struct {
 	// BinaryMissing is the auto_recall field of the same name: the entry is
 	// wired and names a deja binary that is no longer there (#4177).
 	BinaryMissing bool `json:"binary_missing,omitempty"`
+	// SwitchedOff marks a wired entry the user turned off, which the client
+	// will not start (#4303).
+	SwitchedOff bool `json:"switched_off,omitempty"`
+	// PluginMissing marks a dsh layer that names a deja plugin file that is
+	// gone, which keeps dsh from starting at all (#4292).
+	PluginMissing bool `json:"plugin_missing,omitempty"`
 }
 
 type doctorCommandStatus struct {
@@ -494,6 +506,10 @@ func collectDoctorEmbed(dir string) *doctorEmbedReport {
 	return r
 }
 
+// ampServerSideNote is what the amp row says when Amp is installed and wrote no
+// thread file (#4355).
+const ampServerSideNote = "Amp since 2026-03-31 keeps threads on ampcode.com, not on disk"
+
 func doctorStoreChecks() []doctorStoreCheck {
 	aiderPaths := []string{sources.Home()}
 	aiderPaths = append(aiderPaths, filepath.SplitList(os.Getenv("DEJA_AIDER_ROOTS"))...)
@@ -562,9 +578,12 @@ func doctorStoreChecks() []doctorStoreCheck {
 }
 
 // doctorProbeKiro reads one Kiro transcript with the reader its path belongs
-// to, so a store written by the IDE is not probed with the CLI's parser and
-// reported empty.
+// to, so a store written by the IDE, or kiro-cli's database, is not probed
+// with the CLI's parser and reported empty.
 func doctorProbeKiro(path string) ([]model.Session, error) {
+	if path == sources.KiroDB() {
+		return sources.ParseKiroDB(path)
+	}
 	if sources.KiroUnderIDE(path) {
 		return sources.ParseKiroIDEFile(path)
 	}
@@ -738,6 +757,9 @@ func probeDoctorStore(check doctorStoreCheck) (store doctorStore, mod time.Time,
 	// order of magnitude up (#1025).
 	store.Unchecked = !whole
 	if len(check.files) == 0 {
+		if check.name == "amp" && sources.AmpThreadsServerSide() {
+			store.Note = ampServerSideNote
+		}
 		// The text rows have separated a store whose disk went away from one
 		// that was deleted since #933; a script reading this could not (#999).
 		for _, p := range check.paths {
@@ -915,7 +937,8 @@ func collectDoctorAutoRecall() []doctorAutoStatus {
 	}
 	for _, a := range wirings {
 		state, dead := autoWiringState(a)
-		out = append(out, doctorAutoStatus{Name: a.name, State: state, Path: a.path(), BinaryMissing: dead})
+		out = append(out, doctorAutoStatus{Name: a.name, State: state, Path: a.path(), BinaryMissing: dead,
+			SwitchedOff: state == "wired" && autoWiringSwitchedOff(a.name) != ""})
 	}
 	return out
 }
@@ -936,6 +959,12 @@ func collectDoctorMCP() []doctorMCPStatus {
 		// same as able to start.
 		if state == "wired" && dejaCommandMissing(config.path) != "" {
 			row.BinaryMissing = true
+		}
+		if state == "wired" && dejaEntrySwitchedOff(config.path) {
+			row.SwitchedOff = true
+		}
+		if state == "wired" && config.name == "deepseek" && len(dshPluginsMissing(config.path)) > 0 {
+			row.PluginMissing = true
 		}
 		out = append(out, row)
 	}
