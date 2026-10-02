@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -226,9 +227,10 @@ func parseClineModernSession(path string) ([]model.Session, error) {
 	id := filepath.Base(sessionDir)
 	s := model.Session{Harness: "cline", ID: id, Path: path, Project: "cline"}
 	var man clineManifest
+	cwd := ""
 	if mb, err := os.ReadFile(filepath.Join(sessionDir, id+".json")); err == nil {
 		if json.Unmarshal(mb, &man) == nil {
-			cwd := man.CWD
+			cwd = man.CWD
 			if cwd == "" {
 				cwd = man.WorkspaceRoot
 			}
@@ -249,6 +251,7 @@ func parseClineModernSession(path string) ([]model.Session, error) {
 			}
 		}
 	}
+	exits := commandExits{}
 	for _, m := range msgs.Messages {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
@@ -268,10 +271,12 @@ func parseClineModernSession(path string) ([]model.Session, error) {
 		// The work rides in the same content list, in blocks clineContentText
 		// drops because they are not type:"text" — so the file an assistant
 		// edited and the command it ran were reachable from nothing.
-		if recs := clineWorkRecords(m.Content, ts); len(recs) > 0 {
+		from := len(s.Messages)
+		if recs := clineWorkRecords(m.Content, cwd, ts); len(recs) > 0 {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, recs...)
 		}
+		clineJoinExits(s.Messages, from, m.Content, clineDialect, exits)
 	}
 	if len(s.Messages) == 0 {
 		return nil, nil
@@ -335,6 +340,7 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 		contents[i] = m.Content
 	}
 	xmlEra := rooXMLEra(contents)
+	exits := commandExits{}
 	for ti, m := range turns {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
@@ -350,10 +356,13 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 				s.Touch(ts)
 				s.Messages = append(s.Messages, tool...)
 			}
+			clineJoinExits(s.Messages, len(s.Messages), m.Content, rooDialect, exits)
 			text = unwrapClineTask(words)
 		} else if work := rooWorkRecords(m.Content, ts, workspace, xmlEra); len(work) > 0 {
 			s.Touch(ts)
+			from := len(s.Messages)
 			s.Messages = append(s.Messages, work...)
+			clineJoinExits(s.Messages, from, m.Content, rooDialect, exits)
 		}
 		if text == "" {
 			continue
@@ -371,7 +380,9 @@ func parseClineLegacyTask(path string) ([]model.Session, error) {
 // declares. Three of them differ from every other harness: `run_commands`
 // takes a list under `commands` rather than one string, `read_files` takes a
 // list of read requests under `files`, and the editor names the replaced text
-// `old_text`.
+// `old_text` and the written text `new_text` — the only record of a file the
+// editor created, which was read under new_string and lost (#4503).
+// apply_patch takes its patch under `input`; clineWorkRecords reads it.
 var clineDialect = toolDialect{
 	pathKey:     "path",
 	pathListKey: "files",
@@ -380,6 +391,7 @@ var clineDialect = toolDialect{
 	commandKey:  "commands",
 	editTools:   map[string]bool{"editor": true},
 	oldKey:      "old_text",
+	newKey:      "new_text",
 }
 
 // rooDialect is what the Roo Code and the legacy Cline extension call their
@@ -443,7 +455,8 @@ func rooWorkRecords(raw json.RawMessage, ts time.Time, workspace string, xmlEra 
 }
 
 // clineWorkRecords turns the tool blocks of one message into work records.
-func clineWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
+// cwd is where the session ran: a patch names its files relative to it.
+func clineWorkRecords(raw json.RawMessage, cwd string, ts time.Time) []model.Message {
 	var blocks []any
 	if json.Unmarshal(raw, &blocks) != nil {
 		return nil
@@ -464,6 +477,9 @@ func clineWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 			out = append(out, model.Message{Role: RoleEdit, Text: span, Time: ts})
 		}
 	}
+	for _, patch := range applyPatchInputs(blocks, clineDialect) {
+		out = append(out, applyPatchRecords(patch, func(p string) string { return resolveToolPath(p, cwd) }, ts)...)
+	}
 	if IndexCommands() {
 		for _, cmd := range commandsIn(blocks, clineDialect) {
 			out = append(out, model.Message{Role: RoleCommand, Text: cmd, Time: ts})
@@ -475,6 +491,55 @@ func clineWorkRecords(raw json.RawMessage, ts time.Time) []model.Message {
 		}
 	}
 	return out
+}
+
+// clineJoinExits notes the commands a message's tool calls appended from
+// index from on, and stamps those its tool results report on (#4502). A
+// command is emitted from its tool_use and its status sits in the tool_result
+// of a later message, and nothing joined the two.
+func clineJoinExits(msgs []model.Message, from int, raw json.RawMessage, d toolDialect, exits commandExits) {
+	if !IndexCommands() || !bytes.Contains(raw, []byte(`"tool_`)) {
+		return
+	}
+	var blocks []any
+	if json.Unmarshal(raw, &blocks) != nil {
+		return
+	}
+	exits.note(msgs, from, commandCallsIn(blocks, d))
+	for _, it := range blocks {
+		m, ok := it.(map[string]any)
+		if !ok || m["type"] != "tool_result" {
+			continue
+		}
+		id, _ := m["tool_use_id"].(string)
+		if _, ok := exits[id]; !ok {
+			continue
+		}
+		// Cline CLI: one {query, error, success} entry per command of a
+		// run_commands batch; success is a clean exit, and a non-zero one is
+		// the error "Command exited with code N".
+		if list, ok := m["content"].([]any); ok {
+			for _, e := range list {
+				entry, _ := e.(map[string]any)
+				query, _ := entry["query"].(string)
+				if ok, _ := entry["success"].(bool); ok {
+					exits.stamp(msgs, id, query, 0)
+				} else if er, _ := entry["error"].(string); er != "" {
+					if code, ok := statusCode(er, "Command exited with code ", ""); ok {
+						exits.stamp(msgs, id, query, code)
+					}
+				}
+			}
+		}
+		// The VS Code extension's execute_command opens its result with the
+		// status (CommandOrchestrator.ts).
+		line := firstLine(contentText(m["content"]))
+		if code, ok := statusCode(line, "Command failed with exit code ", "."); ok {
+			exits.stamp(msgs, id, "", code)
+		} else if code, ok := statusCode(line, "Command executed successfully (exit code ", ")."); ok {
+			exits.stamp(msgs, id, "", code)
+		}
+	}
 }
 
 // clineTurnToolOutput is what a turn's tool_result blocks printed, for the

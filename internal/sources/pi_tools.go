@@ -109,6 +109,10 @@ func (r *piReader) call(id, name string, args map[string]any, applied bool, t ti
 	if name == "" || args == nil {
 		return
 	}
+	if patch, _ := args["input"].(string); name == "apply_patch" && patch != "" {
+		r.patch(id, patch, applied, t)
+		return
+	}
 	if in, _ := args["input"].(string); name == "edit" && in != "" && args["path"] == nil {
 		r.hashline(id, in, t)
 		return
@@ -143,6 +147,29 @@ func (r *piReader) call(id, name string, args map[string]any, applied bool, t ti
 				r.commandAt[id] = append(r.commandAt[id], len(r.s.Messages))
 			}
 			r.add(RoleCommand, cmd, t)
+		}
+	}
+}
+
+// patch records OpenClaw's apply_patch, on beside pi's edit and write for
+// every model: one `input` holding a patch in codex's format, so the files and
+// both sides come out of its headers and lines (#4500).
+func (r *piReader) patch(id, body string, applied bool, t time.Time) {
+	files, spans, wrote := applyPatch(body, r.abs)
+	if IndexToolPaths() && len(files) > 0 {
+		r.add(RoleFiles, strings.Join(files, "\n"), t)
+	}
+	if !applied {
+		return
+	}
+	if IndexEdits() {
+		for _, span := range spans {
+			r.change(id, RoleEdit, span, t)
+		}
+	}
+	if IndexWrites() {
+		for _, w := range wrote {
+			r.change(id, RoleWrote, w, t)
 		}
 	}
 }
@@ -245,9 +272,15 @@ func (r *piReader) toolResult(msg map[string]any, t time.Time) {
 		mark := ""
 		if code, ok := piExitCode(details["exitCode"]); ok {
 			mark = "  → exit " + strconv.Itoa(code)
+		} else if code, ok := statusCode(lastLine(contentText(msg["content"])), "Command exited with code ", ""); failed && ok {
+			// pi's bash throws on a non-zero exit and the error result keeps
+			// only the message, the output with "Command exited with code N"
+			// as its last line; details is empty (#4501).
+			mark = "  → exit " + strconv.Itoa(code)
 		} else if !failed {
-			// pi records no exit code, so only the clean case is stated,
-			// as the Claude decoder does; nothing is made up for a failure.
+			// A clean run records no code, so it is stated here, as the
+			// Claude decoder does; nothing is made up for a failure that
+			// names none.
 			mark = "  → exit 0"
 		}
 		for _, i := range at {
@@ -329,6 +362,8 @@ func piCommandFailed(msg map[string]any) bool {
 	return ok && code != 0
 }
 
+// piExitCode reads a numeric exit code as either decoder hands it back; the
+// Copilot Chat reader, which decodes with UseNumber, uses it too.
 func piExitCode(v any) (int, bool) {
 	switch n := v.(type) {
 	case float64:

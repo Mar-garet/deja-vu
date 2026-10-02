@@ -1846,12 +1846,16 @@ var claudeHookWiring = []struct{ Event, Sub, Matcher string }{
 	// subagent. That agent gets no session start and sends no user prompt, so
 	// its instructions are the only place memory can reach it, and hook-tool
 	// answers this one by rewriting them rather than by speaking to the parent.
-	{"PreToolUse", "hook-tool", "Bash|Edit|Write|MultiEdit|NotebookEdit|Task|Agent"},
+	{"PreToolUse", "hook-tool", "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit|Task|Agent"},
 	// The other half of the point of action: the pre-tool line speaks before a
 	// command runs, this one speaks when it failed and the store knows what
-	// followed that error before. Bash only — a failed edit does not carry a
-	// shell error signature.
-	{"PostToolUse", "hook-tool-after", "Bash"},
+	// followed that error before. The shells only — a failed edit does not
+	// carry a shell error signature. PowerShell is the shell on Windows (#4489).
+	{"PostToolUse", "hook-tool-after", "Bash|PowerShell"},
+	// A command that exited non-zero fires this instead, never PostToolUse —
+	// measured on Claude Code 2.1.287, output under `error` (#4488).
+	// PostToolUse stays for the failure that exits 0: `go test ./... | tail`.
+	{"PostToolUseFailure", "hook-tool-after", "Bash|PowerShell"},
 	// The session is over, so its live stamp goes and the next session's MCP
 	// recall can answer with it (#4210).
 	{"SessionEnd", "hook-session-end", ""},
@@ -1871,8 +1875,16 @@ func installClaudeHook(exe string, uninstall bool) (installResult, error) {
 		return installResult{}, configParseError(path, err)
 	}
 	nextRoot := root
+	// An event the installed Claude Code would reject is taken out, not
+	// written: one it does not know fails the whole file (#4488).
+	keep := map[string]bool{}
+	if !uninstall {
+		for _, h := range claudeWiring() {
+			keep[h.Event] = true
+		}
+	}
 	for _, h := range claudeHookWiring {
-		nextRoot = updateClaudeHook(nextRoot, h.Event, hookRun(exe, h.Sub), h.Matcher, uninstall)
+		nextRoot = updateClaudeHook(nextRoot, h.Event, hookRun(exe, h.Sub), h.Matcher, uninstall || !keep[h.Event])
 	}
 	// In the shape the reader wrote it, like every other JSON writer: this was
 	// the last one still marshalling straight, so an install that added hooks
@@ -1908,7 +1920,7 @@ func hookStatusMessage(event string) string {
 		return "Saving this session to memory…"
 	case "PreToolUse":
 		return "Checking what this touches…"
-	case "PostToolUse":
+	case "PostToolUse", "PostToolUseFailure":
 		return "Checking what fixed this before…"
 	case "SessionEnd":
 		return "Marking this session as ended…"
