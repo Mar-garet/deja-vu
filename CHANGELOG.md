@@ -182,6 +182,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Roo Code or Kilo Code `read_file` call in the legacy `files: [{path}]` form records the files it read; it recorded none (#4531).
 - A Crush `lsp_replace_symbol` edit gets its written lines, so `deja blame` can attribute the new symbol; only the file was recorded (#4533).
 - A Kilo CLI session keeps the commands it ran with `background_process` and the notebooks it read and edited with `notebook_read` and `notebook_edit`, with the cells an edit wrote. Those calls left no record (#4534).
+- A Kilo Code extension task keeps what its own tools changed: each pair of a `search_and_replace` `operations` list, the lines a `fast_edit_file` wrote, a `write_file`, and the files `delete_file` and `generate_image` named. They left nothing or only the path (#4535).
 
 ## [0.21.4] - 2026-09-29
 

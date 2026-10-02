@@ -234,3 +234,30 @@ insert into message values('m1','ses_1',1790000001000,'{"role":"assistant","time
 		vocabWrote("/tmp/proj/retry.ipynb", refused),
 	})
 }
+
+// Kilo Code (kilocode-legacy v5.16.2) task files: search_and_replace
+// {path, operations[{search, replace}]}, fast_edit_file {target_file,
+// instructions, code_edit}, write_file (the alias it keeps in history),
+// delete_file {path} and generate_image {prompt, path} (#4535).
+func TestKiloTaskToolVocabulary(t *testing.T) {
+	second := "func backoffJitter(attempt int) time.Duration { return time.Duration(attempt) }"
+	ss := rooTask(t, ParseKiloTask,
+		rooUse("search_and_replace", map[string]any{"path": "retry.go", "operations": []any{
+			map[string]any{"search": oldLoop, "replace": newLoop},
+			map[string]any{"search": jitter, "replace": second}}}),
+		rooUse("fast_edit_file", map[string]any{"target_file": "backoff.go", "instructions": "cap the retry loop",
+			"code_edit": "// ... existing code ...\n" + newLoop + "\n// ... existing code ..."}),
+		rooUse("write_file", map[string]any{"path": "jitter.go", "content": jitter}),
+		rooUse("delete_file", map[string]any{"path": "old_retry.go"}),
+		rooUse("generate_image", map[string]any{"prompt": "a retry diagram", "path": "retry.png"}),
+	)
+	vocabCheck(t, ss, []string{
+		vocabFiles("/tmp/proj/retry.go\n/tmp/proj/backoff.go\n/tmp/proj/jitter.go\n/tmp/proj/old_retry.go\n/tmp/proj/retry.png"),
+		vocabEdit("/tmp/proj/retry.go", oldLoop),
+		vocabWrote("/tmp/proj/retry.go", newLoop),
+		vocabEdit("/tmp/proj/retry.go", jitter),
+		vocabWrote("/tmp/proj/retry.go", second),
+		vocabWrote("/tmp/proj/backoff.go", newLoop),
+		vocabWrote("/tmp/proj/jitter.go", jitter),
+	}, nil)
+}

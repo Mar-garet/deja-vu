@@ -49,7 +49,12 @@ shape, with the user's first turn wrapped in `<task>…</task>`. `history_item.j
 supplies the id, the millisecond timestamp and the workspace, which is what names
 the project; without it the task's directory mtime is the base time. A
 `history_item.json` written or changed after the transcript re-reads the task
-(#4446).
+(#4446). Tool calls are read as Roo's are (see [Roo Code](roo.md)), plus Kilo
+Code's own: `search_and_replace` with an `operations` list of literal
+`search`/`replace` pairs, `fast_edit_file` with `target_file` and a
+`code_edit` whose `// ... existing code ...` lines are dropped before its
+written lines are hashed, `write_file` (the alias of `write_to_file` kept in
+history), and `delete_file` and `generate_image`, which name a file (#4535).
 
 SQLite: `session` joined to `message` and `part`, exactly as OpenCode writes it —
 see [OpenCode](opencode.md) for the field-by-field description. Kilo CLI adds

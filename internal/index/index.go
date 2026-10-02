@@ -550,6 +550,10 @@ import (
 //
 // 60 also: a Kilo CLI background_process start or monitor is a command, and
 // notebook_read and notebook_edit leave files and wrote records (#4534).
+//
+// 60 also: a Kilo Code task's search_and_replace operations[], fast_edit_file
+// and write_file leave files, edit and wrote records, and delete_file and
+// generate_image files records (#4535).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the

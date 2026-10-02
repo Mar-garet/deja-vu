@@ -50,6 +50,11 @@ var rooEditTools = map[string]bool{
 	"edit_file":      true,
 	"edit":           true,
 	"apply_patch":    true,
+	// Kilo Code's own: fast_edit_file sends the new code with the rest
+	// elided, and write_file is the alias of write_to_file it keeps in
+	// history (#4535).
+	"fast_edit_file": true,
+	"write_file":     true,
 }
 
 // rooDiffSides splits one diff payload into the replaced and the written side
@@ -236,6 +241,18 @@ func rooCallSides(name string, in map[string]any) (replaced, written []string) {
 		if rooTruthy(in["use_regex"]) {
 			return nil, nil
 		}
+		// Kilo Code's takes a list of literal pairs under operations
+		// (#4535).
+		if ops, ok := in["operations"].([]any); ok {
+			for _, op := range ops {
+				m, _ := op.(map[string]any)
+				search, _ := m["search"].(string)
+				replace, _ := m["replace"].(string)
+				replaced = append(replaced, search)
+				written = append(written, replace)
+			}
+			return replaced, written
+		}
 		search, _ := in["search"].(string)
 		replace, _ := in["replace"].(string)
 		return []string{search}, []string{replace}
@@ -243,11 +260,30 @@ func rooCallSides(name string, in map[string]any) (replaced, written []string) {
 		old, _ := in["old_string"].(string)
 		neu, _ := in["new_string"].(string)
 		return []string{old}, []string{neu}
-	case "write_to_file", "insert_content":
+	case "write_to_file", "insert_content", "write_file":
 		content, _ := in["content"].(string)
 		return nil, []string{content}
+	case "fast_edit_file":
+		edit, _ := in["code_edit"].(string)
+		return nil, []string{withoutElisions(edit)}
 	}
 	return nil, nil
+}
+
+// rooFoldTargetFile puts Kilo Code's fast_edit_file target_file under path,
+// the key the shared readers take the file from (#4535).
+func rooFoldTargetFile(blocks []any) {
+	for _, it := range blocks {
+		name, in, ok := toolPart(it, rooDialect)
+		if !ok || name != "fast_edit_file" {
+			continue
+		}
+		if _, has := in["path"]; !has {
+			if p, _ := in["target_file"].(string); p != "" {
+				in["path"] = p
+			}
+		}
+	}
 }
 
 // rooTruthy reads a flag that arrives as a bool from the JSON history and as a
