@@ -74,7 +74,12 @@ async function run(bin, args, input, cwd, timeout = 20000) {
       cwd,
       maxBuffer: 8 * 1024 * 1024,
     })
-    if (input !== undefined) child.child.stdin.end(input)
+    if (input !== undefined) {
+      // deja can exit before it reads stdin; unhandled, the EPIPE would
+      // throw in the gateway.
+      child.child.stdin.on("error", () => {})
+      child.child.stdin.end(input)
+    }
     const { stdout } = await child
     return stdout.trim()
   } catch {

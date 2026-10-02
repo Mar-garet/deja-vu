@@ -104,6 +104,9 @@ async function run(bin, args, input, cwd, timeout = 20000) {
       maxBuffer: 8 * 1024 * 1024,
     })
     if (input !== undefined) {
+      // deja can exit before it reads stdin; unhandled, the EPIPE that
+      // follows would take opencode down. The generated plugin does the same.
+      child.child.stdin.on("error", () => {})
       child.child.stdin.end(input)
     }
     const { stdout } = await child
