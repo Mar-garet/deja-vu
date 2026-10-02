@@ -51,6 +51,8 @@ show(await post({ name: "bash", arguments: { command: "ls" }, agent }, text("ret
 show(await post({ name: "edit", arguments: { file_path: "/w/proj/retry.go" }, agent }, text("ok"), async () => ({ kind: "block", feedback: [] })));
 show(await post({ name: "bash", arguments: { command: "cat build.log" }, agent }, text("old run:\n[exit code: 1]\nall green now"), accept));
 show(await post({ name: "bash", arguments: { command: "make serve" }, agent }, text("listening\n[killed by signal: SIGKILL]"), accept));
+show(await post({ name: "pwsh", arguments: { command: "dotnet build" }, agent }, text("error CS1002\n[exit code: 1]"), accept));
+show(await post({ name: "str_replace_editor", arguments: { command: "str_replace", path: "/w/proj/retry.go" }, agent }, text("edited"), accept));
 `
 	run := filepath.Join(home, "drive.mjs")
 	if err := os.WriteFile(run, []byte(driver), 0o644); err != nil {
@@ -64,7 +66,7 @@ show(await post({ name: "bash", arguments: { command: "make serve" }, agent }, t
 	if lines[0] == "NOLISTENER" {
 		t.Fatal("auto.js registers no tools/post-execute listener, so dsh hears nothing at the point of action")
 	}
-	if len(lines) != 6 {
+	if len(lines) != 8 {
 		t.Fatalf("driver said %q", out)
 	}
 	if lines[0] != `[["user","plugin","NOTE about the file"]]` {
@@ -88,6 +90,13 @@ show(await post({ name: "bash", arguments: { command: "make serve" }, agent }, t
 	if lines[5] != `[["user","plugin","FIX seen before"]]` {
 		t.Errorf("a command killed by a signal did not carry the earlier fix: %s", lines[5])
 	}
+	// dsh's other shell and its other editor (#4293).
+	if lines[6] != `[["user","plugin","FIX seen before"]]` {
+		t.Errorf("a failed pwsh command did not carry the earlier fix: %s", lines[6])
+	}
+	if lines[7] != `[["user","plugin","NOTE about the file"]]` {
+		t.Errorf("a str_replace_editor edit did not carry the file's note: %s", lines[7])
+	}
 	asked, err := os.ReadFile(calls)
 	if err != nil {
 		t.Fatal(err)
@@ -97,12 +106,14 @@ show(await post({ name: "bash", arguments: { command: "make serve" }, agent }, t
 		`hook-tool --plain {"tool_name":"read","tool_input":{"file_path":"/w/proj/retry.go"},"session_id":"sess-A","cwd":"/w/proj"}`,
 		`hook-tool-after --plain {"tool_name":"bash","tool_input":{"command":"go test ./..."},"tool_response":"FAIL retry","session_id":"sess-A","cwd":"/w/proj"}`,
 		`hook-tool-after --plain {"tool_name":"bash","tool_input":{"command":"make serve"},"tool_response":"listening","session_id":"sess-A","cwd":"/w/proj"}`,
+		`hook-tool-after --plain {"tool_name":"powershell","tool_input":{"command":"dotnet build"},"tool_response":"error CS1002","session_id":"sess-A","cwd":"/w/proj"}`,
+		`hook-tool --plain {"tool_name":"edit","tool_input":{"file_path":"/w/proj/retry.go"},"session_id":"sess-A","cwd":"/w/proj"}`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("deja was not asked %s\ncalls:\n%s", want, got)
 		}
 	}
-	if strings.Count(got, "hook-tool") != 3 {
+	if strings.Count(got, "hook-tool") != 5 {
 		t.Errorf("deja was asked for a call that needs nothing:\n%s", got)
 	}
 }

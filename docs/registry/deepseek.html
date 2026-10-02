@@ -125,8 +125,8 @@
 <p>Verified against a local model with no tools in play: dsh answered a question</p>
 <p>about a pool size that only the injected block carried.</p>
 <p>The same plugin listens on <code>tools/post-execute</code>, which runs on every tool</p>
-<p>result: after a <code>read</code>, <code>edit</code> or <code>write</code> it adds <code>deja hook-tool</code>&#39;s line about</p>
-<p>the file, and after a <code>bash</code> whose result ends in <code>[exit code: N]</code> or <code>[killed by signal: X]</code></p>
+<p>result: after a <code>read</code>, <code>edit</code>, <code>write</code> or <code>str_replace_editor</code> call it adds</p>
+<p><code>deja hook-tool</code>&#39;s line about the file, and after a <code>bash</code> or <code>pwsh</code> whose result ends in <code>[exit code: N]</code> or <code>[killed by signal: X]</code></p>
 <p>(the last line only, as dsh&#39;s own parser reads it) it adds</p>
 <p><code>deja hook-tool-after</code>&#39;s earlier fix for that error, both as</p>
 <p><code>additionalContexts</code>, which dsh hands the model on the next step. The marker</p>

@@ -71,8 +71,8 @@ harness falls back to the first prompt.
   Verified against a local model with no tools in play: dsh answered a question
   about a pool size that only the injected block carried.
   The same plugin listens on `tools/post-execute`, which runs on every tool
-  result: after a `read`, `edit` or `write` it adds `deja hook-tool`'s line about
-  the file, and after a `bash` whose result ends in `[exit code: N]` or `[killed by signal: X]`
+  result: after a `read`, `edit`, `write` or `str_replace_editor` call it adds
+  `deja hook-tool`'s line about the file, and after a `bash` or `pwsh` whose result ends in `[exit code: N]` or `[killed by signal: X]`
   (the last line only, as dsh's own parser reads it) it adds
   `deja hook-tool-after`'s earlier fix for that error, both as
   `additionalContexts`, which dsh hands the model on the next step. The marker

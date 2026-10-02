@@ -323,7 +323,16 @@ async function toolNote(exec, result) {
       ...base,
     });
   }
-  if (exec.name === "bash") {
+  // The profile's other editor names the file "path"; view is its read.
+  if (exec.name === "str_replace_editor" && args.path) {
+    return askAsync(["hook-tool", "--plain"], {
+      tool_name: args.command === "view" ? "read" : "edit",
+      tool_input: { file_path: String(args.path) },
+      ...base,
+    });
+  }
+  // pwsh is the Windows shell, with the same markers.
+  if (exec.name === "bash" || exec.name === "pwsh") {
     // dsh reports how a command ended in the text, not as an error result: a
     // last line of "[exit code: N]" for a non-zero exit, or "[killed by
     // signal: X]". Read only there, the way dsh's own parseExitStatus reads
@@ -335,7 +344,7 @@ async function toolNote(exec, result) {
     // whose last line is "[exit code: 1]" matches nothing on file.
     const response = status.body;
     return askAsync(["hook-tool-after", "--plain"], {
-      tool_name: "bash",
+      tool_name: exec.name === "pwsh" ? "powershell" : "bash",
       tool_input: { command: String(args.command || "") },
       tool_response: response,
       ...base,
