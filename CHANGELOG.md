@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A Codex rollout that grows by records with no message, such as `thread_settings_applied`, moves the session's updated time on the next `deja index`, not only on a rebuild (#4166).
 - After an index update, a command that passed is no longer on file as ending in a failure the agent read afterwards. A clean `make build`, a prompt, then a Read of a failing log made the hook warn that `make build` ended with `--- FAIL`; a full build never did (#4309).
 - A Gemini CLI or Qwen Code command that fails with more than a megabyte of output gets the earlier fix, as a long failing Bash command already did. The hook read the cut payload only at the keys Claude and Codex use (#4314).
 - `deja index` no longer says a line was skipped because deja could not read it when the pass caught a client mid-write. A last line with no newline yet is left for the next pass, which reads it whole (#4276).

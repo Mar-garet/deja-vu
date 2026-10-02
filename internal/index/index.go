@@ -593,6 +593,9 @@ import (
 //
 // 60 also: an OpenClaw 2026.7 reset or delete archive, stamped
 // 2026-10-01T15-18-21.294Z rather than with a number, is read (#4482).
+//
+// 60 also: a Codex rollout grown by records with no message moves the
+// session's updated time on an append, as a rebuild does (#4166).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
