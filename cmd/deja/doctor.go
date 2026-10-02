@@ -872,7 +872,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 	ocDB := sources.OpencodeDB()
 	printRow("opencode", ocDB, doctorFilePresent(ocDB), doctorSQLiteDetail(ocDB, sqlite))
 
-	printRow("aider", doctorAiderLocation(), len(sources.AiderFiles()) > 0, doctorCount(len(sources.AiderFiles()), "file"))
+	printRow("aider", doctorAiderLocation(), len(sources.AiderFiles()) > 0, doctorAiderDetail())
 
 	// The row names the store and counts what is under `tmp`, where the chats
 	// are: Antigravity keeps its own store in a sibling directory of the same
@@ -1186,6 +1186,19 @@ func doctorAiderLocation() string {
 	}
 	return loc
 }
+
+// doctorAiderDetail says where the history is when none was found: aider
+// writes it at the git root of each project, and $HOME holds one only for a
+// launch from $HOME (#4326).
+func doctorAiderDetail() string {
+	n := len(sources.AiderFiles())
+	if n > 0 {
+		return doctorCount(n, "file")
+	}
+	return doctorCount(0, "file") + " — " + aiderNoHistoryHint
+}
+
+const aiderNoHistoryHint = "aider writes .aider.chat.history.md in each project; start it there as `deja aider` or list project dirs in DEJA_AIDER_ROOTS"
 
 func doctorAntigravityLocation() string {
 	if roots := sources.AntigravityRoots(); len(roots) > 0 {
