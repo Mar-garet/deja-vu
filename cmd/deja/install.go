@@ -1316,7 +1316,19 @@ func mcpBlock(root map[string]any, key, path string) (map[string]any, bool, erro
 // mcpServers object over three lines, and an uninstall wrote it back as `{}`
 // though the .bak beside it had the original (#4423). Anything that decodes
 // differently — a server added since, a file that is not JSON — keeps next.
-func snapshotIfSameJSON(path string, next []byte) []byte {
+// So does a file deja took nothing out of: its layout now is the reader's, not
+// the snapshot's. Numbers are compared as written, not as float64s.
+func snapshotIfSameJSON(path string, old, next []byte) []byte {
+	if bytes.Equal(old, next) {
+		return next
+	}
+	want, ok := decodeJSONExact(next)
+	if !ok {
+		return next
+	}
+	if before, ok := decodeJSONExact(old); ok && reflect.DeepEqual(before, want) {
+		return next
+	}
 	bak := path + ".bak"
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		bak = resolved + ".bak"
@@ -1326,11 +1338,21 @@ func snapshotIfSameJSON(path string, next []byte) []byte {
 		return next
 	}
 	b = bytes.TrimPrefix(b, utf8BOM)
-	var want, have any
-	if json.Unmarshal(b, &have) != nil || json.Unmarshal(next, &want) != nil || !reflect.DeepEqual(want, have) {
+	if have, ok := decodeJSONExact(b); !ok || !reflect.DeepEqual(want, have) {
 		return next
 	}
 	return b
+}
+
+// decodeJSONExact decodes one JSON document with its numbers kept as text.
+func decodeJSONExact(b []byte) (any, bool) {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil || dec.More() {
+		return nil, false
+	}
+	return v, true
 }
 
 // dropOwnBackup removes the snapshot beside path when the snapshot is deja's
@@ -1566,7 +1588,7 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	// comparison is of the text, and the mark goes back on what is written.
 	bom := fileStartsWithBOM(path)
 	if removingWiring {
-		next = snapshotIfSameJSON(path, next)
+		next = snapshotIfSameJSON(path, old, next)
 	}
 	if bytes.Equal(old, next) {
 		return "unchanged", nil
