@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name. The same goes for every agent whose sessions are filed under such a folder name (Claude Code without a cwd, Cursor CLI, pi, omp and others): `my_org/app` is no longer indexed as `org/app`. The index rebuilds once (#4402).
+- `deja install aider` joins the `read:` list of a CRLF `~/.aider.conf.yml`, or one with a comment after or under the key, instead of writing a second `read:` that made aider drop your files; uninstall gives a scalar or flow `read:` back in the form you wrote, and keeps a config that held only `read: []` (#4330, #4331).
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name (#4402).
 - Command Code 1.73 sessions are indexed again: the client now writes a session header and one message envelope per line, which deja read as nothing. Commands, files, edits and tool output from `shell_command`, `read_file`, `edit_file` and `write_file` come along, and the project is the session's own directory (#4370).
 - Command Code's tool hooks speak again: `deja hook-tool` and `hook-tool-after` now know its `shell_command`, `edit_file` and `write_file`, which they used to answer with nothing on every call (#4371).

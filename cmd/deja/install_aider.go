@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -44,12 +45,29 @@ func installAider(_ string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
-	next := removeAiderReadEntry(string(old))
+	// LF while it is edited: a CRLF file never matched the block-list search,
+	// so install wrote a second read: key and aider, which keeps the last,
+	// dropped the reader's files (#4330). writeIfChanged puts the endings back.
+	was := aiderReadWas(path)
+	next, _ := removeAiderReadEntry(lfText(old), was)
 	if !uninstall {
+		// The line install turns into a block list, kept so uninstall can put
+		// it back as it was (#4331).
+		inline := aiderInlineRead(next)
 		var aerr error
 		if next, aerr = addAiderReadEntry(next, aiderContextPath()); aerr != nil {
 			return installResult{}, fmt.Errorf("%s: %w", shortHome(path), aerr)
 		}
+		if inline != "" {
+			// One record per config: the state is stored sorted, so an older
+			// line left beside it could be the one uninstall reads.
+			if was != "" && was != inline {
+				forgetBlockAdded(path, aiderReadWasKey+was)
+			}
+			noteBlockAdded(path, aiderReadWasKey+inline)
+		}
+	} else if was != "" {
+		forgetBlockAdded(path, aiderReadWasKey+was)
 	}
 	a, werr := writeIfChanged(path, old, []byte(next))
 	if werr != nil {
@@ -71,44 +89,124 @@ func installAider(_ string, uninstall bool) (installResult, error) {
 	return installResult{Path: path, Action: a}, nil
 }
 
+// aiderReadWasKey prefixes the record of a read: line install promoted to a
+// block list: the scalar or flow form the reader wrote, which uninstall puts
+// back. Without it the file came back as a block list, and a file that held
+// only `read: []` came back empty and was deleted (#4331).
+const aiderReadWasKey = "aider-read-was:"
+
+// aiderReadWas is the read: line the last install promoted in this config, or
+// "" when it promoted none.
+func aiderReadWas(path string) string {
+	prefix := blockKey(path, aiderReadWasKey)
+	was := ""
+	for _, b := range slices.Concat(readWiringState().Blocks, blocksAddedThisRun) {
+		if rest, ok := strings.CutPrefix(b, prefix); ok && !blocksForgottenThisRun[b] {
+			was = rest
+		}
+	}
+	return was
+}
+
+// aiderInlineRead is the top-level `read: <value>` line addAiderReadEntry
+// would rewrite as a block list, or "".
+func aiderInlineRead(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if v, ok := strings.CutPrefix(line, "read: "); ok && strings.TrimSpace(v) != "" && !strings.HasPrefix(strings.TrimSpace(v), "#") {
+			return line
+		}
+	}
+	return ""
+}
+
 // addAiderReadEntry keeps whatever list is already under read: — a user with
-// their own CONVENTIONS.md there must not lose it.
+// their own CONVENTIONS.md there must not lose it. s is LF text.
 func addAiderReadEntry(s, ctx string) (string, error) {
 	entry := "  - " + ctx + "\n"
-	if i := strings.Index("\n"+s, "\nread:\n"); i >= 0 {
-		at := i + len("\nread:\n") - 1
-		return s[:at] + entry + s[at:], nil
+	keys := 0
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(line, "read:") {
+			keys++
+		}
+	}
+	if keys > 1 {
+		return "", fmt.Errorf("read: is written twice at the top level, and aider reads only the last one — keep one and run this again")
 	}
 	// The scalar form takes a single file; promote it to a list so both survive.
 	for _, line := range strings.Split(s, "\n") {
 		v, ok := strings.CutPrefix(line, "read: ")
-		if !ok || strings.TrimSpace(v) == "" {
+		if !ok || strings.TrimSpace(v) == "" || strings.HasPrefix(strings.TrimSpace(v), "#") {
 			continue
 		}
-		// A flow list is not a scalar. Taken as one, `read: [a.md, b.md]`
-		// became a single entry `- [a.md, b.md]` and aider looked for a file
-		// with that name — the reader's two files gone from its view, reported
-		// as a successful install (#3197).
-		if items, isFlow := yamlFlowItems(strings.TrimSpace(v)); isFlow {
-			if items == nil {
-				// A shape this cannot take apart safely. Refuse, the way the
-				// goose and Continue writers do, rather than rewrite it wrong.
-				return "", fmt.Errorf("read: %s is a list deja cannot rewrite \u2014 move it to a block list and run this again", strings.TrimSpace(v))
-			}
-			var b strings.Builder
-			b.WriteString("read:\n")
-			for _, it := range items {
-				b.WriteString("  - " + it + "\n")
-			}
-			b.WriteString(entry)
-			return strings.Replace(s, line+"\n", b.String(), 1), nil
+		items, ok := aiderReadItems(v)
+		if !ok {
+			// A shape this cannot take apart safely. Refuse, the way the
+			// goose and Continue writers do, rather than rewrite it wrong.
+			return "", fmt.Errorf("read: %s is not a form deja can rewrite \u2014 move it to a block list and run this again", strings.TrimSpace(v))
 		}
-		return strings.Replace(s, line+"\n", "read:\n  - "+strings.TrimSpace(v)+"\n"+entry, 1), nil
+		var b strings.Builder
+		b.WriteString("read:\n")
+		for _, it := range items {
+			b.WriteString("  - " + it + "\n")
+		}
+		b.WriteString(entry)
+		return strings.Replace(s, line+"\n", b.String(), 1), nil
 	}
 	if s != "" && !strings.HasSuffix(s, "\n") {
 		s += "\n"
 	}
-	return s + "read:\n" + entry, nil
+	// The block form, found the way the other YAML writers find their keys: a
+	// comment after the key or under it, and a second read: refused (#4290).
+	at, err := yamlTopKeyEnd(s, "read:")
+	if err != nil {
+		return "", err
+	}
+	if at < 0 {
+		return s + "read:\n" + entry, nil
+	}
+	// The reader's own indent, which may be none: one list cannot mix two.
+	if line := s[at:]; strings.HasPrefix(strings.TrimLeft(line, " "), "- ") {
+		entry = line[:len(line)-len(strings.TrimLeft(line, " "))] + "- " + ctx + "\n"
+	}
+	return s[:at] + entry + s[at:], nil
+}
+
+// yamlPlainSafe reports that s reads as the same string unquoted in a block
+// list item.
+func yamlPlainSafe(s string) bool {
+	if s == "" || s != strings.TrimSpace(s) || strings.ContainsAny(s[:1], "-?:,[]{}#&*!|>'\"%@`") {
+		return false
+	}
+	return !strings.Contains(s, ": ") && !strings.Contains(s, " #") && !strings.HasSuffix(s, ":") && !strings.ContainsAny(s, "\\")
+}
+
+// aiderReadItems is what a top-level `read: <v>` line holds, as the block list
+// install turns it into: a flow list's items, nothing for a null, or the one
+// file a scalar names. ok is false for a value it cannot take apart.
+//
+// A flow list is not a scalar. Taken as one, `read: [a.md, b.md]` became a
+// single entry `- [a.md, b.md]` and aider looked for a file with that name —
+// the reader's two files gone from its view, reported as a successful install
+// (#3197). Nor is a null, a block scalar, an alias, an anchor, a tag or a
+// mapping: promoted, `read: ~` became a null item and `read: |` an item `- |`
+// with its text left dangling under deja's entry.
+func aiderReadItems(v string) (items []string, ok bool) {
+	v = strings.TrimSpace(v)
+	if items, isFlow := yamlFlowItems(v); isFlow {
+		return items, items != nil
+	}
+	bare := v
+	if i := strings.Index(bare, " #"); i >= 0 {
+		bare = strings.TrimSpace(bare[:i])
+	}
+	switch strings.ToLower(bare) {
+	case "~", "null", "''", `""`:
+		return []string{}, true
+	}
+	if v == "" || strings.ContainsAny(v[:1], "|>&*!{") {
+		return nil, false
+	}
+	return []string{v}, true
 }
 
 // yamlFlowItems takes apart a YAML flow list \u2014 `[a, b]` \u2014 into its items, and
@@ -158,8 +256,10 @@ func yamlFlowItems(v string) ([]string, bool) {
 			return nil, true
 		}
 		// A name quoted in the flow list is the same file unquoted, and the
-		// block list deja writes takes it plain.
-		if len(it) > 1 && (it[0] == '"' || it[0] == '\'') && it[len(it)-1] == it[0] {
+		// block list deja writes takes it plain — when plain reads the same:
+		// unquoted, "#a.md" is a comment and 'k: v.md' a mapping, and aider
+		// loses the file.
+		if len(it) > 1 && (it[0] == '"' || it[0] == '\'') && it[len(it)-1] == it[0] && yamlPlainSafe(it[1:len(it)-1]) {
 			items[i] = it[1 : len(it)-1]
 		}
 	}
@@ -192,7 +292,10 @@ func aiderConfReadsContext(s string) bool {
 	return false
 }
 
-func removeAiderReadEntry(s string) string {
+// removeAiderReadEntry takes deja's entry out of an LF config, and puts back
+// was — the read: line install promoted — when the list left is exactly what
+// that line held. It reports whether it did.
+func removeAiderReadEntry(s, was string) (string, bool) {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
 	for _, l := range lines {
@@ -201,19 +304,57 @@ func removeAiderReadEntry(s string) string {
 		}
 		out = append(out, l)
 	}
+	restored := false
+	if was != "" {
+		out, restored = restoreAiderRead(out, was)
+	}
 	// A read: key with nothing under it is not the file we found: drop the key
-	// as well, or the next aider start reads a null list.
+	// as well, or the next aider start reads a null list. A comment under the
+	// key is not an item.
 	for i := 0; i < len(out); i++ {
-		if strings.TrimRight(out[i], " \t") != "read:" {
+		if yamlIndentWidth(out[i]) != 0 || !yamlKeyLine(out[i], "read:") {
 			continue
 		}
-		if i+1 < len(out) && strings.HasPrefix(strings.TrimSpace(out[i+1]), "- ") {
+		j := i + 1
+		for j < len(out) && (strings.TrimSpace(out[j]) == "" || strings.HasPrefix(strings.TrimSpace(out[j]), "#")) {
+			j++
+		}
+		if j < len(out) && strings.HasPrefix(strings.TrimSpace(out[j]), "- ") {
 			continue
 		}
 		out = append(out[:i], out[i+1:]...)
 		i--
 	}
-	return strings.Join(out, "\n")
+	return strings.Join(out, "\n"), restored
+}
+
+// restoreAiderRead swaps the top-level read: block back for the line install
+// made it from, when the block holds the same files in the same order. A list
+// the reader has changed since stays as they left it.
+func restoreAiderRead(lines []string, was string) ([]string, bool) {
+	want, ok := aiderReadItems(strings.TrimPrefix(was, "read: "))
+	if !ok {
+		return lines, false
+	}
+	for i, l := range lines {
+		if l != "read:" {
+			continue
+		}
+		var got []string
+		j := i + 1
+		for ; j < len(lines); j++ {
+			item, ok := strings.CutPrefix(strings.TrimSpace(lines[j]), "- ")
+			if !ok || yamlIndentWidth(lines[j]) == 0 && !strings.HasPrefix(lines[j], "- ") {
+				break
+			}
+			got = append(got, item)
+		}
+		if strings.Join(got, "\n") != strings.Join(want, "\n") || len(got) != len(want) {
+			return lines, false
+		}
+		return append(append(append([]string{}, lines[:i]...), was), lines[j:]...), true
+	}
+	return lines, false
 }
 
 // refreshAiderContext regenerates the read-only file from the same digest the
