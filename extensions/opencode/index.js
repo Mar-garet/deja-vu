@@ -280,7 +280,10 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
     try {
       const key = input?.sessionID || "default"
       if (!digests.has(key)) {
-        // The session rides along so the digest leaves it and its parent out.
+        // The session id, as the plugin `deja install opencode-auto` writes
+        // sends it: without it deja hands the session its own work back and
+        // never reads the digest cached for it (#4273). The parent rides
+        // along so the digest leaves it out too.
         const payload = { session_id: input?.sessionID || "", parent_session_id: await parentOf(input?.sessionID), cwd }
         const { context, receipt } = contextText(await ask(["hook-context"], JSON.stringify(payload), 30000))
         digests.set(key, context)

@@ -38,11 +38,14 @@ func AnswerAfter(messages []model.Message, i int) string {
 		if m.Role != "assistant" {
 			continue
 		}
-		if text, ok := decisionSentence(m.Text); ok {
+		// deja's own credit line is not the answer, and a reply that was
+		// nothing else has none (#4247).
+		reply := withoutOwnCredit(m.Text)
+		if text, ok := decisionSentence(reply); ok {
 			return text
 		}
 		if first == "" {
-			first = DecisionText(m.Text)
+			first = DecisionText(reply)
 		}
 	}
 	return first

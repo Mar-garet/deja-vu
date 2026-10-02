@@ -391,17 +391,22 @@ func doctorAutoRecall(w io.Writer) {
 		if a.marker == "" {
 			continue
 		}
+		launcher := doctorLauncherNote(path, a.name+"-auto")
 		if missing := reasonixRuntimeMissingFor(a.name); missing != "" {
 			fmt.Fprintf(w, "  %-12s runs %s, which is not there — `deja install reasonix-auto` rewrites it for this binary\n", "", missing)
 		} else if exe := hookExeNote(path, a.name+"-auto"); exe != "" {
-			fmt.Fprintf(w, "  %-12s %s\n", "", exe)
+			// When the binary that is gone is the launcher, the note below
+			// says so; printing both named one file twice (#4245).
+			if launcher == "" || !hookExeIsLauncher(path) {
+				fmt.Fprintf(w, "  %-12s %s\n", "", exe)
+			}
 		} else if other := otherBinaryNote(path, a.name+"-auto"); other != "" {
 			// The quieter half of the same question: the binary is there and is
 			// not this one, which works until that file goes (#3656).
 			fmt.Fprintf(w, "  %-12s %s\n", "", other)
 		}
-		if note := doctorLauncherNote(path, a.name+"-auto"); note != "" {
-			fmt.Fprintf(w, "  %-12s %s\n", "", note)
+		if launcher != "" {
+			fmt.Fprintf(w, "  %-12s %s\n", "", launcher)
 		}
 	}
 }

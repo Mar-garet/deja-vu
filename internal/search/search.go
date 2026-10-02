@@ -454,7 +454,11 @@ func renderSnippets(hits []Hit, o Options, n int) {
 			continue
 		}
 		for _, text := range hits[i].snipTexts {
-			hits[i].Snippets = append(hits[i].Snippets, snippet(text, o.Query, re))
+			// A message that was only deja's credit line has no words left
+			// once it is stripped, and printed as an empty bullet (#4247).
+			if sn := snippet(text, o.Query, re); sn != "" {
+				hits[i].Snippets = append(hits[i].Snippets, sn)
+			}
 		}
 		hits[i].snipTexts = nil
 	}
@@ -2787,7 +2791,9 @@ func ErrorHits(ss []model.Session) []Hit {
 			if strings.TrimSpace(m.Text) == "" {
 				continue
 			}
-			hit.Snippets = append(hit.Snippets, snippet(m.Text, "", nil))
+			if sn := snippet(m.Text, "", nil); sn != "" {
+				hit.Snippets = append(hit.Snippets, sn)
+			}
 			if len(hit.Snippets) == 2 {
 				break
 			}
@@ -2940,7 +2946,9 @@ func RelevanceHitsWeighted(ss []model.Session, terms []string, idf map[string]fl
 		// Heaviest first; a stable sort keeps message order among ties.
 		sort.SliceStable(best, func(i, j int) bool { return best[i].weighted > best[j].weighted })
 		for i := 0; i < len(best) && i < 2; i++ {
-			hit.Snippets = append(hit.Snippets, snippet(s.Messages[best[i].idx].Text, best[i].center, nil))
+			if sn := snippet(s.Messages[best[i].idx].Text, best[i].center, nil); sn != "" {
+				hit.Snippets = append(hit.Snippets, sn)
+			}
 		}
 		hit.Score = float64(len(ss) - rank)
 		hits[rank] = hit

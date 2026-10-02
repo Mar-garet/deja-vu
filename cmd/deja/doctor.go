@@ -246,13 +246,16 @@ func doctorHooks(w io.Writer) {
 		fmt.Fprintf(w, "  %-12s %s\n", "", note)
 	}
 	// Only when something here is actually wired: the note is about the binary
-	// those entries name, and a file with no deja in it names none.
-	if note := hookExeNote(st.path, "claude-auto"); note != "" && len(st.missing) < st.want {
+	// those entries name, and a file with no deja in it names none. Not when
+	// that binary is the launcher, which the note below names (#4245).
+	launcher := doctorLauncherNote(st.path, "claude-auto")
+	if note := hookExeNote(st.path, "claude-auto"); note != "" && len(st.missing) < st.want &&
+		(launcher == "" || !hookExeIsLauncher(st.path)) {
 		fmt.Fprintf(w, "  %-12s %s\n", "", note)
 	}
 	// The entries name the launcher now, and the launcher is always there —
 	// what can be gone is everything it resolves to (#3422).
-	if note := doctorLauncherNote(st.path, "claude-auto"); note != "" {
+	if note := launcher; note != "" {
 		fmt.Fprintf(w, "  %-12s %s\n", "", note)
 	} else if st.runNote != "" {
 		fmt.Fprintf(w, "  %-12s %s\n", "", st.runNote)
@@ -925,8 +928,18 @@ func doctorHarnesses(w io.Writer, dir string) {
 	gooseRoot := filepath.Join(sources.GooseRoot(), "sessions")
 	printRow("goose", gooseRoot, doctorExists(gooseRoot) || doctorFilePresent(sources.GooseDB()), doctorGooseDetail(sqlite))
 
+	// Hermes 0.17 keeps one state.db at the root and no profiles/ directory,
+	// which HermesDBs reads first; the row looked only at profiles/ and said
+	// missing about an indexed store (#4244).
+	// The directory alone is not a store: it holds hermes' config, and
+	// `deja install hermes-auto` writes there on a machine where it never ran.
 	hermesRoot := sources.HermesProfilesRoot()
-	printRow("hermes", hermesRoot, doctorExists(hermesRoot), doctorCount(len(sources.HermesSessionFiles()), "store"))
+	rootStore := doctorFilePresent(filepath.Join(sources.HermesHome(), "state.db"))
+	hermesPresent := rootStore || doctorExists(hermesRoot)
+	if rootStore || !doctorExists(hermesRoot) {
+		hermesRoot = sources.HermesHome()
+	}
+	printRow("hermes", hermesRoot, hermesPresent, doctorCount(len(sources.HermesSessionFiles()), "store"))
 
 	clineModern := sources.ClineSessionsDir()
 	clineFiles := len(sources.ClineSessionFiles())

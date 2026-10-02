@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -17,14 +16,19 @@ func heldOpen(from, to string) error {
 	return &os.LinkError{Op: "rename", Old: from, New: to, Err: syscall.Errno(32)}
 }
 
-// sleepTick is how much one Sleep can overshoot on this platform: windows
-// rounds up to the scheduler's ~15.6ms tick, everywhere else the error is
-// small enough that a millisecond stands in for it.
-func sleepTick() time.Duration {
-	if runtime.GOOS == "windows" {
-		return 16 * time.Millisecond
-	}
-	return time.Millisecond
+// swapClock stands the swap on a clock that moves only when the swap sleeps,
+// and returns how far it has moved. What a test bounds is the waiting the swap
+// chose, not how long a loaded runner took to do it: the same swap measured
+// 306ms against a 284ms bound on ubuntu-latest (#4160).
+func swapClock(t *testing.T) func() time.Duration {
+	t.Helper()
+	start := time.Unix(0, 0)
+	var waited time.Duration
+	wasNow, wasSleep := swapNow, swapSleep
+	swapNow = func() time.Time { return start.Add(waited) }
+	swapSleep = func(d time.Duration) { waited += d }
+	t.Cleanup(func() { swapNow, swapSleep = wasNow, wasSleep })
+	return func() time.Duration { return waited }
 }
 
 // onWindows makes the wait apply on the machine running the test.
@@ -93,6 +97,9 @@ func TestASwapThatCannotRenameKeepsTheOldIndex(t *testing.T) {
 	held.Store(2)
 	real := renameFile
 	renameFile = func(from, to string) error {
+		// Every rename costs a little on a loaded runner, which is time the
+		// swap did not choose to spend (#4160).
+		time.Sleep(20 * time.Millisecond)
 		// The second rename is refused for good; the restore is refused twice
 		// and then allowed, which is the shape a swap meets when the same
 		// handles are holding both.
@@ -108,21 +115,17 @@ func TestASwapThatCannotRenameKeepsTheOldIndex(t *testing.T) {
 	}
 	t.Cleanup(func() { renameFile = real })
 
-	start := time.Now()
+	away := swapClock(t)
 	if err := swapIndexDir(dir, tmp); err == nil {
 		t.Fatal("a rename refused for the whole wait was reported as a swap")
 	}
 	// Bounded by what a reader will wait for it, not by "eventually": the
 	// failed rename and the restore share that window, with a floor under the
-	// restore so it is never left none of it.
-	//
-	// The bound carries slack for the clock rather than for the code: this
-	// window is thirteen 20ms sleeps, and on windows each one rounds up to the
-	// ~15.6ms scheduler tick, so the runner measured 296ms against a nominal
-	// 280ms and the leg went red on arithmetic (#3648). One tick per platform,
-	// four of them, is still an order below "eventually".
-	bound := swapRenameWait + restoreRenameFloor + swapRenameStep + 4*sleepTick()
-	if took := time.Since(start); took > bound {
+	// restore so it is never left none of it. Counted on the swap's own clock,
+	// so neither a windows sleep rounding up to the scheduler tick (#3648) nor
+	// a loaded runner (#4160) moves it.
+	bound := swapRenameWait + restoreRenameFloor + swapRenameStep
+	if took := away(); took > bound {
 		t.Errorf("the index was away for %v, past the %v it may take", took, bound)
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "records.bin")); err != nil || string(b) != "old" {
@@ -157,11 +160,11 @@ func TestASwapWaitsOutTheSecondRenameWithinTheReadersWindow(t *testing.T) {
 	}
 	t.Cleanup(func() { renameFile = real })
 
-	start := time.Now()
+	away := swapClock(t)
 	if err := swapIndexDir(dir, tmp); err != nil {
 		t.Fatalf("the swap gave up on the rename readers were holding: %v", err)
 	}
-	if took := time.Since(start); took > swapRenameWait {
+	if took := away(); took > swapRenameWait {
 		t.Errorf("the index was away for %v, past the %v a reader waits", took, swapRenameWait)
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "records.bin")); err != nil || string(b) != "new" {
@@ -193,11 +196,11 @@ func TestASwapDoesNotWaitOutARefusalThatWillNotClear(t *testing.T) {
 	}
 	t.Cleanup(func() { renameFile = real })
 
-	start := time.Now()
+	away := swapClock(t)
 	if err := swapIndexDir(dir, tmp); err == nil {
 		t.Fatal("a read-only filesystem was reported as a swap")
 	}
-	if took := time.Since(start); took > swapRenameStep*2 {
+	if took := away(); took > 0 {
 		t.Errorf("waited %v on a refusal that cannot clear", took)
 	}
 	// And the previous index is back: a fail-fast is still a swap that did not
@@ -230,11 +233,11 @@ func TestASwapDoesNotWaitOutAnUnrecognisedRefusal(t *testing.T) {
 	}
 	t.Cleanup(func() { renameFile = real })
 
-	start := time.Now()
+	away := swapClock(t)
 	if err := swapIndexDir(dir, tmp); err == nil {
 		t.Fatal("an unrecognised refusal was reported as a swap")
 	}
-	if took := time.Since(start); took > swapRenameStep*2 {
+	if took := away(); took > 0 {
 		t.Errorf("waited %v on a refusal deja cannot read", took)
 	}
 	// And the previous index is back: a fail-fast is still a swap that did not
