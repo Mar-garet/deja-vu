@@ -316,15 +316,20 @@ func gooseConfigDirFor(goos string) string {
 	if root := os.Getenv("GOOSE_PATH_ROOT"); filepath.IsAbs(root) {
 		return filepath.Join(root, "config")
 	}
+	// Goose is one of the few that does not use ~/.config on Windows: its
+	// config, data and state all sit under the Block vendor directory, and
+	// etcetera's Windows strategy never reads XDG_CONFIG_HOME — which Git Bash
+	// and scoop setups export, so checking it first wired a config goose
+	// never opens (#4286).
+	if goos == "windows" {
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			appData = filepath.Join(homeDir(), "AppData", "Roaming")
+		}
+		return filepath.Join(appData, "Block", "goose", "config")
+	}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(xdg) {
 		return filepath.Join(xdg, "goose")
-	}
-	// Goose is one of the few that does not use ~/.config on Windows: its
-	// config, data and state all sit under the Block vendor directory.
-	if goos == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "Block", "goose", "config")
-		}
 	}
 	return filepath.Join(homeDir(), ".config", "goose")
 }

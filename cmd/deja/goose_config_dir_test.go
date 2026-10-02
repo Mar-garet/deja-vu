@@ -25,3 +25,22 @@ func TestGooseConfigDirSkipsARelativeRoot(t *testing.T) {
 		t.Errorf("an absolute XDG_CONFIG_HOME gave %q", d)
 	}
 }
+
+// On Windows goose's config is under %APPDATA%\Block\goose\config whatever
+// XDG_CONFIG_HOME says: etcetera's Windows strategy never reads it, and Git
+// Bash or scoop setups export it (#4286). GOOSE_PATH_ROOT still wins.
+func TestGooseConfigDirOnWindowsIgnoresXDG(t *testing.T) {
+	hermeticEnv(t)
+	appData := filepath.Join(t.TempDir(), "AppData")
+	t.Setenv("APPDATA", appData)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "xdg"))
+	t.Setenv("GOOSE_PATH_ROOT", "")
+	if d, want := gooseConfigDirFor("windows"), filepath.Join(appData, "Block", "goose", "config"); d != want {
+		t.Errorf("windows config dir = %q, want %q", d, want)
+	}
+	root := t.TempDir()
+	t.Setenv("GOOSE_PATH_ROOT", root)
+	if d := gooseConfigDirFor("windows"); d != filepath.Join(root, "config") {
+		t.Errorf("GOOSE_PATH_ROOT on windows gave %q", d)
+	}
+}
