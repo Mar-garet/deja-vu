@@ -362,6 +362,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 		// opencode task session's digest led with its parent, which is live
 		// and asking through it (#4548).
 		ParentSessionID string `json:"parent_session_id"`
+		TranscriptPath  string `json:"transcript_path"`
 		CWD             string `json:"cwd"`
 		// Cursor leaves cwd empty and names the project here instead.
 		WorkspaceRoots []string `json:"workspace_roots"`
@@ -403,6 +404,12 @@ func runHookContextMode(dir string, plain, once bool) error {
 		}
 		rememberSessionDigest(dir, input.SessionID)
 	}
+	// Claude Code forks with source "fork", and the fork carries its source's
+	// turns, the digest that opened it among them. A second one led with the
+	// source itself, the fork's own opening under another id (#4549).
+	if input.Source == "fork" {
+		return nil
+	}
 	input.WorkspaceRoots = adoptGrokRoots(input.WorkspaceRoots, input.WorkspaceRoot)
 	// The harness tells us which project this is; deja read only the
 	// environment, so a host that sends the payload without exporting
@@ -411,7 +418,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// The session asking is left out of its own digest (#4199), except after a
 	// compaction: the lead there points the agent at that session's id.
 	var self []string
-	for id := range askerLineage(dir, input.SessionID, input.ParentSessionID) {
+	for id := range askerLineage(dir, input.SessionID, input.TranscriptPath, input.ParentSessionID) {
 		if input.Source == "compact" && id == input.SessionID {
 			continue
 		}

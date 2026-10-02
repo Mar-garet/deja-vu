@@ -609,3 +609,45 @@ func IsCompactionEditTool(name string) bool {
 		return false
 	}
 }
+
+// TranscriptHead is the session a Claude Code or Codex transcript opens with,
+// read from its first records only. A hook asking about a session the index
+// does not hold yet — a fork's first prompts come before any build has seen
+// it — learns from it which turn the session opens with and, from a Codex
+// rollout, which thread it was forked from (#4549).
+func TranscriptHead(path, nativeSessionID string) (model.Session, error) {
+	if strings.TrimSpace(nativeSessionID) == "" {
+		return model.Session{}, fmt.Errorf("%w: missing session id", ErrTranscriptIdentity)
+	}
+	if _, err := regularCompactionFile(path); err != nil {
+		return model.Session{}, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return model.Session{}, err
+	}
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, compactionHeaderBytes)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return model.Session{}, err
+	}
+	head := buf[:n]
+	if i := bytes.LastIndexByte(head, '\n'); i >= 0 {
+		head = head[:i+1]
+	} else if int64(n) == compactionHeaderBytes {
+		return model.Session{}, ErrTranscriptLineTooLarge
+	}
+	harness, err := compactionHarness(head, nil)
+	if err != nil {
+		return model.Session{}, err
+	}
+	s, err := parseCompactionSession(path, harness, "", head)
+	if err != nil {
+		return model.Session{}, err
+	}
+	if s.ID != nativeSessionID {
+		return model.Session{}, fmt.Errorf("%w: got %q, want %q", ErrTranscriptIdentity, s.ID, nativeSessionID)
+	}
+	return s, nil
+}

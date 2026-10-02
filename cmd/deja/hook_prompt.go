@@ -55,6 +55,9 @@ type promptHookInput struct {
 	// knows: the opencode plugin asks opencode for a task session's parent.
 	// That session is live and asking through this one (#4548).
 	ParentSessionID string `json:"parent_session_id"`
+	// TranscriptPath is the asker's transcript, read for what a session the
+	// index does not hold yet was forked from (#4549).
+	TranscriptPath string `json:"transcript_path"`
 	// CWD is what the harness says the project is. Reading only the
 	// environment meant a host that sends the payload without exporting
 	// CLAUDE_PROJECT_DIR recalled nothing (#759).
@@ -282,8 +285,8 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 		skip[id] = true
 	}
 	// The asker and what counts as it: a spawn's parent, a sub-agent's parent,
-	// the sub-agents it spawned (#4548).
-	self := askerLineage(dir, input.SessionID, input.ParentSessionID)
+	// the sub-agents it spawned (#4548), a fork's source (#4549).
+	self := askerLineage(dir, input.SessionID, input.TranscriptPath, input.ParentSessionID)
 	for id := range self {
 		skip[id] = true
 	}

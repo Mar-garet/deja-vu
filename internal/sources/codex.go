@@ -679,13 +679,18 @@ func codexRolloutHead(path string) (id, cwd string, payload map[string]any) {
 // codexLineage is what a rollout's own session_meta says about where the thread
 // came from. A sub-agent's names the thread that spawned it, as
 // source.subagent.thread_spawn.parent_thread_id on codex 0.149.0; recall reads
-// the edge to leave a live session's sub-agents out of it (#4547).
+// the edge to leave a live session's sub-agents out of it (#4547). A fork's
+// names the thread it was forked from, as forked_from_id, and a fork is not
+// told about its own source as if it were earlier work (#4549).
 func codexLineage(payload map[string]any) (kind, parent string) {
 	src, _ := payload["source"].(map[string]any)
 	sub, _ := src["subagent"].(map[string]any)
 	spawn, _ := sub["thread_spawn"].(map[string]any)
 	if p, _ := spawn["parent_thread_id"].(string); p != "" {
 		return "subagent", p
+	}
+	if p, _ := payload["forked_from_id"].(string); p != "" {
+		return "fork", p
 	}
 	return "", ""
 }

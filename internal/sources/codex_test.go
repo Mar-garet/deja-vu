@@ -628,3 +628,33 @@ func TestCodexSubAgentNamesItsParent(t *testing.T) {
 		t.Errorf("a top-level thread read as spawned: %v %#v", err, ss)
 	}
 }
+
+// A fork names the thread it was forked from in its own session_meta, and the
+// fork is not told about its source as if it were earlier work (#4549).
+func TestCodexForkNamesItsSource(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "rollout-2026-06-01T02-00-00-child.jsonl")
+	body := `{"timestamp":"2026-06-01T02:00:00Z","type":"session_meta","payload":{"id":"child","forked_from_id":"parent","cwd":"/w/child"}}` + "\n" +
+		`{"timestamp":"2026-06-01T01:00:00Z","type":"session_meta","payload":{"id":"parent","cwd":"/w/parent"}}` + "\n" +
+		`{"timestamp":"2026-06-01T02:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"child question"}]}}` + "\n"
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseCodexRollout(p)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v %#v", err, ss)
+	}
+	if ss[0].Kind != "fork" || ss[0].Parent != "parent" {
+		t.Errorf("kind %q parent %q, want a fork of parent", ss[0].Kind, ss[0].Parent)
+	}
+	head, err := TranscriptHead(p, "child")
+	if err != nil {
+		t.Fatalf("head: %v", err)
+	}
+	if head.Kind != "fork" || head.Parent != "parent" {
+		t.Errorf("head: kind %q parent %q, want a fork of parent", head.Kind, head.Parent)
+	}
+	if _, err := TranscriptHead(p, "someone-else"); err == nil {
+		t.Error("a transcript was read as another session's")
+	}
+}
