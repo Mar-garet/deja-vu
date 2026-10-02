@@ -38,7 +38,8 @@ func (c commandExits) note(msgs []model.Message, from int, calls []claudeCommand
 
 // stamp marks the commands of call id with the code their result reported, in
 // the marker every other harness writes. cmd, when set, picks the one command
-// of a batch the code belongs to.
+// of a batch the code belongs to: the first of them not stamped yet, since a
+// batch that runs a command twice reports each run in order.
 func (c commandExits) stamp(msgs []model.Message, id, cmd string, code int) {
 	for _, i := range c[id] {
 		if i >= len(msgs) || strings.Contains(msgs[i].Text, "  → exit ") {
@@ -48,6 +49,9 @@ func (c commandExits) stamp(msgs []model.Message, id, cmd string, code int) {
 			continue
 		}
 		msgs[i].Text += fmt.Sprintf("  → exit %d", code)
+		if cmd != "" {
+			return
+		}
 	}
 }
 

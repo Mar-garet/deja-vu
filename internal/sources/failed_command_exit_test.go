@@ -166,3 +166,38 @@ func TestKiroCLIReadsAFailedResultWithItsCall(t *testing.T) {
 		}
 	}
 }
+
+// A Cline CLI batch can run the same command twice. Each entry's status
+// belongs to one of the two, in order: the first clean entry stamped both and
+// the failure that followed was dropped as already stamped.
+func TestClineBatchStampsARepeatedCommandOncePerEntry(t *testing.T) {
+	dir := t.TempDir()
+	id := "1790877871094"
+	if err := os.MkdirAll(filepath.Join(dir, id), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, id, id+".json"), []byte(`{"cwd":"/tmp/proj","started_at":"2026-10-01T18:00:00Z"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, id, id+".messages.json")
+	if err := os.WriteFile(p, []byte(`{"version":1,"agent":"lead","sessionId":"`+id+`","messages":[
+ {"role":"user","ts":1790877871100,"content":[{"type":"text","text":"fix the retry loop"}]},
+ {"role":"assistant","ts":1790877871200,"content":[{"type":"tool_use","id":"call_1","name":"run_commands","input":{"commands":["go test ./...","go test ./..."]}}]},
+ {"role":"user","ts":1790877871300,"content":[{"type":"tool_result","tool_use_id":"call_1","name":"run_commands","content":[
+  {"query":"go test ./...","result":"ok","success":true},
+  {"query":"go test ./...","result":"FAIL","error":"Command exited with code 1","success":false}]}]}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range parseKindForTest(t, "cline-sdk", p) {
+		for _, m := range s.Messages {
+			if m.Role == RoleCommand {
+				got = append(got, m.Text)
+			}
+		}
+	}
+	want := []string{"$ go test ./...  → exit 0", "$ go test ./...  → exit 1"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("commands = %q, want %q", got, want)
+	}
+}
