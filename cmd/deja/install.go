@@ -1631,6 +1631,7 @@ func writeIfChanged(path string, old, next []byte) (string, error) {
 	bom := fileStartsWithBOM(path)
 	if removingWiring {
 		next = snapshotIfSameJSON(path, old, next)
+		next = snapshotIfOnlyEmptyBlocksDiffer(path, old, next)
 	}
 	if bytes.Equal(old, next) {
 		return "unchanged", nil

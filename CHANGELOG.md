@@ -202,6 +202,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja install codex`, `grok` and `kimi-auto` refuse a `config.toml` that sets `mcp_servers` or `hooks` inline (`mcp_servers = { … }`, `hooks = []`) and say which line, rather than appending a table that redefines it, after which codex would not load its config at all (#4554).
 - A YAML config that is `{}` on one line, or that sets `mcp_servers: {}` inline, is refused with the reason rather than given a block after it that no parser reads; hermes fell back to its defaults and goose dropped the config. Continue, aider and dsh had the same append (#4555).
 - An `openclaw.json` in JSON5, with unquoted keys or single quotes, is refused saying OpenClaw reads it as JSON5, not with a JSON error pointing at the comment above it; and one with trailing commas uninstalls the way it installed (#4557).
+- Uninstall gives back an empty block as it found it: a `"hooks": {}`, `"servers": {}` or `"context_servers": {}` you had stays in Claude Code, Codex, Cursor, Command Code, Zed, VS Code, grok, prime and amp, and the `"mcp": {}` deja added to an empty opencode or kilo config goes (#4562).
+- Uninstall gives back an empty block as it found it: a `"hooks": {}`, `"servers": {}` or `"context_servers": {}` you had stays in Claude Code, Codex, Cursor, Command Code, Zed, VS Code, grok, prime and amp, and the `"mcp": {}` deja added to an empty opencode or kilo config goes. It is read off deja's snapshot, so a file edited since install keeps the old behaviour (#4562).
+- An empty config you created (`touch ~/.codex/config.toml`) is still there, empty, after `deja install` and `deja uninstall`; TOML, YAML and aider configs were deleted and JSON ones came back as `{}` (#4563).
+- With deja already wired under another name, `deja install` for VS Code, prime, amp and ZCode takes that entry over instead of adding a second server, and for Zed, grok, hermes, goose and Continue it says the other entry also runs deja, rather than a plain `updated` while the client starts the server twice (#4556).
+- A config you made read-only (`chmod 444`) is refused, named, and left as it was; install and uninstall wrote a temp file and renamed it over the lock (#4558).
+- `deja install claude-auto` refused on a read-only `~/.claude` no longer leaves deja's MCP server wired in `~/.claude.json` with a `.bak` beside it; the halves that can refuse go first (#4560).
+- A change the client saves to its config while `deja install` is editing it is kept: deja reads the file again before replacing it and, if it moved, edits the new version. Measured on `~/.claude.json` with a client saving during install, lost saves went from 31 and 116 of 200 runs to 4 and 5 (#4561).
 
 ## [0.21.4] - 2026-09-29
 
