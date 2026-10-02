@@ -58,6 +58,14 @@ func TestAFailedCommandKeepsItsExitCode(t *testing.T) {
 		{name: "senpi", kind: "senpi", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
 		{name: "kimchi", kind: "kimchi", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript)},
 		{name: "cherrystudio-pi", fixture: file("2026-09-20T10-00-00-000Z_s1.jsonl", failedPiTranscript), parse: func(p string) ([]model.Session, error) { return ParseCherryStudioPiFileFromOffset(p, 0) }},
+		{name: "goose", kind: "goose-db", fixture: func(t *testing.T, _ string) string {
+			return seedDB(t, "sessions.db", `create table sessions (id text primary key, name text, description text, working_dir text, created_at text, updated_at text);
+create table messages (id integer primary key autoincrement, session_id text, role text, content_json text, created_timestamp integer);
+insert into sessions values ('20260920_1','n','fix the retry loop','/tmp/proj','2026-09-20T10:00:00Z','2026-09-20T10:05:00Z');
+insert into messages(session_id,role,content_json,created_timestamp) values ('20260920_1','user','[{"type":"text","text":"fix the retry loop"}]',1790874400);
+insert into messages(session_id,role,content_json,created_timestamp) values ('20260920_1','assistant','[{"type":"toolRequest","id":"c1","toolCall":{"status":"success","value":{"name":"shell","arguments":{"command":"go test ./..."}}}}]',1790874401);
+insert into messages(session_id,role,content_json,created_timestamp) values ('20260920_1','user','[{"type":"toolResponse","id":"c1","toolResult":{"status":"success","value":{"content":[{"type":"text","text":"./retry.go:12:5: undefined: backoffJitter\n\nCommand exited with code 1"}],"isError":true,"structuredContent":{"stdout":"","stderr":"./retry.go:12:5: undefined: backoffJitter","exit_code":1,"timed_out":false}}}}]',1790874402);`)
+		}},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
