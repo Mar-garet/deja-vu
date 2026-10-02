@@ -1852,6 +1852,10 @@ var claudeHookWiring = []struct{ Event, Sub, Matcher string }{
 	// followed that error before. Bash only — a failed edit does not carry a
 	// shell error signature.
 	{"PostToolUse", "hook-tool-after", "Bash"},
+	// A command that exited non-zero fires this instead, never PostToolUse —
+	// measured on Claude Code 2.1.287, output under `error` (#4488).
+	// PostToolUse stays for the failure that exits 0: `go test ./... | tail`.
+	{"PostToolUseFailure", "hook-tool-after", "Bash"},
 	// The session is over, so its live stamp goes and the next session's MCP
 	// recall can answer with it (#4210).
 	{"SessionEnd", "hook-session-end", ""},
@@ -1908,7 +1912,7 @@ func hookStatusMessage(event string) string {
 		return "Saving this session to memory…"
 	case "PreToolUse":
 		return "Checking what this touches…"
-	case "PostToolUse":
+	case "PostToolUse", "PostToolUseFailure":
 		return "Checking what fixed this before…"
 	case "SessionEnd":
 		return "Marking this session as ended…"

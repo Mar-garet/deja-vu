@@ -35,5 +35,6 @@ Message records have `type`, `sessionId`, `timestamp`, and a `message` object. `
 - Tool and control records use other `type` values and do not become messages.
 - Project path encoding is ambiguous because `-` represents both a separator and a hyphen. deja checks the local filesystem before using a two-segment fallback.
 - Subagent logs are read as task, answer and the files they changed by default; the full child transcript is opt-in.
+- A Bash call that exits non-zero fires `PostToolUseFailure`, not `PostToolUse`, with the output under `error`; a hook reply has to name the event it was sent or Claude Code drops it ("Hook returned incorrect event name"). `claude-auto` wires `hook-tool-after` to both (2.1.287, #4488).
 
 **Last verified:** 2026-09-10
