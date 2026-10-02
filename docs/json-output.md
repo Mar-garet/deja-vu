@@ -551,7 +551,9 @@ reads `missing`, since both files also carry the user's own hooks; for
 server in it) or `config-missing`. A `wired` row carries `binary_missing` when
 its entry names a deja binary that is no longer there, so the harness cannot
 start the server, and `switched_off` when the entry is turned off
-(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not. The `deepseek` row carries `plugin_missing` when
+(`"disabled": true`, or opencode's `"enabled": false`), so the harness will not. For Reasonix, `switched_off` means deja's plugin package has no enabled
+record in `plugin-packages.json`, which is what `reasonix plugin disable deja`
+leaves. The `deepseek` row carries `plugin_missing` when
 `cordis.patch.yml` names a deja plugin file dsh cannot find, which keeps dsh
 from starting at all.
 `cherrystudio` is read from the app's own database: `wired`

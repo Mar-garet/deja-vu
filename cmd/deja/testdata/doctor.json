@@ -153,7 +153,8 @@
       "name": "prime",
       "state": "missing",
       "paths": [
-        "<tmp>/home/.prime/agent/sessions"
+        "<tmp>/home/.prime/agent/sessions",
+        "<tmp>/home/.prime/agent/session-artifacts"
       ],
       "files": 0,
       "indexed_sessions": 0

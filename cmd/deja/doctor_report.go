@@ -535,7 +535,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 		{"crush", []string{sources.CrushDataHome()}, sources.CrushDBs(), sources.ParseCrushDB},
 		{"pi", []string{sources.PiRoot()}, sources.PiSessionFiles(), sources.ParsePiFile},
 		{"omp", []string{sources.OmpRoot()}, sources.OmpSessionFiles(), sources.ParseOmpFile},
-		{"prime", []string{sources.PrimeRoot()}, sources.PrimeSessionFiles(), sources.ParsePrimeFile},
+		{"prime", sources.PrimeRoots(), sources.PrimeSessionFiles(), sources.ParsePrimeFile},
 		{"amp", []string{sources.AmpRoot()}, sources.AmpThreadFiles(), sources.ParseAmpFile},
 		{"openclaw", []string{sources.OpenClawRoot()}, sources.OpenClawStoreFiles(), parseDoctorOpenClaw},
 		{"copilot", []string{sources.CopilotRoot()}, sources.CopilotSessionFiles(), sources.ParseCopilotFile},
@@ -964,7 +964,7 @@ func collectDoctorMCP() []doctorMCPStatus {
 		if state == "wired" && dejaCommandMissing(config.path) != "" {
 			row.BinaryMissing = true
 		}
-		if state == "wired" && dejaEntrySwitchedOff(config.path) {
+		if state == "wired" && (dejaEntrySwitchedOff(config.path) || doctorMCPSwitchedOff(config.name) != "") {
 			row.SwitchedOff = true
 		}
 		if state == "wired" && config.name == "deepseek" && len(dshPluginsMissing(config.path)) > 0 {

@@ -542,7 +542,7 @@ func allHarnesses() []Harness {
 			Name: "prime", Load: LoadPrime, Files: PrimeSessionFiles,
 			Kinds: []FileKind{{
 				Name:      "prime",
-				Match:     func(p string) bool { return strings.HasSuffix(p, ".jsonl") && strings.HasPrefix(p, PrimeRoot()) },
+				Match:     isPrimeFile,
 				Parse:     fullParse(ParsePrimeFile),
 				ParseFrom: offsetParse(ParsePrimeFileFromOffset),
 			}},

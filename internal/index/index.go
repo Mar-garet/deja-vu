@@ -397,6 +397,11 @@ import (
 // no longer takes the kept sessions' ids (#4332).
 // 60 also: a Zed thread gains the files its agent created with write_file (#4339).
 // 60 also: a Cherry Studio reply indexed mid-stream is read whole once it finishes (#4346).
+// 60 also: an omp session indexed mid-way keeps its header id instead of
+// splitting off the appended turns under the file name (#4406).
+//
+// 60 also: a CodeWhale edit_file call written with search/replace, its own
+// argument names, leaves an edit and a wrote record (#4404).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
