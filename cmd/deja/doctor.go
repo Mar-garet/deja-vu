@@ -939,11 +939,15 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// Hermes 0.17 keeps one state.db at the root and no profiles/ directory,
 	// which HermesDBs reads first; the row looked only at profiles/ and said
 	// missing about an indexed store (#4244).
+	// The directory alone is not a store: it holds hermes' config, and
+	// `deja install hermes-auto` writes there on a machine where it never ran.
 	hermesRoot := sources.HermesProfilesRoot()
-	if doctorFilePresent(filepath.Join(sources.HermesHome(), "state.db")) || !doctorExists(hermesRoot) {
+	rootStore := doctorFilePresent(filepath.Join(sources.HermesHome(), "state.db"))
+	hermesPresent := rootStore || doctorExists(hermesRoot)
+	if rootStore || !doctorExists(hermesRoot) {
 		hermesRoot = sources.HermesHome()
 	}
-	printRow("hermes", hermesRoot, doctorExists(hermesRoot), doctorCount(len(sources.HermesSessionFiles()), "store"))
+	printRow("hermes", hermesRoot, hermesPresent, doctorCount(len(sources.HermesSessionFiles()), "store"))
 
 	clineModern := sources.ClineSessionsDir()
 	clineFiles := len(sources.ClineSessionFiles())
