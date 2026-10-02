@@ -517,6 +517,11 @@
       "path": "<tmp>/home/.config/opencode/plugins/deja.js"
     },
     {
+      "name": "kilocode",
+      "state": "missing",
+      "path": "<tmp>/home/.config/kilo/plugins/deja.js"
+    },
+    {
       "name": "cursor",
       "state": "missing",
       "path": "<tmp>/home/.cursor/hooks.json"
@@ -605,6 +610,11 @@
       "name": "grok",
       "state": "missing",
       "path": "<tmp>/home/.grok/hooks/deja.json"
+    },
+    {
+      "name": "kiro",
+      "state": "missing",
+      "path": "<tmp>/home/.kiro/agents/deja.json"
     },
     {
       "name": "copilot",

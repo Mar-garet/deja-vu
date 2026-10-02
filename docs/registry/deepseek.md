@@ -70,6 +70,17 @@ harness falls back to the first prompt.
   such plugin, and removes it along with its row when someone drops back to it.
   Verified against a local model with no tools in play: dsh answered a question
   about a pool size that only the injected block carried.
+  The same plugin listens on `tools/post-execute`, which runs on every tool
+  result: after a `read`, `edit`, `write` or `str_replace_editor` call it adds
+  `deja hook-tool`'s line about the file, and after a `bash` or `pwsh` whose result ends in `[exit code: N]` or `[killed by signal: X]`
+  (the last line only, as dsh's own parser reads it) it adds
+  `deja hook-tool-after`'s earlier fix for that error, both as
+  `additionalContexts`, which dsh hands the model on the next step. The marker
+  is dropped before the lookup, as the index drops it. Measured on dsh
+  0.1.1-rc.2: a bash that failed with an error two earlier sessions had fixed
+  was followed, in the next request, by a `<deja-recall>` message naming the
+  command that fixed it. `tools/execute`, the seam before the call, has no
+  channel to the model (#4293).
   The workspace deja is asked about is the session's, read from the session
   header (`agent.session.header.cwd`). One `dsh web` process serves sessions
   from every workspace and never changes directory, so `process.cwd()` is only

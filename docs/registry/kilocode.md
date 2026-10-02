@@ -14,6 +14,14 @@
   `✓ deja connected` once it is there. The skill goes in
   `~/.kilocode/skills/deja-history/SKILL.md` and the command in
   `<config>/kilo/commands/deja.md`.
+- **Auto-recall**: `deja install kilocode-auto` does all of the above and adds
+  `<config>/kilo/plugins/deja.js`. Kilo CLI kept opencode's plugin loader (it
+  globs `{plugin,plugins}/*.{ts,js}` in each config directory), so the file is
+  opencode-auto's plugin: the session digest folded into the system prompt,
+  per-prompt recall, the file and failed-command lines after a tool, and the
+  session-end stamp. It is always the opencode 1.x shape, whichever opencode is
+  on PATH: Kilo 7.8.3 refuses the 2.x default export with "must default export
+  an object with server()" (#4398).
 
 Verified on `@kilocode/cli` 7.7.3. A real `kilo run` session landed in
 `~/.local/share/kilo/kilo.db`, deja indexed it and recall returned the phrase
@@ -33,7 +41,12 @@ for a skill — so the command file, the server and both skills coexist under th
 same word. Gemini's flat namespace is the opposite case and needed the command
 file dropped there (#3665).
 
-**Last verified:** 2026-09-17
+Verified on `@kilocode/cli` 7.8.3 with `deja install kilocode-auto`: a `kilo
+run` in a project with one earlier Kilo session sent the model a system
+message opening with the `<deja-recall>` digest naming that session, and the
+reply answered from it.
+
+**Last verified:** 2026-10-02
 
 Kilo Code is a Roo Code fork that vendors OpenCode — `packages/opencode` is
 1,780 files inside the Kilo repository — and `packages/kilo-vscode/src/legacy-migration`
@@ -88,6 +101,6 @@ directory is put under it (#4534).
   own loader looks first (`packages/opencode/src/kilocode/paths.ts`). A machine
   with the CLI and no editor gets the CLI config, the skill and the command,
   and a note saying no editor host carried the extension.
-- No hooks: a search of Kilo-Org/kilocode finds no hook surface, and the extension is a Roo fork
-  whose hooks are still in flight upstream, so recall arrives when the model calls the tool rather
-  than on its own.
+- Hooks are the CLI's only: the extension is a Roo fork whose hooks are still in flight
+  upstream, so in the editor recall arrives when the model calls the tool. The CLI's plugin
+  is the `kilocode-auto` file above.

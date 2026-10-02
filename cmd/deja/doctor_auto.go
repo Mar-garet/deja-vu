@@ -37,6 +37,8 @@ func autoWirings() []autoWiring {
 		{"opencode", func() string {
 			return filepath.Join(opencodeConfigHome(), "opencode", "plugins", "deja.js")
 		}, "hook-context", ""},
+		// Kilo CLI loads the same plugin from its own config directory (#4398).
+		{"kilocode", func() string { return filepath.Join(kilocodeCLIConfigDir(), "plugins", "deja.js") }, "hook-context", ""},
 		{"cursor", func() string { return filepath.Join(sources.CursorCLIHome(), "hooks.json") }, "hook-context", ""},
 		{"gemini", func() string {
 			return filepath.Join(sources.GeminiHome(), "extensions", "deja", "hooks", "hooks.json")
@@ -78,6 +80,9 @@ func autoWirings() []autoWiring {
 		// whole of auto-recall here — there is no digest hook to look for.
 		{"crush", func() string { return crushConfigPath() }, "hook-tool", ""},
 		{"grok", func() string { return grokHooksPath() }, "hook-context", ""},
+		// kiro-cli runs hooks from the agent a chat starts in; deja's is its
+		// own agent file (#4304).
+		{"kiro", func() string { return kiroAgentPath() }, "hook-context", ""},
 		// Copilot CLI keeps hooks with the rest of its user settings; the row
 		// follows them to config.json while they have not moved yet. The flag
 		// is part of the marker: a plain hook-context line answers in Claude's
@@ -268,6 +273,10 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		state = "stale"
 	case a.name == "openclaw" && openclawPluginMissing():
 		state = "stale"
+	// Written, and nothing starts it: kiro-cli runs kiro_default unless the
+	// default agent is deja's or a chat names it (#4304).
+	case a.name == "kiro" && kiroDefaultAgent() != "deja":
+		state = "installed"
 	default:
 		state = "wired"
 	}
@@ -398,6 +407,8 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's hook is not under hooks.events with hooks.enabled on — `deja install zcode-auto`)\n", a.name, "stale", reportPath(path))
 		case a.name == "openclaw" && openclawPluginMissing():
 			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's plugin is not in %s — `openclaw agent --local` and `openclaw chat` get no recall; `deja install openclaw-auto`)\n", a.name, "stale", reportPath(path), reportPath(openclawPluginDir()))
+		case a.name == "kiro" && kiroDefaultAgent() != "deja":
+			fmt.Fprintf(w, "  %-12s %-11s %s  (runs only in `kiro-cli chat --agent deja`; `kiro-cli agent set-default deja` makes it every chat's)\n", a.name, "installed", reportPath(path))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
 			if off := autoWiringSwitchedOff(a.name); off != "" {

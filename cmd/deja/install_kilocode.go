@@ -20,9 +20,9 @@ import (
 // glob is in the same paths.ts — so the shared manual reaches it without a
 // per-project file.
 //
-// Hooks it does not have: a search of the repository for a hook surface finds
-// none, and the extension is a Roo fork whose hooks are still in flight
-// upstream. So auto-recall stays a gap with a reason rather than a promise.
+// The extension has no hooks: it is a Roo fork whose hooks are still in flight
+// upstream. The CLI does, because it kept opencode's plugin loader — see
+// installKilocodeAuto.
 func kilocodeMCPSettingsPaths() []string {
 	var out []string
 	for _, root := range sources.KiloRoots() {
@@ -141,4 +141,26 @@ func kilocodeFirstRoot() string {
 		}
 	}
 	return filepath.Join(os.DevNull, "kilocode")
+}
+
+// installKilocodeAuto is the kilocode target plus a plugin in the CLI's own
+// `<config>/kilo/plugins`, which Kilo globs with opencode's loader (#4398).
+func installKilocodeAuto(exe string, uninstall bool) (installResult, error) {
+	mcp, err := installKilocode(exe, uninstall)
+	if err != nil {
+		return installResult{}, err
+	}
+	plugin, err := installOpencodeShapedPlugin(filepath.Join(kilocodeCLIConfigDir(), "plugins"), exe, uninstall, kilocodePluginJS)
+	if err != nil {
+		return installResult{}, err
+	}
+	return wroteAll(mcp, plugin), nil
+}
+
+// kilocodePluginJS is opencode's 1.x plugin whatever opencode is on PATH. Kilo
+// CLI 7.8.3 carries the 1.x loader: the 1.x plugin's system transform put the
+// digest in front of the model, and the 2.x default export was refused with
+// "must default export an object with server()".
+func kilocodePluginJS(exe string) string {
+	return legacyPluginJSFor("kilocode-auto", exe)
 }
