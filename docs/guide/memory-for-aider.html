@@ -149,7 +149,7 @@
 <pre>deja install aider</pre>
 <p>Three things, all reversible with <code>deja uninstall aider</code>:</p>
 <ul>
-<li><b>An entry under <code>read:</code></b> in <code>~/.aider.conf.yml</code>, pointing at <code>~/.config/deja/aider-context.md</code>. Whatever was already in that list stays, including the scalar and flow spellings of it.</li>
+<li><b>An entry under <code>read:</code></b> in <code>~/.aider.conf.yml</code>, pointing at <code>~/.config/deja/aider-context.md</code>. Whatever was already in that list stays, including the scalar and flow spellings of it, which install writes out as a block list and uninstall puts back as they were.</li>
 <li><b>The context file itself</b>, written during the install rather than on first use: aider refuses to start when a configured read file is missing, and the first session should not be the one that finds that out.</li>
 <li><b>The shared skill</b> at <code>~/.agents/skills/deja-search/SKILL.md</code>, which the other agents on this machine read.</li>
 </ul>
