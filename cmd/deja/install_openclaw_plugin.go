@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
@@ -19,8 +20,11 @@ import (
 //   - A plugin needs both package.json with openclaw.extensions and
 //     openclaw.plugin.json. Either one alone fails the install with a
 //     validation error rather than being ignored.
-//   - plugins.allow is advisory. Leaving it alone costs a warning on startup,
-//     and writing to it would be deja deciding what the user trusts.
+//   - plugins.allow is the user's trust list, and writing to it would be deja
+//     deciding what the user trusts. Found only by scanning extensions/, the
+//     plugin cost two warnings on every start: the open allow list, and no
+//     install or load-path provenance. Named in plugins.load.paths it is
+//     origin "config", which both checks accept (#4579).
 //   - The entry under plugins.entries is what enables the plugin; extensions/
 //     is a discovery root, so no `openclaw plugins install` step is needed.
 const openclawPluginID = "deja"
@@ -39,6 +43,9 @@ func installOpenClawPlugin(exe string, uninstall bool) (installResult, error) {
 			return installResult{}, err
 		}
 		if _, err := setOpenClawPluginEnabled(false); err != nil {
+			return installResult{}, err
+		}
+		if _, err := setOpenClawPluginLoadPath(dir, false); err != nil {
 			return installResult{}, err
 		}
 		if !had {
@@ -79,6 +86,9 @@ func installOpenClawPlugin(exe string, uninstall bool) (installResult, error) {
 	if openclawEntrySwitchedOff("plugins.entries", openclawPluginID) {
 		note = "left deja's plugin switched off, the way it was — `openclaw plugins enable deja` turns it back on"
 	} else if _, err := setOpenClawPluginEnabled(true); err != nil {
+		return installResult{}, err
+	}
+	if _, err := setOpenClawPluginLoadPath(dir, true); err != nil {
 		return installResult{}, err
 	}
 	// The manifest and package.json beside it are deja's own and went unnamed
@@ -139,6 +149,129 @@ func setOpenClawPluginEnabled(on bool) (string, error) {
 	}
 	next = append(next, '\n')
 	return writeIfChanged(path, old, next)
+}
+
+// setOpenClawPluginLoadPath adds the plugin's directory to plugins.load.paths,
+// or takes it out, beside whatever paths the user lists there (#4579).
+func setOpenClawPluginLoadPath(dir string, on bool) (string, error) {
+	path := filepath.Join(sources.OpenClawStateDir(), "openclaw.json")
+	old, err := readConfig(path)
+	if err != nil {
+		return "", err
+	}
+	var root map[string]any
+	if len(bytes.TrimSpace(old)) == 0 {
+		if !on {
+			return "unchanged", nil
+		}
+		root = map[string]any{}
+	} else if err := json.Unmarshal([]byte(jsoncToJSON(string(old))), &root); err != nil {
+		return "", configParseError(path, err)
+	}
+	plugins, _ := root["plugins"].(map[string]any)
+	load, _ := mapAt(plugins, "load")
+	// Something other than an object or a list there is a config deja does
+	// not understand. The plugin loads from extensions/ without it, so the
+	// cost of leaving it is the warning, not the recall.
+	if _, ok := plugins["load"]; ok && load == nil {
+		return "unchanged", nil
+	}
+	paths, isList := load["paths"].([]any)
+	if _, ok := load["paths"]; ok && !isList {
+		return "unchanged", nil
+	}
+	kept := make([]any, 0, len(paths)+1)
+	for _, p := range paths {
+		if s, _ := p.(string); openclawSamePath(s, dir) {
+			continue
+		}
+		kept = append(kept, p)
+	}
+	had := len(kept) != len(paths)
+	if on == had {
+		return "unchanged", nil
+	}
+	if on {
+		kept = append(kept, dir)
+	}
+	if configIsJSONC(old) {
+		// Comments stay where they are; the list is written whole.
+		text, err := openclawLoadPathsJSONC(string(old), kept, len(load), len(plugins), paths != nil)
+		if err != nil {
+			return "", configParseError(path, err)
+		}
+		return writeIfChanged(path, old, []byte(text))
+	}
+	switch {
+	case len(kept) > 0:
+		if plugins == nil {
+			plugins = map[string]any{}
+			root["plugins"] = plugins
+		}
+		if load == nil {
+			load = map[string]any{}
+			plugins["load"] = load
+		}
+		load["paths"] = kept
+	case load != nil:
+		delete(load, "paths")
+		if len(load) == 0 {
+			delete(plugins, "load")
+		}
+		if len(plugins) == 0 {
+			delete(root, "plugins")
+		}
+	}
+	next, err := marshalConfigLike(old, root)
+	if err != nil {
+		return "", err
+	}
+	return writeIfChanged(path, old, append(next, '\n'))
+}
+
+// openclawLoadPathsJSONC writes kept as plugins.load.paths into a config
+// carrying comments, or takes the key out, with the blocks it was the only
+// thing in, when kept is empty.
+func openclawLoadPathsJSONC(text string, kept []any, loadKeys, pluginKeys int, had bool) (string, error) {
+	if len(kept) == 0 {
+		dropFrom := 2
+		if loadKeys == 1 {
+			dropFrom = 1
+			if pluginKeys == 1 {
+				dropFrom = 0
+			}
+		}
+		return jsoncRemoveKey(text, "plugins.load", "paths", dropFrom)
+	}
+	list, err := json.Marshal(kept)
+	if err != nil {
+		return "", err
+	}
+	if !had {
+		return jsoncSetEntry(text, "plugins.load", "paths", string(list), false, 2)
+	}
+	open := zedTopLevelOpen(text)
+	if open < 0 {
+		return "", fmt.Errorf("does not look like a settings object")
+	}
+	block, have := walkJSONCKeys(text, open, []string{"plugins", "load"})
+	if block == nil || have < 2 {
+		return "", fmt.Errorf("plugins.load is not where it parsed")
+	}
+	at := jsoncListValue(text, block, "paths")
+	if at == nil {
+		return "", fmt.Errorf("plugins.load.paths is not where it parsed")
+	}
+	return text[:at[0]] + string(list) + text[at[1]:], nil
+}
+
+// openclawSamePath reports whether a load path names dir, in the spellings
+// OpenClaw resolves: absolute, or from the home directory.
+func openclawSamePath(p, dir string) bool {
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		p = filepath.Join(sources.Home(), rest)
+	}
+	return p != "" && filepath.Clean(p) == filepath.Clean(dir)
 }
 
 func openclawPluginPackage() string {

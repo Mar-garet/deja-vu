@@ -499,6 +499,9 @@ func jsoncRemoveKey(text, blockKey, key string, dropFrom int) (string, error) {
 	}
 	at := jsoncScalarValue(text, block, key)
 	if at == nil {
+		at = jsoncListValue(text, block, key)
+	}
+	if at == nil {
 		return text, nil
 	}
 	// From the key's own quote to the end of its value, plus the comma behind
@@ -583,6 +586,66 @@ func jsoncScalarValue(text string, block *zedSpan, key string) *[2]int {
 				}
 				span := [2]int{v, stop}
 				return &span
+			}
+			i = end - 1
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+		}
+	}
+	return nil
+}
+
+// jsoncListValue is where a list setting's value sits inside a block, from
+// its '[' to one past the matching ']', or nil when the key is not there or
+// holds something else. OpenClaw's plugins.load.paths is the one deja edits
+// (#4579).
+func jsoncListValue(text string, block *zedSpan, key string) *[2]int {
+	want := `"` + key + `"`
+	depth := 0
+	for i := block.valueOpen + 1; i < block.valueEnd-1; i++ {
+		if j := zedSkipComment(text, i); j != i {
+			i = j - 1
+			continue
+		}
+		switch text[i] {
+		case '"':
+			end := zedStringEnd(text, i)
+			if end < 0 {
+				return nil
+			}
+			if depth == 0 && text[i:end] == want && jsoncIsKey(text, end) {
+				v := end
+				for v < len(text) && (text[v] == ' ' || text[v] == '\t' || text[v] == '\n' || text[v] == '\r' || text[v] == ':') {
+					v++
+				}
+				if v >= len(text) || text[v] != '[' {
+					return nil
+				}
+				level := 0
+				for k := v; k < block.valueEnd-1; k++ {
+					if j := zedSkipComment(text, k); j != k {
+						k = j - 1
+						continue
+					}
+					switch text[k] {
+					case '"':
+						e := zedStringEnd(text, k)
+						if e < 0 {
+							return nil
+						}
+						k = e - 1
+					case '[', '{':
+						level++
+					case ']', '}':
+						level--
+						if level == 0 {
+							return &[2]int{v, k + 1}
+						}
+					}
+				}
+				return nil
 			}
 			i = end - 1
 		case '{', '[':
