@@ -148,3 +148,40 @@ func TestRelativePatchPathsResolveAgainstTheSession(t *testing.T) {
 		})
 	}
 }
+
+// Cline matches its markers as whole lines of three or more of a character —
+// /^[-]{3,} SEARCH>?$/, /^[=]{3,}$/, /^[+]{3,} REPLACE>?$/ and Roo's < and >
+// spellings — so a model's `--- SEARCH` is a block and an indented `=======`
+// inside the replaced code is not a marker (#4504).
+func TestClineDiffMarkersAsClineReadsThem(t *testing.T) {
+	cases := []struct {
+		name, diff        string
+		replaced, written []string
+	}{
+		{"canonical", "------- SEARCH\na\n=======\nb\n+++++++ REPLACE", []string{"a"}, []string{"b"}},
+		{"roo's form", "<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE", []string{"a"}, []string{"b"}},
+		{"three and eight", "--- SEARCH\na\n===\nb\n++++++++ REPLACE", []string{"a"}, []string{"b"}},
+		{"trailing >", "------- SEARCH>\na\n=======\nb\n+++++++ REPLACE>", []string{"a"}, []string{"b"}},
+		{"two blocks", "------- SEARCH\na\n=======\nb\n+++++++ REPLACE\n\n------- SEARCH\nc\n=======\nd\n+++++++ REPLACE", []string{"a", "c"}, []string{"b", "d"}},
+		{"crlf", "------- SEARCH\r\na\r\n=======\r\nb\r\n+++++++ REPLACE\r\n", []string{"a\r"}, []string{"b\r"}},
+		{"indented rule in the code", "------- SEARCH\nx := 1\n    =======\ny := 2\n=======\nz := 3\n+++++++ REPLACE", []string{"x := 1\n    =======\ny := 2"}, []string{"z := 3"}},
+		{"roo line numbers", "<<<<<<< SEARCH\n:start_line:3\n-------\na\n=======\nb\n>>>>>>> REPLACE", []string{"a"}, []string{"b"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			replaced, written := rooDiffSides(c.diff, clineMarkers)
+			if strings.Join(replaced, "|") != strings.Join(c.replaced, "|") || strings.Join(written, "|") != strings.Join(c.written, "|") {
+				t.Errorf("sides = %q / %q, want %q / %q", replaced, written, c.replaced, c.written)
+			}
+		})
+	}
+}
+
+// Roo's apply_diff takes exactly seven, so a `===` rule in the replaced text
+// stays text there (#4504).
+func TestRooDiffMarkersStayExact(t *testing.T) {
+	replaced, written := rooDiffSides("<<<<<<< SEARCH\nTitle\n===\n=======\nHeading\n===\n>>>>>>> REPLACE", rooMarkers)
+	if len(replaced) != 1 || replaced[0] != "Title\n===" || len(written) != 1 || written[0] != "Heading\n===" {
+		t.Errorf("sides = %q / %q", replaced, written)
+	}
+}

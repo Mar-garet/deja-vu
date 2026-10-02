@@ -22,7 +22,8 @@ it (#4315). The legacy extension's store takes
 the Roo path for those, since its tools are Roo's — see
 [Roo Code](roo.md) for the SEARCH/REPLACE shape and the workspace-relative
 paths. Two spellings are Cline's own: `replace_in_file` blocks are marked
-`------- SEARCH` / `=======` / `+++++++ REPLACE`, and `apply_patch` names its
+`------- SEARCH` / `=======` / `+++++++ REPLACE` (each a whole line, a run of
+three or more, Roo's `<` and `>` too), and `apply_patch` names its
 patch `input` where Roo's names it `patch`. The legacy `<task>...</task>` user envelope is unwrapped so the tags are
 not indexed.
 

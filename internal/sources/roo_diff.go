@@ -1,6 +1,9 @@
 package sources
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // Roo and the legacy Cline extension do not send an edit as old_string and
 // new_string the way the shared dialect expects. apply_diff and
@@ -13,11 +16,24 @@ import "strings"
 //
 // Cline's replace_in_file spells the markers `------- SEARCH` and
 // `+++++++ REPLACE`, and accepts Roo's too; read with Roo's alone, Cline's
-// main edit tool recorded the path and neither side (#4504).
+// main edit tool recorded the path and neither side (#4504). Both match a
+// marker as the whole line, so an indented `=======` inside the replaced code
+// is code. Roo's apply_diff takes exactly seven; Cline takes a run of three
+// or more (src/core/assistant-message/diff.ts), which in Roo's would cut a
+// block at a `===` heading rule.
+type diffMarkers struct{ search, middle, replace *regexp.Regexp }
+
 var (
-	rooSearchMarkers  = []string{"<<<<<<< SEARCH", "------- SEARCH"}
-	rooMiddleMarkers  = []string{"======="}
-	rooReplaceMarkers = []string{">>>>>>> REPLACE", "+++++++ REPLACE"}
+	rooMarkers = diffMarkers{
+		search:  regexp.MustCompile(`^<{7} SEARCH>?$`),
+		middle:  regexp.MustCompile(`^={7}$`),
+		replace: regexp.MustCompile(`^>{7} REPLACE$`),
+	}
+	clineMarkers = diffMarkers{
+		search:  regexp.MustCompile(`^(?:-{3,}|<{3,}) SEARCH>?$`),
+		middle:  regexp.MustCompile(`^={3,}$`),
+		replace: regexp.MustCompile(`^(?:\+{3,}|>{3,}) REPLACE>?$`),
+	}
 )
 
 // rooEditTools are the calls that change a file, under both extensions' names.
@@ -40,19 +56,19 @@ var rooEditTools = map[string]bool{
 // of each of its blocks. A payload can hold several blocks for the same file;
 // an unterminated one ends the walk, because guessing where it was meant to
 // close would record text the file never held.
-func rooDiffSides(diff string) (replaced, written []string) {
+func rooDiffSides(diff string, m diffMarkers) (replaced, written []string) {
 	lines := strings.Split(diff, "\n")
 	for i := 0; i < len(lines); i++ {
-		if !rooMarker(lines[i], rooSearchMarkers) {
+		if !rooMarker(lines[i], m.search) {
 			continue
 		}
 		i++
 		i = rooSkipBlockHeader(lines, i)
-		before, next, ok := rooCollect(lines, i, rooMiddleMarkers)
+		before, next, ok := rooCollect(lines, i, m.middle)
 		if !ok {
 			return replaced, written
 		}
-		after, next, ok := rooCollect(lines, next+1, rooReplaceMarkers)
+		after, next, ok := rooCollect(lines, next+1, m.replace)
 		if !ok {
 			return replaced, written
 		}
@@ -84,19 +100,14 @@ func rooSkipBlockHeader(lines []string, i int) int {
 	return i
 }
 
-// rooMarker reports whether a line opens with one of the markers.
-func rooMarker(line string, markers []string) bool {
-	line = strings.TrimSpace(line)
-	for _, m := range markers {
-		if strings.HasPrefix(line, m) {
-			return true
-		}
-	}
-	return false
+// rooMarker reports whether a line is a marker, trailing whitespace and a
+// CRLF's \r aside.
+func rooMarker(line string, marker *regexp.Regexp) bool {
+	return marker.MatchString(strings.TrimRight(line, " \t\r"))
 }
 
 // rooCollect reads lines until a marker, and reports whether it found one.
-func rooCollect(lines []string, i int, markers []string) (body []string, at int, ok bool) {
+func rooCollect(lines []string, i int, markers *regexp.Regexp) (body []string, at int, ok bool) {
 	for ; i < len(lines); i++ {
 		if rooMarker(lines[i], markers) {
 			return body, i, true
@@ -206,9 +217,12 @@ func rooEditRecords(blocks []any, workspace string) (spans, wrote []string) {
 
 func rooCallSides(name string, in map[string]any) (replaced, written []string) {
 	switch name {
-	case "apply_diff", "replace_in_file":
+	case "apply_diff":
 		diff, _ := in["diff"].(string)
-		return rooDiffSides(diff)
+		return rooDiffSides(diff, rooMarkers)
+	case "replace_in_file":
+		diff, _ := in["diff"].(string)
+		return rooDiffSides(diff, clineMarkers)
 	case "search_and_replace":
 		// A regular expression is not the text that stopped existing, so only
 		// a literal search is recorded as the replaced side. The written side
