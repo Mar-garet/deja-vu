@@ -68,7 +68,11 @@
 <p>its first launch and reads it from then on. deja used to write</p>
 <p><code>config.json</code>, which the runtime reads once, as the source of that</p>
 <p>first-launch migration, so nothing reached the agent on a machine where</p>
-<p>ZCode had run; an uninstall clears deja&#39;s entries from both (#4429).</p>
+<p>ZCode had run; an uninstall clears deja&#39;s entries from both. Before that</p>
+<p>first launch, install starts <code>setting.json</code> from <code>config.json</code> the way the</p>
+<p>runtime would, since the runtime skips its migration once the file exists,</p>
+<p>and <code>deja doctor</code> reads hooks outside <code>hooks.events</code> or with</p>
+<p><code>hooks.enabled</code> off as stale (#4429).</p>
 <ul>
 <li>**Three things decide whether that works, and all three are silent when</li>
 </ul>

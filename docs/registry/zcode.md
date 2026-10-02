@@ -29,7 +29,11 @@ block, which deja has no use for and ignores.
   its first launch and reads it from then on. deja used to write
   `config.json`, which the runtime reads once, as the source of that
   first-launch migration, so nothing reached the agent on a machine where
-  ZCode had run; an uninstall clears deja's entries from both (#4429).
+  ZCode had run; an uninstall clears deja's entries from both. Before that
+  first launch, install starts `setting.json` from `config.json` the way the
+  runtime would, since the runtime skips its migration once the file exists,
+  and `deja doctor` reads hooks outside `hooks.events` or with
+  `hooks.enabled` off as stale (#4429).
 - **Three things decide whether that works, and all three are silent when
   wrong.** Config-file hooks do nothing without `hooks.enabled: true`, and
   the runtime's own `setting.json` starts with it off: install turns it on and
