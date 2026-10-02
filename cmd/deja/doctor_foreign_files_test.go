@@ -105,3 +105,44 @@ func TestAClientsOwnFilesAreNotUnreadTranscripts(t *testing.T) {
 		})
 	}
 }
+
+// A Kimi /btw fork is read, so doctor counts it as indexed; a fork that an
+// Agent call with fork: true made is a sub-agent run and stays a skipped one
+// (#4484).
+func TestDoctorCountsAKimiBtwForkAsRead(t *testing.T) {
+	tmp := hermeticEnv(t)
+	t.Setenv("DEJA_INCLUDE_SUBAGENTS", "")
+	root := filepath.Join(tmp, "kimi-store")
+	t.Setenv("DEJA_KIMI_ROOT", root)
+	session := filepath.Join(root, "sessions", "wd_api", "s1")
+	for rel, body := range map[string]string{
+		"state.json": `{"workDir":"/w/api","agents":{"main":{"type":"main"},` +
+			`"agent-1":{"type":"sub","parentAgentId":"main","forkedFrom":"main"},` +
+			`"agent-2":{"type":"sub","parentAgentId":"main","forkedFrom":"main"}}}`,
+		"agents/main/wire.jsonl": `{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"why is the retry loop slow"}]},"time":1782295300001}` + "\n",
+		"agents/agent-1/wire.jsonl": `{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"side"}],"origin":{"kind":"injection","variant":"btw"}},"time":1782295300002}` + "\n" +
+			`{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"what is jitter"}],"origin":{"kind":"user"}},"time":1782295300003}` + "\n",
+		"agents/agent-2/wire.jsonl": `{"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"audit it"}],"origin":{"kind":"system_trigger","name":"subagent"}},"time":1782295300004}` + "\n",
+	} {
+		p := filepath.Join(session, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out bytes.Buffer
+	doctorHarnesses(&out, t.TempDir())
+	var row string
+	for _, line := range strings.Split(out.String(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "kimi ") && strings.Contains(line, "file") {
+			row = strings.TrimSpace(line)
+		}
+	}
+	for _, want := range []string{"(2 files", "1 subagent transcripts skipped"} {
+		if !strings.Contains(row, want) {
+			t.Errorf("kimi row lacks %q: %s", want, row)
+		}
+	}
+}

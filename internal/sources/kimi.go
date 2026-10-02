@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/vshulcz/deja-vu/internal/model"
@@ -28,8 +30,8 @@ import (
 // by default; think-parts are skipped by design (issue #248), and a sub-agent's
 // agents/<agent-id>/wire.jsonl comes in under DEJA_INCLUDE_SUBAGENTS=1, the
 // same switch as everywhere else (#4483). A /btw side question runs in a fork
-// of the main agent that state.json marks forkedFrom; the person asked it, so
-// it is read whatever the switch says (#4484).
+// of the main agent that state.json marks forkedFrom and the btw reminder
+// opens; the person asked it, so it is read whatever the switch says (#4484).
 
 // KimiConfigDir is the native Kimi Code home. DEJA_KIMI_ROOT intentionally
 // does not affect it because that variable only relocates reads.
@@ -56,7 +58,7 @@ func KimiSessionFiles() []string {
 			f = kimiForks(dir)
 			forks[dir] = f
 		}
-		return f[filepath.Base(filepath.Dir(p))]
+		return f[filepath.Base(filepath.Dir(p))] && kimiHasBtw(p)
 	})
 }
 
@@ -65,8 +67,9 @@ func KimiSessionFiles() []string {
 func kimiSessionDirOf(p string) string { return filepath.Dir(filepath.Dir(filepath.Dir(p))) }
 
 // kimiForks lists the agents state.json records as forks of another agent.
-// Kimi forks main for a /btw side question; a sub-agent the main agent spawns
-// carries no forkedFrom (#4484).
+// Kimi forks main for a /btw side question, and from 2.x for an Agent or
+// AgentSwarm call with fork: true too; only the btw reminder in the log tells
+// the two apart (#4484).
 func kimiForks(sessionDir string) map[string]bool {
 	var st struct {
 		Agents map[string]struct {
@@ -91,12 +94,58 @@ func kimiForkFile(p string) bool {
 	return KimiSubagentFile(p) && kimiForks(kimiSessionDirOf(p))[filepath.Base(filepath.Dir(p))]
 }
 
+// kimiBtwFile reports whether p is a /btw fork's log.
+func kimiBtwFile(p string) bool { return kimiForkFile(p) && kimiHasBtw(p) }
+
 // kimiBtwTrigger reports whether an appended message is the reminder Kimi puts
 // in a fork to open a /btw side question; what comes before it is main's
-// context, copied (#4484).
+// context, copied (#4484). 0.28 marks it {kind: system_trigger, name: btw};
+// 0.43 and 2.x {kind: injection, variant: btw}.
 func kimiBtwTrigger(msg map[string]any) bool {
 	o, _ := msg["origin"].(map[string]any)
-	return msg["role"] == "user" && o["kind"] == "system_trigger" && o["name"] == "btw"
+	return msg["role"] == "user" &&
+		(o["kind"] == "system_trigger" && o["name"] == "btw" || o["kind"] == "injection" && o["variant"] == "btw")
+}
+
+// kimiBtwSeen remembers which fork logs hold the btw reminder, by size and
+// mtime, so the file list does not read every fork on every pass. A log that
+// held it holds it for good: the file only grows.
+var kimiBtwSeen = struct {
+	sync.Mutex
+	m map[string]kimiBtwMark
+}{m: map[string]kimiBtwMark{}}
+
+type kimiBtwMark struct {
+	size, mod int64
+	btw       bool
+}
+
+// kimiHasBtw reports whether the log at p holds the btw reminder.
+func kimiHasBtw(p string) bool {
+	fi, err := os.Stat(p)
+	if err != nil {
+		return false
+	}
+	kimiBtwSeen.Lock()
+	m, ok := kimiBtwSeen.m[p]
+	kimiBtwSeen.Unlock()
+	if ok && (m.btw || m.size == fi.Size() && m.mod == fi.ModTime().UnixNano()) {
+		return m.btw
+	}
+	btw := false
+	eachLineFrom(p, 0, func(line []byte) bool {
+		if !bytes.Contains(line, []byte(`"btw"`)) {
+			return true
+		}
+		if msg, _ := decodeJSONLine(line)["message"].(map[string]any); msg != nil && kimiBtwTrigger(msg) {
+			btw = true
+		}
+		return !btw
+	})
+	kimiBtwSeen.Lock()
+	kimiBtwSeen.m[p] = kimiBtwMark{fi.Size(), fi.ModTime().UnixNano(), btw}
+	kimiBtwSeen.Unlock()
+	return btw
 }
 
 // KimiSidecarFiles lists the per-session state.json the reader opens itself
@@ -445,10 +494,10 @@ func parseKimiFileFromOffset(path string, offset int64) ([]model.Session, error)
 // kimiTailResumes reads wire.jsonl whole when either rule asks: the tail
 // answers a call made before it (#4443), or it goes on with a reply streamed
 // across the offset (#4445).
-// A fork is read whole too: the tail cannot say where the copied context
+// A /btw fork is read whole too: the tail cannot say where the copied context
 // ends (#4484).
 func kimiTailResumes(path string, offset int64) bool {
-	if offset > 0 && kimiForkFile(path) {
+	if offset > 0 && kimiBtwFile(path) {
 		return false
 	}
 	return kimiResumes(path, offset) && KimiResumes(path, offset)

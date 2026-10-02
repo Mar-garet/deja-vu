@@ -19,9 +19,12 @@ included. Sub-agent histories under `agents/<agent-id>/wire.jsonl` are read
 only with `DEJA_INCLUDE_SUBAGENTS=1`, each as a session of its own naming the
 parent session (#4483). A `/btw` side question is the exception: Kimi runs it
 in a fork of `main` that `state.json` marks `forkedFrom`, and deja reads that
-fork by default, from the `btw` system trigger on, so the question and the
-answer are kept without the copy of main's context the fork opens with. It is
-a session of its own, kind `fork`, naming the session it was asked in (#4484).
+fork by default from the btw reminder on (origin `system_trigger`/`btw` in
+0.28, `injection` with variant `btw` from 0.43), so the question and the answer
+are kept without the copy of main's context the fork opens with. It is a
+session of its own, kind `fork`, naming the session it was asked in. A fork
+with no btw reminder, such as an `Agent` call with `fork: true`, is a sub-agent
+run like any other (#4484).
 Media is out of scope.
 
 - **MCP**: `deja install kimi` writes `mcpServers.deja` into

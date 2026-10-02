@@ -56,9 +56,12 @@
 <p>only with <code>DEJA_INCLUDE_SUBAGENTS=1</code>, each as a session of its own naming the</p>
 <p>parent session (#4483). A <code>/btw</code> side question is the exception: Kimi runs it</p>
 <p>in a fork of <code>main</code> that <code>state.json</code> marks <code>forkedFrom</code>, and deja reads that</p>
-<p>fork by default, from the <code>btw</code> system trigger on, so the question and the</p>
-<p>answer are kept without the copy of main&#39;s context the fork opens with. It is</p>
-<p>a session of its own, kind <code>fork</code>, naming the session it was asked in (#4484).</p>
+<p>fork by default from the btw reminder on (origin <code>system_trigger</code>/<code>btw</code> in</p>
+<p>0.28, <code>injection</code> with variant <code>btw</code> from 0.43), so the question and the answer</p>
+<p>are kept without the copy of main&#39;s context the fork opens with. It is a</p>
+<p>session of its own, kind <code>fork</code>, naming the session it was asked in. A fork</p>
+<p>with no btw reminder, such as an <code>Agent</code> call with <code>fork: true</code>, is a sub-agent</p>
+<p>run like any other (#4484).</p>
 <p>Media is out of scope.</p>
 <ul>
 <li><strong>MCP</strong>: <code>deja install kimi</code> writes <code>mcpServers.deja</code> into</li>
