@@ -245,3 +245,22 @@ INSERT INTO messages VALUES ('gd2',1,'assistant',`+sqlQuote(vocabJSON(msg))+`,'2
 		}
 	}
 }
+
+// read_many_files takes paths relative to the project and directories beside
+// files ("docs/"): a directory is not a file the session read, and a relative
+// path is under the directory the session ran in (#4494).
+func TestGeminiReadManyFilesDirectoriesAndRelativePaths(t *testing.T) {
+	_, chats := geminiTree(t)
+	vocabWrite(t, filepath.Join(filepath.Dir(chats), ".project_root"), "/tmp/proj")
+	call := map[string]any{"id": "rm1", "name": "read_many_files", "status": "success",
+		"args": map[string]any{"include": []any{"docs/", "src/a.go", "/abs/b.go", "src/**/*.go"}}}
+	p := vocabWrite(t, filepath.Join(chats, "session-2026-10-02T10-00-sess-v-2.jsonl"),
+		`{"sessionId":"sess-v-2","projectHash":"abc","startTime":"2026-10-02T10:00:00.000Z","lastUpdated":"2026-10-02T10:01:00.000Z","kind":"main"}`,
+		`{"id":"u1","timestamp":"2026-10-02T10:00:01.000Z","type":"user","content":[{"text":"read the docs"}]}`,
+		`{"id":"g1","timestamp":"2026-10-02T10:00:02.000Z","type":"gemini","content":"","model":"luna","toolCalls":[`+vocabJSON(call)+`]}`,
+	)
+	ss := vocabParse(t, ParseGeminiFile, p)
+	if got := vocabRoles(ss, RoleFiles); len(got) != 1 || got[0] != "/tmp/proj/src/a.go\n/abs/b.go" {
+		t.Errorf("files records = %q, want the two files, the relative one under the project", got)
+	}
+}
