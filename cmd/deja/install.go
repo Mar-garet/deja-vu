@@ -271,6 +271,15 @@ func runInstall(dir string, args []string, uninstall bool) error {
 				pruneGuidanceDirs(cr.Path)
 			}
 		}
+		// A client that keeps deja off by its own switch gets the same line
+		// doctor prints, unless the writer already said the entry is off
+		// (#4468, #4469).
+		if off := installClientOffNote(t); off != "" && !uninstall && !strings.Contains(r.Note, "switched off") {
+			if r.Note != "" {
+				r.Note += "; "
+			}
+			r.Note += off
+		}
 		written++
 		touchedPaths = append(touchedPaths, r.touched()...)
 		if banner {
@@ -3100,6 +3109,31 @@ func mergeDejaEntry(prev any, entry map[string]any) (map[string]any, string) {
 		note += "left the entry switched off, the way it was — deja will not answer until you turn it back on"
 	}
 	return out, note
+}
+
+// installClientOffNote is the line an install adds when the client it just
+// wrote has deja switched off by a switch install does not touch, so a plain
+// `updated` does not read as working (#4468, #4469). The entry's own switch
+// is left to the writer, which knows whether it kept it.
+func installClientOffNote(target string) string {
+	base := strings.TrimSuffix(target, "-auto")
+	mcp, hooks := base, base
+	switch base {
+	case "claude", "claude-code":
+		mcp, hooks = "claude-code", "claude-code"
+	case "codex":
+		hooks = "codex-hook"
+	}
+	var notes []string
+	if base != target {
+		if n := clientHooksOff(hooks); n != "" {
+			notes = append(notes, n)
+		}
+	}
+	if n := clientMCPDenied(mcp); n != "" {
+		notes = append(notes, n)
+	}
+	return strings.Join(notes, "; ")
 }
 
 // entrySwitchedOff reports whether the reader has turned this entry off.

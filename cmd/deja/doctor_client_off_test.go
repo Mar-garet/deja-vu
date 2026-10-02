@@ -306,6 +306,47 @@ func TestDoctorReadsTheClientsOwnOffSwitches(t *testing.T) {
 	}
 }
 
+// An install over a client that keeps deja off by a switch install does not
+// touch said only `unchanged` or `updated`, which reads as working (#4468,
+// #4469).
+func TestInstallSaysTheClientHasDejaSwitchedOff(t *testing.T) {
+	hermeticEnv(t)
+	settings := filepath.Join(sources.GeminiHome(), "settings.json")
+	claude := filepath.Join(sources.ClaudeConfigDir(), "settings.json")
+	for path, body := range map[string]string{
+		settings: `{"mcp":{"excluded":["deja"]}}`,
+		claude:   `{"disableAllHooks":true}`,
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := captureRun(t, "install", "gemini", "claude-auto", "--no-index")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"`mcp.excluded` lists deja", "`disableAllHooks: true`"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("install does not say %s:\n%s", want, out)
+		}
+	}
+	// Control: with the switches gone, install has nothing to add.
+	for _, path := range []string{settings, claude} {
+		if err := os.WriteFile(path, []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err = captureRun(t, "install", "gemini", "claude-auto", "--no-index"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "switched off") {
+		t.Errorf("install calls an enabled client switched off:\n%s", out)
+	}
+}
+
 // The readers answer "off" only for what the client would read as off.
 func TestClientOffReadersStayOnWhenUnsure(t *testing.T) {
 	if _, _, found := yamlLookup("plugins:\n  enabled: [\n    deja ]\n", "plugins", "enabled"); found {
