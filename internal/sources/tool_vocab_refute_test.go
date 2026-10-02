@@ -185,3 +185,40 @@ func TestRooDiffMarkersStayExact(t *testing.T) {
 		t.Errorf("sides = %q / %q", replaced, written)
 	}
 }
+
+// The v3 engine persists a tool_call line each time the action changes state
+// — awaiting approval, running, then how it ended — under one id and one
+// start time. Every line was read as the call made again, and a denied write
+// as a write (#4506).
+func TestKiroIDECallsOnceAndOnlyWhenRun(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "f045c81011ce49e2", "sess_00000000-0000-4000-8000-0000000000ab")
+	line := func(id, name, status string, args any) string {
+		return vocabJSON(map[string]any{"id": id + "-call", "timestamp": "2026-10-01T10:00:01.000Z", "payload": map[string]any{
+			"type": "tool_call", "toolCallId": id, "toolName": name, "args": args, "status": status, "kind": "edit", "executionId": "e1", "actionType": name}})
+	}
+	edit := map[string]any{"path": "/tmp/proj/retry.go", "oldStr": oldLoop, "newStr": newLoop}
+	denied := map[string]any{"path": "/tmp/proj/secret.go", "text": jitter}
+	failed := map[string]any{"path": "/tmp/proj/failed.go", "oldStr": "func stale() {}", "newStr": "func fresh() { return nil }"}
+	p := vocabWrite(t, filepath.Join(dir, "messages.jsonl"),
+		`{"id":"u1","timestamp":"2026-10-01T10:00:00.000Z","payload":{"type":"user","content":"fix the retry loop"}}`,
+		line("a1", "str_replace", "awaiting_approval", edit),
+		line("a1", "str_replace", "executing", edit),
+		line("a1", "str_replace", "completed", edit),
+		line("a2", "fs_write", "awaiting_approval", denied),
+		line("a2", "fs_write", "denied", denied),
+		line("a3", "str_replace", "executing", failed),
+		line("a3", "str_replace", "failed", failed),
+	)
+	ss := vocabParse(t, ParseKiroIDEFile, p)
+	if got := vocabRoles(ss, RoleEdit); len(got) != 1 || got[0] != "/tmp/proj/retry.go\n"+oldLoop {
+		t.Errorf("edit records = %q, want the one completed str_replace once", got)
+	}
+	if got := vocabRoles(ss, RoleWrote); len(got) != 1 || got[0] != WroteRecord("/tmp/proj/retry.go", newLoop) {
+		t.Errorf("wrote records = %q, want the one completed str_replace once", got)
+	}
+	for _, f := range vocabRoles(ss, RoleFiles) {
+		if strings.Contains(f, "secret.go") {
+			t.Errorf("a denied write left a files record %q", f)
+		}
+	}
+}

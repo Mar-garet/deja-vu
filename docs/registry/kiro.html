@@ -100,7 +100,10 @@
 <p>and <code>args</code> are read into commands (<code>execute_bash</code>, <code>execute_pwsh</code>), files,</p>
 <p>edits and written lines (<code>fs_write</code> and <code>fs_append</code> with <code>path</code> and <code>text</code>,</p>
 <p><code>str_replace</code> with <code>oldStr</code>/<code>newStr</code>, <code>read_file</code>, <code>delete_file</code> with</p>
-<p><code>targetFile</code>) (#4506).</p>
+<p><code>targetFile</code>). The engine writes one such line per state an action passes</p>
+<p>through; only the one that says how it ended (<code>completed</code> or <code>failed</code>) is</p>
+<p>read, a <code>denied</code> call is not, and a failed edit keeps its file but not its</p>
+<p>sides (#4506).</p>
 <ul>
 <li><strong>Tool calls.</strong> The TUI writes <code>toolUse</code> parts inside an</li>
 </ul>
