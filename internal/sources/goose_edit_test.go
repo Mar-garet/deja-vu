@@ -143,6 +143,9 @@ func TestGooseTextEditorDiffPaths(t *testing.T) {
 		{"/w/proj", "b/pkg/a.go", "/w/proj/pkg/a.go"},
 		{`C:\w\proj\src\retry.go`, "b/src/retry.go", `C:\w\proj\src\retry.go`},
 		{"/w/proj/retry.go", "/abs/other.go", "/abs/other.go"},
+		// A relative path is under goose's working directory, and a file's
+		// base is that directory, not the file.
+		{"main.go", "b/util.go", "util.go"},
 	} {
 		diff := "--- " + tc.header + "\n+++ " + tc.header + "\n@@ -1 +1 @@\n-x := 1\n+x := 2\n"
 		if files, _, _ := gooseTextEditorDiff(tc.call, diff); len(files) != 1 || files[0] != tc.want {

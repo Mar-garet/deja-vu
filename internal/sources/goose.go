@@ -388,7 +388,9 @@ func gooseTextEditorDiff(callPath, diff string) (files, spans, wrote []string) {
 			isFile = true
 		}
 	}
-	if isFile && len(base) > 1 {
+	// A bare relative file name is under goose's working directory, which the
+	// record does not hold, so its base is empty rather than the file.
+	if isFile {
 		base = base[:len(base)-1]
 	}
 	resolve := func(p string) string {
