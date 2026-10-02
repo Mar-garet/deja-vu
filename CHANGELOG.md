@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja uninstall zcode-auto` puts `hooks.enabled` back the way it was. Install has to turn it on for deja's hooks to run, and left it on, so hooks you had switched off ran after an install and uninstall. Install now says when it turns the switch on, and both keep the file's key order and indent (#4431).
 - `deja install zcode-auto` writes `~/.zcode/cli/setting.json`, the file the ZCode runtime loads, with the hooks under `hooks.events`. It used to write `config.json`, which ZCode reads only once as a first-launch migration source, so on a machine where ZCode had run neither the MCP tool nor the hooks reached the agent while `deja doctor` said wired. Uninstall also clears deja's entries from the old file (#4429).
 - `deja resume` on a ZCode CLI session prints `zcode --resume <id>`, in the directory the session ran in, instead of refusing (#4430).
 - ZCode CLI sessions keep their tool calls. ZCode's database is opencode's schema but names its tools `Bash`, `Read`, `Edit` and `Write` with Claude Code's arguments, and the reader matched only opencode's lowercase names, so every command, file and edit was dropped. An edit ZCode refused is not recorded. The index rebuilds once (#4428).

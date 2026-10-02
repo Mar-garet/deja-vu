@@ -30,7 +30,10 @@ block, which deja has no use for and ignores.
   first-launch migration, so nothing reached the agent on a machine where
   ZCode had run; an uninstall clears deja's entries from both (#4429).
 - **Three things decide whether that works, and all three are silent when
-  wrong.** Config-file hooks do nothing without `hooks.enabled: true`. A
+  wrong.** Config-file hooks do nothing without `hooks.enabled: true`, and
+  the runtime's own `setting.json` starts with it off: install turns it on and
+  says so, and uninstall puts back what was there, so hooks the reader had
+  switched off do not stay on (#4431). A
   config hook gets no template expansion, so the command carries an absolute
   path. And the output schema is strict: one key ZCode does not recognise and
   the whole response is discarded — which is why the installed line ends in

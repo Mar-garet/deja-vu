@@ -71,7 +71,10 @@
 <ul>
 <li>**Three things decide whether that works, and all three are silent when</li>
 </ul>
-<p>wrong.** Config-file hooks do nothing without <code>hooks.enabled: true</code>. A</p>
+<p>wrong.** Config-file hooks do nothing without <code>hooks.enabled: true</code>, and</p>
+<p>the runtime&#39;s own <code>setting.json</code> starts with it off: install turns it on and</p>
+<p>says so, and uninstall puts back what was there, so hooks the reader had</p>
+<p>switched off do not stay on (#4431). A</p>
 <p>config hook gets no template expansion, so the command carries an absolute</p>
 <p>path. And the output schema is strict: one key ZCode does not recognise and</p>
 <p>the whole response is discarded — which is why the installed line ends in</p>

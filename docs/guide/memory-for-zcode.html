@@ -154,7 +154,7 @@
 </ul>
 <p>Three details about that hook block, taken from the surface a third-party memory plugin established against a live install rather than from guesswork:</p>
 <ul>
-<li>Hooks declared in the config file run only with <code>hooks.enabled</code> set.</li>
+<li>Hooks declared in the config file run only with <code>hooks.enabled</code> set. ZCode writes it off; the install turns it on and says so, and the uninstall puts it back off.</li>
 <li>There is no template expansion in a config hook, so the command carries an absolute path — deja writes its launcher, <code>~/.config/deja/bin/deja-hook</code>, so the wiring survives the binary moving.</li>
 <li>The output schema is strict enough to discard a whole response over one unrecognised key, which is what deja's <code>--strict</code> mode is for.</li>
 </ul>

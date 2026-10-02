@@ -117,7 +117,9 @@ func zcodeServerAt(path, exe string, uninstall bool) (installResult, error) {
 		mcp["servers"] = servers
 		root["mcp"] = mcp
 	}
-	next, err := json.MarshalIndent(root, "", "  ")
+	// In the reader's key order and indent: the runtime writes its own file
+	// and a sorted copy of it reads as a rewrite (#4431).
+	next, err := marshalConfigLike(old, root)
 	if err != nil {
 		return installResult{}, err
 	}
@@ -156,7 +158,16 @@ func installZCodeAuto(exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
-	return wroteAll(server, hooksRes), nil
+	out := wroteAll(server, hooksRes)
+	// Both halves write the same file, so wroteAll keeps one result and the
+	// hooks' note about the switch would go with the other.
+	if hooksRes.Note != "" && !strings.Contains(out.Note, hooksRes.Note) {
+		if out.Note != "" {
+			out.Note += "; "
+		}
+		out.Note += hooksRes.Note
+	}
+	return out, nil
 }
 
 func installZCodeHooks(exe string, uninstall bool) (installResult, error) {
@@ -202,6 +213,7 @@ func zcodeHooksAt(path, exe string, uninstall bool) (installResult, error) {
 		"UserPromptSubmit": zcodeHookEntry(hookRun(exe, "hook-prompt", "--strict"), 20),
 	}
 	changed := false
+	note := ""
 	for event, entry := range wanted {
 		// The old shape, events directly under `hooks`, is only ever taken
 		// out: the runtime does not look there.
@@ -244,6 +256,9 @@ func zcodeHooksAt(path, exe string, uninstall bool) (installResult, error) {
 		changed = true
 	}
 	if uninstall {
+		if restoreZCodeHooksSwitch(path, hooks) {
+			changed = true
+		}
 		if !changed {
 			return installResult{Path: path, Action: "unchanged"}, nil
 		}
@@ -252,13 +267,24 @@ func zcodeHooksAt(path, exe string, uninstall bool) (installResult, error) {
 			forgetBlockAdded(path, "hooks.events")
 			events = nil
 		}
-	} else {
+	} else if on, _ := hooks["enabled"].(bool); !on {
 		// Config-file hooks do not run at all without this, and the plugin
-		// that got here first records the same: the merge has to set it.
-		if on, _ := hooks["enabled"].(bool); !on {
-			hooks["enabled"] = true
-			changed = true
+		// that got here first records the same: the merge has to set it. A
+		// block the reader had keeps what the switch was, so the uninstall
+		// can put it back: the runtime's own file starts with it off, and
+		// hooks the reader switched off would otherwise run from then on
+		// (#4431, the rule gemini's hooksConfig.enabled follows — #4216).
+		if !blockWasAdded(path, "hooks") && len(blocksAddedWithPrefix(path, zcodeSwitchRecord)) == 0 {
+			was := ""
+			if v, ok := hooks["enabled"]; ok {
+				b, _ := json.Marshal(v)
+				was = string(b)
+			}
+			noteBlockAdded(path, zcodeSwitchRecord+was)
+			note = "turned hooks.enabled on in " + shortHome(path) + ", which was off, so its other hooks run too; uninstall turns it back off"
 		}
+		hooks["enabled"] = true
+		changed = true
 	}
 	if events != nil {
 		hooks["events"] = events
@@ -273,7 +299,9 @@ func zcodeHooksAt(path, exe string, uninstall bool) (installResult, error) {
 		delete(root, "hooks")
 		forgetBlockAdded(path, "hooks")
 	}
-	next, err := json.MarshalIndent(root, "", "  ")
+	// In the reader's key order and indent: the runtime writes its own file
+	// and a sorted copy of it reads as a rewrite (#4431).
+	next, err := marshalConfigLike(old, root)
 	if err != nil {
 		return installResult{}, err
 	}
@@ -286,7 +314,30 @@ func zcodeHooksAt(path, exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
-	return installResult{Path: path, Action: action}, nil
+	return installResult{Path: path, Action: action, Note: note}, nil
+}
+
+// zcodeSwitchRecord names the record of what hooks.enabled was before deja
+// turned it on: the JSON value after the =, or nothing when the key was absent.
+const zcodeSwitchRecord = "hooks.enabled="
+
+// restoreZCodeHooksSwitch puts hooks.enabled back the way the reader had it,
+// when deja is the one that turned it on, and reports whether it did.
+func restoreZCodeHooksSwitch(path string, hooks map[string]any) bool {
+	names := blocksAddedWithPrefix(path, zcodeSwitchRecord)
+	for _, name := range names {
+		forgetBlockAdded(path, name)
+		was := strings.TrimPrefix(name, zcodeSwitchRecord)
+		if was == "" {
+			delete(hooks, "enabled")
+			continue
+		}
+		var v any
+		if json.Unmarshal([]byte(was), &v) == nil {
+			hooks["enabled"] = v
+		}
+	}
+	return len(names) > 0
 }
 
 // withoutZCodeHooks is an event's list with deja's entries taken out.

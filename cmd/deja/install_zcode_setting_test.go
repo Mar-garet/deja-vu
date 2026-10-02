@@ -193,3 +193,62 @@ func TestUninstallZCodeClearsTheOldConfigFile(t *testing.T) {
 		t.Errorf("uninstall took the reader's own entries: %s", b)
 	}
 }
+
+// ZCode runs config-file hooks only with hooks.enabled on, and its own
+// setting.json starts with it off. Install turned it on and uninstall left it
+// on, so hooks the reader had switched off ran after an install and an
+// uninstall, and the re-marshalled file came back with its keys sorted (#4431).
+func TestUninstallZCodePutsTheHooksSwitchBack(t *testing.T) {
+	hermeticEnv(t)
+	home := os.Getenv("HOME")
+	dir := filepath.Join(home, ".zcode", "cli")
+	setting := filepath.Join(dir, "setting.json")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	theirs := strings.Replace(zcodeDefaultSetting, `"PostToolUse": [],`,
+		`"PostToolUse": [{"hooks": [{"type": "command", "command": "/tmp/notify.sh", "timeout": 5}]}],`, 1)
+	if theirs == zcodeDefaultSetting {
+		t.Fatal("the fixture has no PostToolUse list to put the reader's hook in")
+	}
+	if err := os.WriteFile(setting, []byte(theirs), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureRun(t, "install", "zcode-auto", "--no-index")
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !strings.Contains(out, "hooks.enabled") {
+		t.Errorf("install turned on hooks the reader had off and did not say so:\n%s", out)
+	}
+	if _, err := captureRun(t, "uninstall", "zcode-auto"); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	got, err := os.ReadFile(setting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != theirs {
+		t.Errorf("setting.json did not come back as it was.\nbefore:\n%s\nafter:\n%s", theirs, got)
+	}
+
+	// A switch that was already on stays on: something else may run on it.
+	on := strings.Replace(theirs, `"enabled": false,
+    "timeoutMs"`, `"enabled": true,
+    "timeoutMs"`, 1)
+	if on == theirs {
+		t.Fatal("the fixture has no hooks.enabled to turn on")
+	}
+	if err := os.WriteFile(setting, []byte(on), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureRun(t, "install", "zcode-auto", "--no-index"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if _, err := captureRun(t, "uninstall", "zcode-auto"); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if got, _ := os.ReadFile(setting); string(got) != on {
+		t.Errorf("uninstall changed a file whose switch was already on:\n%s", got)
+	}
+}
