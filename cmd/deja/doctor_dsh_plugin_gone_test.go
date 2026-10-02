@@ -182,3 +182,19 @@ func TestDSHPluginsMissingReadsCommentsAndNamesAFileOnce(t *testing.T) {
 		t.Errorf("missing = %q, want %q", got, want)
 	}
 }
+
+// A file:// URL keeps its drive. Go's url.Parse reads file://C:/x as host "C:"
+// and path /x, so the drive was dropped and doctor named \x, a path other than
+// the one in the layer; file:///C:/x parses to the path /C:/x (#4438).
+func TestDSHNameMissingKeepsAFileURLsDrive(t *testing.T) {
+	for _, c := range []struct{ name, want string }{
+		{"file://C:/nowhere/gone.js", "C:/nowhere/gone.js"},
+		{"file:///C:/nowhere/gone.js", "C:/nowhere/gone.js"},
+		{"file:///nowhere/gone.js", "/nowhere/gone.js"},
+	} {
+		got := dshNameMissing(c.name)
+		if want := filepath.FromSlash(c.want); len(got) != 1 || got[0] != want {
+			t.Errorf("dshNameMissing(%q) = %q, want [%q]", c.name, got, want)
+		}
+	}
+}

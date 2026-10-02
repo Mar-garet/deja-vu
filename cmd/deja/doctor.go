@@ -1911,7 +1911,17 @@ func dshNameMissing(name string) []string {
 		if err != nil {
 			return nil
 		}
-		p := filepath.FromSlash(u.Path)
+		// dsh's URL parser keeps a drive letter as part of the path, written
+		// file://C:/x or file:///C:/x; Go's reads the first as host "C:" and
+		// the second as /C:/x, and either way doctor named a drive-less path
+		// that is not the one in the layer (#4438).
+		p := u.Path
+		if len(u.Host) == 2 && u.Host[1] == ':' {
+			p = u.Host + p
+		} else if len(p) > 2 && p[0] == '/' && p[2] == ':' {
+			p = p[1:]
+		}
+		p = filepath.FromSlash(p)
 		if !doctorExists(p) {
 			return []string{p}
 		}

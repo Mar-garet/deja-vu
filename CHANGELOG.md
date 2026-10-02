@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- On Windows, a DeepSeek TUI or Codex tool path such as `/tmp/proj/retry.go` is kept as written instead of being joined onto the session's directory as `\tmp\proj\tmp\proj\retry.go`, and `deja doctor` keeps the drive of a `file://C:/…` dsh plugin it reports missing (#4438).
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name. The same goes for every agent whose sessions are filed under such a folder name (Claude Code without a cwd, Cursor CLI, pi, omp and others): `my_org/app` is no longer indexed as `org/app`. The index rebuilds once (#4402).
 - A project folder whose path has a `_`, `.` or space in it resolves back to its directory, so a Qwen Code session that recorded no cwd resumes there and the project keeps its real name (#4402).
 - Command Code 1.73 sessions are indexed again: the client now writes a session header and one message envelope per line, which deja read as nothing. Commands, files, edits and tool output from `shell_command`, `read_file`, `edit_file` and `write_file` come along, and the project is the session's own directory (#4370).
