@@ -76,9 +76,9 @@ row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
 - Wiring: `deja install kiro` writes the server into
   `~/.kiro/settings/mcp.json`, which the CLI and the IDE both read — the same
   file `kiro-cli mcp add --scope global` writes. One thing the installer
-  cannot do for you: a custom agent (`~/.kiro/agents/<name>.json`) does not
-  inherit global servers, so the entry has to be repeated in that agent's own
-  `mcpServers` block, and the install note says so.
+  cannot do for you: a custom agent (`~/.kiro/agents/<name>.json`) reads the
+  global servers only when it sets `"includeMcpJson": true`, and the install
+  note says so. The agent `kiro-auto` writes sets it.
 - Guidance: `deja install kiro` writes `~/.kiro/steering/deja.md`, the global
   half of steering — scanned for every project, alongside the workspace one.
   It is four lines on purpose. A steering document declares an inclusion mode,
@@ -116,7 +116,7 @@ the request and the preToolUse and postToolUse ones nowhere.
 
 - `deja install kiro` writes `~/.kiro/settings/mcp.json` and
   `~/.kiro/steering/deja.md`, and says the one thing a reader has to know: a
-  custom agent in `~/.kiro/agents/*.json` does not inherit global MCP servers.
+  custom agent in `~/.kiro/agents/*.json` reads the global MCP servers only with `"includeMcpJson": true`.
 - `--resume-id <SESSION_ID>` is in its own help, which is the command
   `deja resume` prints for a CLI session. `-r`, `--resume-picker` are beside it.
 - What could not be checked: `kiro-cli mcp list` refuses before a login

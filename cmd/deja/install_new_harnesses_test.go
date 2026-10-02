@@ -29,6 +29,11 @@ func TestInstallKiroWritesTheGlobalSettings(t *testing.T) {
 	if !strings.Contains(res.Note, "agents") {
 		t.Errorf("note = %q, want it to mention custom agents", res.Note)
 	}
+	// includeMcpJson is the switch that gives an agent the global file, and
+	// the agent kiro-auto writes sets it, so "copy the entry" was the wrong fix.
+	if !strings.Contains(res.Note, `"includeMcpJson": true`) || strings.Contains(res.Note, "copy the deja entry") {
+		t.Errorf("note = %q, want the includeMcpJson switch", res.Note)
+	}
 
 	// The global steering file is the user-level guidance channel, and it is
 	// always-on: every line is in front of every turn, so it stays short.

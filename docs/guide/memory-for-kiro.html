@@ -154,7 +154,7 @@
 
 <h2>Getting recall into Kiro itself</h2>
 <pre>deja install kiro</pre>
-<p>That writes the MCP server into <code>~/.kiro/settings/mcp.json</code>, which the CLI and the IDE both read — the same file <code>kiro-cli mcp add --scope global</code> writes — and a four-line steering file at <code>~/.kiro/steering/deja.md</code> that tells the model the tool is there. Steering is loaded in front of every turn, which is why it names the tool and stops. A custom agent in <code>~/.kiro/agents/*.json</code> does not inherit global servers, so copy the deja entry into that agent's own <code>mcpServers</code> block; the install note says so. <code>deja search "<i>the thing you half-remember</i>"</code> works from any terminal too.</p>
+<p>That writes the MCP server into <code>~/.kiro/settings/mcp.json</code>, which the CLI and the IDE both read — the same file <code>kiro-cli mcp add --scope global</code> writes — and a four-line steering file at <code>~/.kiro/steering/deja.md</code> that tells the model the tool is there. Steering is loaded in front of every turn, which is why it names the tool and stops. A custom agent in <code>~/.kiro/agents/*.json</code> reads the global servers only when it sets <code>"includeMcpJson": true</code>; the install note says so. <code>deja search "<i>the thing you half-remember</i>"</code> works from any terminal too.</p>
 
 <h2>Recall at the start of a kiro-cli chat</h2>
 <pre>deja install kiro-auto</pre>

@@ -20,15 +20,16 @@ import (
 // target rather than one per client the way the reader has two (#3651).
 //
 // One thing a user has to know and the installer cannot do for them: a custom
-// agent — `~/.kiro/agents/<name>.json` — does not inherit global servers, so
-// the entry has to be repeated inside that agent's own file. The note says so
-// rather than leaving a reader wondering why recall is missing in their agent.
+// agent — `~/.kiro/agents/<name>.json` — reads this file only when it sets
+// `"includeMcpJson": true`. The note says so rather than leaving a reader
+// wondering why recall is missing in their agent; the agent kiro-auto writes
+// sets it.
 func kiroMCPSettingsPath() string {
 	return filepath.Join(sources.KiroConfigDir(), "settings", "mcp.json")
 }
 
-const kiroAgentNote = "a custom agent in ~/.kiro/agents/*.json does not inherit global MCP servers — " +
-	"copy the deja entry into that agent's own mcpServers block"
+const kiroAgentNote = "a custom agent in ~/.kiro/agents/*.json reads the global MCP servers only with " +
+	"`\"includeMcpJson\": true` in it"
 
 // kiroSteeringPath is Kiro's user-level guidance channel: `~/.kiro/steering`
 // is the global half of steering, loaded for every project, and kiro-cli scans

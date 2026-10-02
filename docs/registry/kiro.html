@@ -126,9 +126,9 @@
 </ul>
 <p><code>~/.kiro/settings/mcp.json</code>, which the CLI and the IDE both read — the same</p>
 <p>file <code>kiro-cli mcp add --scope global</code> writes. One thing the installer</p>
-<p>cannot do for you: a custom agent (<code>~/.kiro/agents/&lt;name&gt;.json</code>) does not</p>
-<p>inherit global servers, so the entry has to be repeated in that agent&#39;s own</p>
-<p><code>mcpServers</code> block, and the install note says so.</p>
+<p>cannot do for you: a custom agent (<code>~/.kiro/agents/&lt;name&gt;.json</code>) reads the</p>
+<p>global servers only when it sets <code>&#34;includeMcpJson&#34;: true</code>, and the install</p>
+<p>note says so. The agent <code>kiro-auto</code> writes sets it.</p>
 <ul>
 <li>Guidance: <code>deja install kiro</code> writes <code>~/.kiro/steering/deja.md</code>, the global</li>
 </ul>
@@ -168,7 +168,7 @@
 <li><code>deja install kiro</code> writes <code>~/.kiro/settings/mcp.json</code> and</li>
 </ul>
 <p><code>~/.kiro/steering/deja.md</code>, and says the one thing a reader has to know: a</p>
-<p>custom agent in <code>~/.kiro/agents/*.json</code> does not inherit global MCP servers.</p>
+<p>custom agent in <code>~/.kiro/agents/*.json</code> reads the global MCP servers only with <code>&#34;includeMcpJson&#34;: true</code>.</p>
 <ul>
 <li><code>--resume-id &lt;SESSION_ID&gt;</code> is in its own help, which is the command</li>
 </ul>
