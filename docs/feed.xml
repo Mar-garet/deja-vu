@@ -67,6 +67,13 @@
     <summary>Command Code logs a session per project and starts each one cold. deja wires its MCP server, hooks, skill and command, and indexes every agent here.</summary>
   </entry>
   <entry>
+    <title>Add memory to Copilot CLI: every agent&#39;s sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-copilot.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-copilot.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>How to give GitHub Copilot CLI recall over every coding agent&#39;s sessions on this machine — where its events live, and the MCP entry it needs.</summary>
+  </entry>
+  <entry>
     <title>Add memory to Gemini CLI: every agent&#39;s sessions — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/guide/memory-for-gemini.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-gemini.html"></link>
@@ -114,6 +121,13 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/search.html"></link>
     <updated>2026-10-02T00:00:00Z</updated>
     <summary>deja search syntax: exact and phrase queries, natural language with stop words, fuzzy typo tolerance, confidence tiers, and optional local semantic recall.</summary>
+  </entry>
+  <entry>
+    <title>Where Claude Code and Codex store sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/where-sessions-are-stored.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/where-sessions-are-stored.html"></link>
+    <updated>2026-10-02T00:00:00Z</updated>
+    <summary>Where each coding agent keeps its conversation history file, in thirty-five formats, and how to read them without the tool that wrote them.</summary>
   </entry>
   <entry>
     <title>Where coding agents store their history — session format registry</title>
@@ -275,19 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kiro.html"></link>
     <updated>2026-10-02T00:00:00Z</updated>
     <summary>Where Kiro writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where omp (Oh My Pi) stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/omp.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/omp.html"></link>
-    <updated>2026-10-02T00:00:00Z</updated>
-    <summary>Where omp (Oh My Pi) writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where opencode stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/opencode.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/opencode.html"></link>
-    <updated>2026-10-02T00:00:00Z</updated>
-    <summary>Where opencode writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
 </feed>

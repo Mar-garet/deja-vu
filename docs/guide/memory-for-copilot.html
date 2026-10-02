@@ -143,11 +143,11 @@
 <p>Copilot CLI records each session and starts the next one empty. The events are still on disk, next to whatever you did that week in the other agents on the machine.</p>
 
 <h2>What Copilot already has</h2>
-<p>Sessions live under <code>~/.copilot/session-state/&lt;sessionId&gt;/events.jsonl</code> as a stream of <code>{type, data, timestamp}</code> records. Complete, and read by nothing. <a href="../registry/copilot.html">How Copilot's store is read</a> has the event shapes and the quirks behind them.</p>
+<p>Sessions live under <code>${COPILOT_HOME:-~/.copilot}/session-state/&lt;sessionId&gt;/events.jsonl</code> as a stream of <code>{type, data, timestamp}</code> records. Complete, and read by nothing. <a href="../registry/copilot.html">How Copilot's store is read</a> has the event shapes and the quirks behind them.</p>
 
 <h2>Adding recall</h2>
 <pre>deja install copilot</pre>
-<p>Copilot keeps its MCP servers under <code>mcpServers</code> in <code>~/.copilot/mcp-config.json</code>, but its entries are not the common shape — each carries a type and a list of enabled tools, so the entry is written in Copilot's own form rather than copied from another harness. The same install writes the <code>deja-history</code> skill to <code>~/.copilot/skills/</code>, which Copilot also lists as the <code>/deja-history</code> command.</p>
+<p>Copilot keeps its MCP servers under <code>mcpServers</code> in <code>${COPILOT_HOME:-~/.copilot}/mcp-config.json</code>, but its entries are not the common shape — each carries a type and a list of enabled tools, so the entry is written in Copilot's own form rather than copied from another harness. The same install writes the <code>deja-history</code> skill to <code>~/.copilot/skills/</code>, which Copilot also lists as the <code>/deja-history</code> command.</p>
 <p>It needs the binary, which that entry calls by name:</p>
 <pre>brew install deja-vu
 # or

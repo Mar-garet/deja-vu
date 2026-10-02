@@ -3275,12 +3275,13 @@ func installCursor(exe string, uninstall bool) (installResult, error) {
 // the same file install writes; it used to read the guidance skill instead and
 // said wired with no server registered (#4232).
 func copilotMCPConfigPath() string {
-	return filepath.Join(sources.Home(), ".copilot", "mcp-config.json")
+	return filepath.Join(sources.CopilotHome(), "mcp-config.json")
 }
 
 // installCopilotMCP wires deja into GitHub Copilot CLI's MCP registry
-// (~/.copilot/mcp-config.json). Copilot's schema differs from the common
-// mcpServers shape: entries carry a type and an enabled-tools list.
+// (mcp-config.json under $COPILOT_HOME, or ~/.copilot). Copilot's schema
+// differs from the common mcpServers shape: entries carry a type and an
+// enabled-tools list.
 func installCopilotMCP(exe string, uninstall bool) (installResult, error) {
 	path := copilotMCPConfigPath()
 	old, err := readConfig(path)
@@ -4781,7 +4782,7 @@ func existingTargetChecks() map[string]string {
 		"cursor":      sources.CursorCLIHome(),
 		"gemini":      filepath.Join(sources.GeminiHome(), "settings.json"),
 		"antigravity": antigravityConfigHome(),
-		"copilot":     filepath.Join(homeDir(), ".copilot"),
+		"copilot":     sources.CopilotHome(),
 		"grok":        sources.GrokRoot(),
 		"qwen":        sources.QwenConfigDir(),
 		"kimi":        sources.KimiConfigDir(),

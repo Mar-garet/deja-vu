@@ -80,7 +80,7 @@
 <tr><td><a href="../../registry/codex.html">Codex CLI</a></td><td><code>${CODEX_HOME:-~/.codex}/sessions/**/rollout-*.jsonl</code></td><td>JSONL rollout，外加一个 history 文件</td></tr>
 <tr><td><a href="../../registry/commandcode.html">Command Code</a></td><td><code>~/.commandcode/projects/*/*.jsonl</code></td><td>JSONL，一行一条记录</td></tr>
 <tr><td><a href="../../registry/continue.html">Continue</a></td><td><code>${CONTINUE_GLOBAL_DIR:-~/.continue}/sessions/*.json</code></td><td>JSON 文件，每次整份重写</td></tr>
-<tr><td><a href="../../registry/copilot.html">Copilot CLI</a></td><td><code>${DEJA_COPILOT_ROOT:-~/.copilot/session-state}/*/events.jsonl</code></td><td>JSONL，一行一条记录</td></tr>
+<tr><td><a href="../../registry/copilot.html">Copilot CLI</a></td><td><code>${DEJA_COPILOT_ROOT:-${COPILOT_HOME:-~/.copilot}/session-state}/*/events.jsonl</code></td><td>JSONL，一行一条记录</td></tr>
 <tr><td><a href="../../registry/crush.html">Crush</a></td><td><code>&lt;project&gt;/.crush/crush.db</code></td><td>SQLite 数据库，每个项目一个</td></tr>
 <tr><td><a href="../../registry/cursor.html">Cursor</a></td><td><code>~/Library/Application Support/Cursor/User/{globalStorage,workspaceStorage/*}/state.vscdb</code></td><td>SQLite 键值库，或 JSONL</td></tr>
 <tr><td><a href="../../registry/deepseek.html">DeepSeek Harness</a></td><td><code>${DSH_HOME:-~/.dsh}/sessions/*/session-*/session.jsonl.zstd</code></td><td>JSONL，一行一条记录</td></tr>
