@@ -242,6 +242,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	switch {
 	case harnessPluginCarriesRecall(a.name) && (err != nil || !strings.Contains(string(b), a.marker)):
 		state = "plugin"
+	case a.name == "aider" && aiderWiring(err == nil) != "":
+		state = aiderWiring(err == nil)
 	case autoUnwired(a, b, err):
 		state = "missing"
 	case a.marker != "" && !strings.Contains(string(b), a.marker):
@@ -256,6 +258,8 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 	// enabled record of it; the directory alone is inert.
 	case a.name == "reasonix" && !reasonixPackageEnabled():
 		state = "stale"
+	case a.name == "zcode" && !zcodeHooksRun(b):
+		state = "stale"
 	default:
 		state = "wired"
 	}
@@ -268,6 +272,55 @@ func autoWiringState(a autoWiring) (state string, binaryMissing bool) {
 		binaryMissing = true
 	}
 	return state, binaryMissing
+}
+
+// aiderWiring is the aider row's state when the context file and the read:
+// entry that makes aider load it disagree, and "" when they agree. The file
+// alone said wired while aider loaded nothing, and the entry alone said missing
+// — the word for never installed — while every start printed an error (#4327).
+func aiderWiring(fileThere bool) string {
+	// readConfig, for the byte order mark install writes back.
+	b, _ := readConfig(aiderConfPath())
+	named := aiderConfReadsContext(string(b))
+	switch {
+	case named && !fileThere:
+		return "broken"
+	case !named && fileThere:
+		return "stale"
+	}
+	return ""
+}
+
+// autoWiringSwitchedOff is the line under a wired row whose harness has turned
+// the wiring off, and "" when it has not. The file is still ours and still
+// right, so the row stays wired, the way a switched-off MCP entry does.
+func autoWiringSwitchedOff(name string) string {
+	if name == "antigravity" && antigravityPluginSwitchedOff() {
+		return "the plugin is switched off — antigravity will not run it until `agy plugin enable deja`"
+	}
+	return clientHooksOff(name)
+}
+
+// antigravityPluginSwitchedOff reads the switch `agy plugin disable` writes:
+// plugins.<dir>.enabled in config.json, which wins wherever it has an entry,
+// and otherwise a `"disabled": true` in the plugin's own plugin.json (#4359).
+func antigravityPluginSwitchedOff() bool {
+	var config struct {
+		Plugins map[string]struct {
+			Enabled *bool `json:"enabled"`
+		} `json:"plugins"`
+	}
+	if b, err := readConfig(filepath.Join(antigravityConfigHome(), "config.json")); err == nil &&
+		json.Unmarshal([]byte(jsoncToJSON(string(b))), &config) == nil {
+		if p, ok := config.Plugins[antigravityPluginName]; ok && p.Enabled != nil {
+			return !*p.Enabled
+		}
+	}
+	var manifest struct {
+		Disabled bool `json:"disabled"`
+	}
+	b, err := readConfig(filepath.Join(antigravityConfigHome(), "plugins", antigravityPluginName, "plugin.json"))
+	return err == nil && json.Unmarshal([]byte(jsoncToJSON(string(b))), &manifest) == nil && manifest.Disabled
 }
 
 // doctorAutoRecall prints one line per harness. "stale" is the interesting
@@ -295,8 +348,17 @@ func doctorAutoRecall(w io.Writer) {
 			continue
 		}
 		switch {
+		case a.name == "aider" && aiderWiring(err == nil) == "broken":
+			fmt.Fprintf(w, "  %-12s %-11s %s  (%s reads it and it is not there — aider prints an error on every start; `deja install aider` writes it)\n", a.name, "broken", reportPath(path), reportPath(aiderConfPath()))
+		case a.name == "aider" && aiderWiring(err == nil) == "stale":
+			fmt.Fprintf(w, "  %-12s %-11s %s  (no read: entry for it in %s, so aider never loads it — `deja install aider`)\n", a.name, "stale", reportPath(path), reportPath(aiderConfPath()))
 		case err != nil:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "missing", reportPath(path), note)
+			// Missing here is not "never installed" when the layer still names
+			// the file: dsh then fails the whole profile load (#4292).
+			if a.name == "deepseek" && dshLayerNamesMissing(path) {
+				fmt.Fprintf(w, "  %-12s %s\n", "", reportPath(dshPatchPath())+" still names it — dsh will not start; `deja install deepseek-auto` writes it again, or `deja uninstall deepseek` takes deja out of the layer")
+			}
 		case autoUnwired(a, b, err):
 			// The client's config is there and deja never wrote its hook into
 			// it: the MCP install writes this same file, and only the -auto
@@ -309,8 +371,13 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no %s call — `deja install %s-auto`)\n", a.name, "stale", reportPath(path), a.marker, a.name)
 		case a.name == "reasonix" && !reasonixPackageEnabled():
 			fmt.Fprintf(w, "  %-12s %-11s %s  (no enabled record in %s — `deja install reasonix-auto`)\n", a.name, "stale", reportPath(path), reportPath(reasonixStatePath()))
+		case a.name == "zcode" && !zcodeHooksRun(b):
+			fmt.Fprintf(w, "  %-12s %-11s %s  (deja's hook is not under hooks.events with hooks.enabled on — `deja install zcode-auto`)\n", a.name, "stale", reportPath(path))
 		default:
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
+			if off := autoWiringSwitchedOff(a.name); off != "" {
+				fmt.Fprintf(w, "  %-12s %s\n", "", off)
+			}
 		}
 		// Under the row whatever the row said. A machine that upgraded is most
 		// often stale rather than wired — the entries were written by the

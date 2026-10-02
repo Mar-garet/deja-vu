@@ -45,10 +45,12 @@
 </ul>
 <p>Tool calls are <code>tool.call</code> events with <code>name</code> and <code>args</code>: <code>path</code> for the file tools, <code>old_string</code>/<code>new_string</code> on <code>Edit</code>, and the whole file as <code>content</code> on <code>Write</code>, which is the only record a created file&#39;s lines were ever in a session.</p>
 <p><code>state.json</code> next to each session supplies title, workDir (project) and</p>
-<p>timestamps. User turns arrive as <code>context.append_message</code>; streamed assistant</p>
+<p>timestamps, and a change to it alone re-reads the session (#4446). User turns arrive as <code>context.append_message</code>; streamed assistant</p>
 <p>turns are reconstructed from <code>step.begin</code> → <code>content.part</code> (type <code>text</code> only;</p>
 <p><code>think</code> parts are skipped) → <code>step.end</code>, with an end-of-file flush so a</p>
-<p>response that is mid-stream when indexing runs is not lost. <code>tool.result</code></p>
+<p>response that is mid-stream when indexing runs is not lost; the next pass</p>
+<p>reads the file whole when the stream goes on, so the reply is stored once</p>
+<p>(#4445). <code>tool.result</code></p>
 <p>events keep their <code>output</code> text under the <code>tool-output</code> role, error results</p>
 <p>included. Sub-agent histories under <code>agents/agent-*</code> and media are out of</p>
 <p>scope.</p>

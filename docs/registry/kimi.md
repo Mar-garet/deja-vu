@@ -8,10 +8,12 @@
 Tool calls are `tool.call` events with `name` and `args`: `path` for the file tools, `old_string`/`new_string` on `Edit`, and the whole file as `content` on `Write`, which is the only record a created file's lines were ever in a session.
 
 `state.json` next to each session supplies title, workDir (project) and
-timestamps. User turns arrive as `context.append_message`; streamed assistant
+timestamps, and a change to it alone re-reads the session (#4446). User turns arrive as `context.append_message`; streamed assistant
 turns are reconstructed from `step.begin` → `content.part` (type `text` only;
 `think` parts are skipped) → `step.end`, with an end-of-file flush so a
-response that is mid-stream when indexing runs is not lost. `tool.result`
+response that is mid-stream when indexing runs is not lost; the next pass
+reads the file whole when the stream goes on, so the reply is stored once
+(#4445). `tool.result`
 events keep their `output` text under the `tool-output` role, error results
 included. Sub-agent histories under `agents/agent-*` and media are out of
 scope.
