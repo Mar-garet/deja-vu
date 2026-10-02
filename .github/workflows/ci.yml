@@ -113,7 +113,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
         shell: bash
       # The shard matrix for the test legs, and the one place the shard count
-      # is set.
+      # is set. A windows leg that only builds is one job, not three.
       - name: Shards
         id: shards
         env:
@@ -124,6 +124,7 @@ jobs:
           matrix=$(jq -cn --argjson of "$of" --arg full "$FULL" '{include: [
             ("ubuntu-latest", "macos-latest", "windows-latest") as $os
             | range(1; $of + 1) as $i
+            | select($os != "windows-latest" or $full == "true" or $i == 1)
             | {os: $os, shard: $i, of: $of}]}')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix"
