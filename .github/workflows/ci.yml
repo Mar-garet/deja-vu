@@ -338,6 +338,14 @@ jobs:
       # rounded down, which in a small package means one uncovered statement
       # fails the build — cjkfold is 74 statements, model is 10. Adding a
       # helper to any of these means adding its test in the same commit.
+      #
+      # The numbers come from the profile the test step already wrote. This
+      # used to run the whole suite a second time, without -race, only to read
+      # the "coverage:" line go test prints per package: 293s of the ubuntu
+      # leg on run 37061621425. The awk below is that figure: statements in
+      # covered blocks over all statements, one decimal. A block listed twice
+      # counts once, covered if either listing covered it. scripts/ has no
+      # floors, as in the total above.
       - name: Per-package coverage floor
         if: runner.os == 'Linux'
         shell: bash
@@ -352,8 +360,10 @@ jobs:
             [internal/termwidth]=100 [internal/usage]=95
           )
           fail=0
+          declare -A seen=()
           while read -r pkg cov; do
             short=${pkg#github.com/vshulcz/deja-vu/}
+            seen[$short]=1
             want=${floor[$short]:-0}
             if awk -v c="$cov" -v f="$want" 'BEGIN { exit !(c+0 < f+0) }'; then
               echo "$short: $cov% below floor $want%"
@@ -361,7 +371,22 @@ jobs:
             else
               echo "$short: $cov% (floor $want%)"
             fi
-          done < <(go test -coverprofile=/dev/null ./... 2>/dev/null | awk '/^ok/ { for(i=1;i<=NF;i++) if($i=="coverage:"){gsub("%","",$(i+1)); print $2, $(i+1)} }')
+          done < <(grep -v '/scripts/' coverage.out | awk '
+            $1 != "mode:" {
+              pkg = $1; sub(/:[^:]*$/, "", pkg); sub(/\/[^\/]*$/, "", pkg)
+              if (!($1 in stmts)) { stmts[$1] = $2; total[pkg] += $2 }
+              if ($3 > 0 && !($1 in hit)) { hit[$1] = 1; covered[pkg] += $2 }
+            }
+            END { for (p in total) if (total[p] > 0) printf "%s %.1f\n", p, 100 * covered[p] / total[p] }
+          ' | sort)
+          # A floored package the profile does not mention was not measured,
+          # which is not the same as passing.
+          for short in "${!floor[@]}"; do
+            if [ -z "${seen[$short]:-}" ]; then
+              echo "$short: not in the coverage profile"
+              fail=1
+            fi
+          done
           exit $fail
 
   e2e:
