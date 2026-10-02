@@ -261,3 +261,35 @@ func TestKiloTaskToolVocabulary(t *testing.T) {
 		vocabWrote("/tmp/proj/jitter.go", jitter),
 	}, nil)
 }
+
+// cwSaved parses one saved CodeWhale session, workspace /tmp/proj,
+// whose assistant turn makes each call and gets result back (#4538).
+func cwSaved(t *testing.T, result string, isErr bool, calls ...map[string]any) []model.Session {
+	t.Helper()
+	var uses, results []any
+	for i, c := range calls {
+		id := fmt.Sprintf("call_%d", i)
+		uses = append(uses, map[string]any{"type": "tool_use", "id": id, "name": c["name"], "input": c["input"]})
+		results = append(results, map[string]any{"type": "tool_result", "tool_use_id": id, "content": result, "is_error": isErr})
+	}
+	doc := map[string]any{
+		"schema_version": 1,
+		"metadata":       map[string]any{"id": "cw-1", "title": "fix the retry loop", "created_at": "2026-10-01T10:00:00Z", "updated_at": "2026-10-01T10:05:00Z", "workspace": "/tmp/proj"},
+		"messages": []any{
+			map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": "fix the retry loop"}}},
+			map[string]any{"role": "assistant", "content": uses},
+			map[string]any{"role": "user", "content": results},
+		},
+	}
+	return vocabParse(t, ParseCodeWhaleFile, vocabWrite(t, filepath.Join(t.TempDir(), "cw-1.json"), vocabJSON(doc)))
+}
+
+// CodeWhale 0.10.1 runs commands through terminal/run {command, session} and
+// task_shell_start {command, cwd} beside bash (#4538).
+func TestCodeWhaleTerminalAndTaskShellCommands(t *testing.T) {
+	ss := cwSaved(t, "ok", false,
+		map[string]any{"name": "terminal/run", "input": map[string]any{"command": "go test ./...", "session": "term-1"}},
+		map[string]any{"name": "task_shell_start", "input": map[string]any{"command": "go test -race ./..."}},
+	)
+	vocabCheck(t, ss, []string{vocabCmd("$ go test ./..."), vocabCmd("$ go test -race ./...")}, nil)
+}

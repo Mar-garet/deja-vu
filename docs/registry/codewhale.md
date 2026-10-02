@@ -23,7 +23,9 @@ record, a `tool_result` becomes tool output, error runs included. Since 0.9.6
 new turns use `read`, `write`, `edit` and `bash`, where `edit` takes
 `edits[{oldText,newText}]` (also sent as a JSON string, or as one top-level
 `oldText`/`newText` pair, both read the same way); the older `read_file`, `write_file` and `edit_file`
-names are still read for sessions saved before.
+names are still read for sessions saved before. Commands also run through
+`terminal/run` (a PTY session) and `task_shell_start` (a background task), both
+under `command`, and are read as commands (#4538).
 
 `thinking` blocks are dropped. So are the `system` and `developer` roles:
 CodeWhale's own documentation names them as where it puts compaction summaries,

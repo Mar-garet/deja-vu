@@ -124,8 +124,10 @@ var codeWhaleDialect = toolDialect{
 		"read_file": true, "write_file": true, "edit_file": true,
 		"fim_edit": true, "apply_patch": true, "str_replace": true,
 	},
-	shellTool:  "exec_shell",
-	shellTools: map[string]bool{"exec_shell": true, "bash": true, "Bash": true},
+	shellTool: "exec_shell",
+	// terminal/run runs a command in a PTY session and task_shell_start as a
+	// background task, both under `command` (#4538).
+	shellTools: map[string]bool{"exec_shell": true, "bash": true, "Bash": true, "terminal/run": true, "task_shell_start": true},
 	editTools: map[string]bool{
 		"edit": true, "write": true,
 		"edit_file": true, "fim_edit": true, "str_replace": true,

@@ -554,6 +554,9 @@ import (
 // 60 also: a Kilo Code task's search_and_replace operations[], fast_edit_file
 // and write_file leave files, edit and wrote records, and delete_file and
 // generate_image files records (#4535).
+//
+// 60 also: a CodeWhale terminal/run or task_shell_start call is a command
+// (#4538).
 const version = 60
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
