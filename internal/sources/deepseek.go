@@ -488,9 +488,9 @@ func deepSeekPackedTexts(v any) []string {
 	return out
 }
 
-// deepSeekToolText unwraps tool output, which nests one block array inside
-// another: the outer block says which call this answers, the inner one carries
-// the text the tool printed.
+// deepSeekToolText unwraps tool output. Up to v3 it nests one block array
+// inside another: the outer block says which call this answers, the inner one
+// carries the text the tool printed. From v4 the inner blocks are the content.
 func deepSeekToolText(v any) string {
 	blocks, ok := v.([]any)
 	if !ok {
@@ -500,6 +500,13 @@ func deepSeekToolText(v any) string {
 	for _, b := range blocks {
 		block, ok := b.(map[string]any)
 		if !ok {
+			continue
+		}
+		// Only the wrapper and text blocks are what the tool printed. From v4
+		// the blocks sit directly in the message, beside images and the
+		// plugin:* blocks dsh namespaces, whose text is not the output (#4600).
+		typ, _ := block["type"].(string)
+		if typ != "" && typ != "text" && typ != "tool-result" {
 			continue
 		}
 		if text := deepSeekContentText(block["content"]); text != "" {

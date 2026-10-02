@@ -163,3 +163,33 @@ func TestParseDeepSeekFileReadsAV4ErrorResult(t *testing.T) {
 		t.Errorf("tool output = %q", got)
 	}
 }
+
+// A v4 result's blocks are the content itself, so an image or a block a plugin
+// wrote sits beside the text. Only the text is what the tool printed.
+func TestParseDeepSeekFileKeepsOnlyTextFromAV4Result(t *testing.T) {
+	log := `{"type":"session","version":4,"id":"session-blocks","createdAt":1790506922540,"cwd":"/work/pgbouncer-lab","isSeeded":false,"delegationDepth":0}
+{"type":"user/message","seq":1,"time":1790506922600,"data":{"content":[{"type":"text","text":"show the chart"}],"source":{"kind":"user"},"role":"user"}}
+{"type":"tool/call","seq":2,"time":1790506922700,"data":{"callId":"c1","name":"read_image","arguments":"{\"file_path\": \"/work/pgbouncer-lab/pool.png\"}"}}
+{"type":"tool/result","seq":3,"time":1790506922710,"data":{"message":{"role":"tool","source":{"kind":"tool","callId":"c1"},"toolCallId":"c1","content":[{"type":"text","text":"chartoutput pool usage"},{"type":"image","text":"imageleak","data":"AAAA","mediaType":"image/png"},{"type":"plugin:annotate","text":"pluginleak","content":[{"type":"text","text":"nestedleak"}]}],"id":"t1"}}}
+`
+	path := filepath.Join(t.TempDir(), "session-blocks", "session.v4.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(log), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ss, err := ParseDeepSeekFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v, %d sessions", err, len(ss))
+	}
+	var out []string
+	for _, m := range ss[0].Messages {
+		if m.Role == RoleToolOutput {
+			out = append(out, m.Text)
+		}
+	}
+	if got := strings.Join(out, "|"); got != "chartoutput pool usage" {
+		t.Errorf("tool output = %q, want only the text block", got)
+	}
+}
