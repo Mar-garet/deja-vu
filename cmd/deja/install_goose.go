@@ -538,8 +538,16 @@ func installGooseAuto(exe string, uninstall bool) (installResult, error) {
 // Hooks belong to a plugin: ~/.agents/plugins/<name>/hooks/hooks.json. The
 // matcher field is a regex, and an invalid one makes Goose skip the rule
 // silently, so SessionStart carries none.
+//
+// An absolute GOOSE_PATH_ROOT moves goose's user plugins to
+// $GOOSE_PATH_ROOT/.agents/plugins (config/paths.rs get_dir), and a hook
+// under the home directory then never ran (#4569).
 func gooseHookPath() string {
-	return filepath.Join(homeDir(), ".agents", "plugins", "deja", "hooks", "hooks.json")
+	base := homeDir()
+	if root := os.Getenv("GOOSE_PATH_ROOT"); filepath.IsAbs(root) {
+		base = root
+	}
+	return filepath.Join(base, ".agents", "plugins", "deja", "hooks", "hooks.json")
 }
 
 func writeGooseHook(exe string) (string, error) {
