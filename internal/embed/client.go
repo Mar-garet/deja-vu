@@ -43,13 +43,13 @@ func New() (*Client, error) {
 	if endpoint := os.Getenv("DEJA_EMBED_URL"); strings.EqualFold(strings.TrimSpace(endpoint), "off") {
 		return nil, errNoEmbedEndpoint
 	} else if endpoint != "" {
-		return &Client{URL: endpoint, Model: model, apiKey: embedAPIKey(endpoint), HTTP: &http.Client{Timeout: 30 * time.Second}}, nil
+		return &Client{URL: endpoint, Model: model, apiKey: embedAPIKey(endpoint), HTTP: &http.Client{Timeout: 120 * time.Second}}, nil
 	}
 	if Off() {
 		return nil, fmt.Errorf("embedding is off (DEJA_EMBED_OFF=1)")
 	}
 	for _, endpoint := range probeURLs {
-		c := &Client{URL: endpoint, Model: model, HTTP: &http.Client{Timeout: 30 * time.Second}}
+		c := &Client{URL: endpoint, Model: model, HTTP: &http.Client{Timeout: 120 * time.Second}}
 		if err := c.probe(); err == nil {
 			return c, nil
 		}
@@ -67,7 +67,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	}
 	httpClient := c.HTTP
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		httpClient = &http.Client{Timeout: 120 * time.Second}
 	}
 	body, err := json.Marshal(map[string]any{"model": c.Model, "input": texts})
 	if err != nil {

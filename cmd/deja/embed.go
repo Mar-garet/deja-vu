@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/vshulcz/deja-vu/internal/embed"
 	"github.com/vshulcz/deja-vu/internal/index"
@@ -128,7 +129,11 @@ func maybeRerank(dir string, hits []search.Hit, o search.Options, notice *os.Fil
 		fmt.Fprintln(notice, "deja: semantic rerank unavailable; using lexical order")
 		return hits
 	}
-	out, err := embed.Rerank(context.Background(), hits, o.Query, sidecar, client)
+	// The client waits up to two minutes for a batch while indexing; a query
+	// keeps the half minute it always had.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	out, err := embed.Rerank(ctx, hits, o.Query, sidecar, client)
 	if err != nil {
 		fmt.Fprintln(notice, "deja: semantic rerank failed; using lexical order")
 		return hits
@@ -160,7 +165,9 @@ func maybeSemantic(dir string, hits []search.Hit, o search.Options, notice *os.F
 	if err != nil {
 		return hits, false
 	}
-	out, err := embed.SemanticSearch(context.Background(), dir, o, sidecar, client)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	out, err := embed.SemanticSearch(ctx, dir, o, sidecar, client)
 	if err != nil || len(out) == 0 {
 		return hits, false
 	}
