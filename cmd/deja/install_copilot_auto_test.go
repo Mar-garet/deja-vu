@@ -448,3 +448,23 @@ func TestCopilotPowerShellLineQuotesThePath(t *testing.T) {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 }
+
+// Copilot writes settings.json itself, so the file being there says nothing
+// about deja: a machine that never ran copilot-auto read stale, and counted as
+// wired for the brief.
+func TestDoctorCallsCopilotsOwnSettingsMissing(t *testing.T) {
+	home := copilotTestHome(t)
+	if err := os.WriteFile(filepath.Join(home, ".copilot", "settings.json"), []byte(`{"model":"gpt-5.4"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range autoWirings() {
+		if a.name != "copilot" {
+			continue
+		}
+		if state, _ := autoWiringState(a); state != "missing" {
+			t.Errorf("state = %q for Copilot's own settings with no deja hook, want missing", state)
+		}
+		return
+	}
+	t.Fatal("no copilot row")
+}

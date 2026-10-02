@@ -107,6 +107,7 @@ func autoWirings() []autoWiring {
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
 	"cursor": true, "qwen": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+	"copilot": true,
 }
 
 // autoUnwired reports whether a row's file holds no deja wiring at all: it is
