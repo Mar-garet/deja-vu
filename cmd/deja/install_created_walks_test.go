@@ -75,3 +75,21 @@ func TestWriteKnowsACreatedFileThroughALinkedDirectory(t *testing.T) {
 		t.Error("took a snapshot of a file this run created, reached through a linked directory")
 	}
 }
+
+// snapshotTaken resolved the directory of every recorded snapshot on each
+// call; resolution keeps the file name, so only same-named ones can match.
+func TestSnapshotTakenResolvesOnlySnapshotsOfTheSameName(t *testing.T) {
+	dir := t.TempDir()
+	snapshotsByThisRun = nil
+	t.Cleanup(func() { snapshotsByThisRun = nil })
+	for i := range 50 {
+		snapshotsByThisRun = append(snapshotsByThisRun, filepath.Join(dir, fmt.Sprintf("config-%d.json.bak", i)))
+	}
+	walks := countEvalSymlinks(t)
+	if snapshotTaken(filepath.Join(dir, "settings.json")) {
+		t.Fatal("settings.json has no snapshot")
+	}
+	if *walks > 1 {
+		t.Errorf("resolved %d directories to look up one snapshot, want 1", *walks)
+	}
+}
