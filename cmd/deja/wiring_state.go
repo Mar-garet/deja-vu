@@ -515,10 +515,16 @@ func rememberSnapshot(bak string) {
 // (review of #3340).
 func snapshotTaken(path string) bool {
 	want := canonicalSnapshotPath(path + ".bak")
+	name := filepath.Base(want)
 	st := readWiringState()
 	for _, list := range [][]string{snapshotsByThisRun, st.Snapshots} {
 		for _, bak := range list {
-			if bak == path+".bak" || canonicalSnapshotPath(bak) == want {
+			if bak == path+".bak" {
+				return true
+			}
+			// Resolution keeps the file name, so a snapshot of another file
+			// is not worth a walk of its directories.
+			if filepath.Base(bak) == name && canonicalSnapshotPath(bak) == want {
 				return true
 			}
 		}
@@ -533,7 +539,7 @@ func snapshotTaken(path string) bool {
 // #3340). A directory that is already gone resolves to itself, which is the
 // uninstall's own case and is why the file itself is never resolved.
 func canonicalSnapshotPath(bak string) string {
-	dir, err := filepath.EvalSymlinks(filepath.Dir(bak))
+	dir, err := evalSymlinks(filepath.Dir(bak))
 	if err != nil {
 		return bak
 	}
