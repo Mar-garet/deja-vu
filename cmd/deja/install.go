@@ -1351,12 +1351,22 @@ func backupOnce(path string) (bool, error) {
 // before this run; one this run created is deja's and needs no snapshot. The
 // record holds the path as given, the write may have followed a symlink, so
 // both forms are compared.
+//
+// Only an entry with the same file name is resolved. deja wrote each one as a
+// regular file, so only its directories can be links, and a different name
+// cannot resolve to path. Resolving every entry on every write made an install
+// of n configs n² path walks.
 func backupOnceUnlessCreated(path string) (bool, error) {
+	name := filepath.Base(path)
 	for _, p := range createdByThisRun {
 		if p == path {
 			return false, nil
 		}
-		if r, err := filepath.EvalSymlinks(p); err == nil && r == path {
+		// EqualFold: Windows resolution can change a name's case.
+		if !strings.EqualFold(filepath.Base(p), name) {
+			continue
+		}
+		if r, err := evalSymlinks(p); err == nil && r == path {
 			return false, nil
 		}
 	}
@@ -1585,6 +1595,10 @@ var createdDirsByThisRun []string
 // keep them and a later uninstall can take back a file that turns out to hold
 // nothing but empty containers (#2583).
 var createdByThisRun []string
+
+// evalSymlinks is filepath.EvalSymlinks for the lookups that run once per
+// recorded file, swappable so a test can count them.
+var evalSymlinks = filepath.EvalSymlinks
 
 // structurallyEmptyConfig reports that a config holds nothing but the empty
 // containers deja's writers leave behind. #840 deletes a file whose content is
