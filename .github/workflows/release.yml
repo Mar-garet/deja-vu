@@ -235,11 +235,28 @@ jobs:
 
       # Same version npm was just given for this package — release-npm.mjs may
       # have moved it to the next patch of its own line — and the same pinned
-      # binary dependency, so the two registries serve one artifact.
+      # binary dependency, so the two registries serve one artifact. npm can
+      # still serve the previous version when this run starts: v0.21.5 read
+      # 0.21.4 here and ClawHub refused it as already published (#4612). So wait
+      # until npm serves this release or later before taking its version.
       - name: Publish the OpenClaw plugin
         run: |
           set -euo pipefail
-          version="$(npm view @vshulcz/openclaw-deja version)"
+          want="${TAG#v}"
+          version=""
+          for try in $(seq 1 30); do
+            live="$(npm view @vshulcz/openclaw-deja version --prefer-online 2>/dev/null || true)"
+            if [ -n "$live" ] && [ "$(printf '%s\n%s\n' "$want" "$live" | sort -V | head -n1)" = "$want" ]; then
+              version="$live"
+              break
+            fi
+            echo "npm serves ${live:-nothing} for @vshulcz/openclaw-deja, waiting for $want (try $try/30)"
+            if [ "$try" -lt 30 ]; then sleep 20; fi
+          done
+          if [ -z "$version" ]; then
+            echo "::error::npm did not serve @vshulcz/openclaw-deja $want or later within 10 minutes"
+            exit 1
+          fi
           out="$(mktemp -d)/openclaw"
           cp -R extensions/openclaw "$out"
           node -e '
