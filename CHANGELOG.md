@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - TRAE CLI 2.0 sessions are read from `~/.trae/cli` (`TRAE_HOME`, `DEJA_TRAE_ROOT`) as harness `trae`, with their own doctor row and `traex resume`. Prompts come only from TRAE's user events, so the runtime context it writes under the user role is not indexed as something you said (#4680).
 - CodeBuddy Code sessions are read from `~/.codebuddy/projects`, WorkBuddy's from `~/.workbuddy/projects`, and Muse Code's from `~/.local/share/muse/sessions`; `deja install codebuddy` and `codebuddy-auto` wire recall into CodeBuddy (#4681, #4679).
+- `deja install trae` adds the MCP server to TRAE CLI's `traecli.toml`, and `trae-auto` adds the session-start, per-prompt, tool and compaction hooks to its `hooks.json`; TRAE runs them once you trust them at start-up (#4702).
+
+### Fixed
+
+- TRAE CLI sessions under `TRAECLI_HOME` are indexed; deja only followed `TRAE_HOME` (#4701).
+- `deja install muse` and `muse-auto` wire recall into Muse Code: the MCP server and Claude-shaped hooks in `~/.config/muse/settings.json`, and the skill in `~/.agents/skills`. `deja resume` prints `muse resume <id>` in the session's workspace (#4709, #4710).
+
+### Fixed
+
+- Under `DEJA_INCLUDE_SUBAGENTS=1`, Muse Code's reminder and verification observers are no longer indexed as sessions, and a workflow subagent gets its project (#4711, #4712).
+- CodeBuddy: `deja resume` prints `codebuddy -r <id>` in the directory the session ran in, and `install codebuddy-auto` writes the `deja-history` skill and the `/deja` command where CodeBuddy reads them (#4707, #4708).
+
+### Fixed
+
+- CodeBuddy: a failed command keeps its exit code, the `/compact` instruction prompt is no longer indexed as your words, and the recovery packet after a compaction arrives with the next prompt (#4703, #4704, #4705).
+- The Claude Code and CodeBuddy plugins stand down when `deja install <h>-auto` already wired the same hooks, instead of running every hook twice (#4706).
 
 ## [0.21.6] - 2026-10-04
 

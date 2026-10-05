@@ -407,6 +407,16 @@
       "path": "<tmp>/home/.codebuddy/.mcp.json"
     },
     {
+      "name": "trae",
+      "state": "config-missing",
+      "path": "<tmp>/home/.trae/traecli.toml"
+    },
+    {
+      "name": "muse",
+      "state": "config-missing",
+      "path": "<tmp>/home/.config/muse/settings.json"
+    },
+    {
       "name": "kimi",
       "state": "config-missing",
       "path": "<tmp>/home/.kimi-code/mcp.json"
@@ -574,6 +584,16 @@
       "path": "<tmp>/home/.codebuddy/settings.json"
     },
     {
+      "name": "trae",
+      "state": "missing",
+      "path": "<tmp>/home/.trae/cli/hooks.json"
+    },
+    {
+      "name": "muse",
+      "state": "missing",
+      "path": "<tmp>/home/.config/muse/settings.json"
+    },
+    {
       "name": "kimi",
       "state": "missing",
       "path": "<tmp>/home/.kimi-code/config.toml"
@@ -729,6 +749,11 @@
       "name": "commandcode",
       "state": "missing",
       "path": "<tmp>/home/.commandcode/commands/deja.md"
+    },
+    {
+      "name": "codebuddy",
+      "state": "missing",
+      "path": "<tmp>/home/.codebuddy/commands/deja.md"
     },
     {
       "name": "copilot-chat",

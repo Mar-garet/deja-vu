@@ -2,10 +2,11 @@
 
 - **ID**: `trae`
 - **Store**: `${TRAE_HOME:-~/.trae}/cli/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl`, plus `archived_sessions/` for `traex archive <id>` and `history.jsonl` beside them
-- **Read override**: `DEJA_TRAE_ROOT` replaces the `cli` directory; `TRAE_HOME` moves TRAE's whole home, and deja follows it
+- **Read override**: `DEJA_TRAE_ROOT` replaces the `cli` directory; `TRAECLI_HOME` moves that directory and `TRAE_HOME` moves TRAE's whole home, and deja follows both
 - **Format**: JSONL — Codex rollouts: `session_meta`, `turn_context`, `response_item`, `event_msg`, plus TRAE's own `history_mutation`
 - **Needs**: nothing (`zstd` only for a compressed rollout)
 - **Resume**: `traex resume <id>`
+- **Wiring**: `deja install trae` adds the MCP server to `${TRAE_HOME:-~/.trae}/traecli.toml`; `deja install trae-auto` adds Codex's hooks to `${TRAECLI_HOME:-${TRAE_HOME:-~/.trae}/cli}/hooks.json` as well, which TRAE runs once they are trusted at start-up
 
 TRAE CLI 2.0 ships as `traex` and reports itself as `traecli 0.200.x`. It is a
 closed-source fork of codex-rs and writes the same rollout files Codex does,

@@ -251,10 +251,12 @@ func resumeCommand(s model.Session) (string, string, error) {
 	if !resumeIDPattern.MatchString(s.ID) {
 		return "", "", fmt.Errorf("session id %q contains characters deja will not place in a command", digest.Short(s.ID))
 	}
-	// A Kimi or Qwen sub-agent log is a session in deja under
-	// DEJA_INCLUDE_SUBAGENTS=1, but neither client opens one on its own; the
+	// A Kimi, Qwen or CodeBuddy sub-agent log is a session in deja under
+	// DEJA_INCLUDE_SUBAGENTS=1, but none of these clients opens one on its own; the
 	// id deja gives it is one they have never seen (#4483).
-	if s.Kind == "subagent" && (s.Harness == "kimi" || s.Harness == "qwen") && s.Parent != "" {
+	// Muse's child logs are the same: `muse resume <child>` answers "has no
+	// saved log" (#4710).
+	if s.Kind == "subagent" && (s.Harness == "kimi" || s.Harness == "qwen" || s.Harness == "muse" || s.Harness == "codebuddy") && s.Parent != "" {
 		return "", "", fmt.Errorf("session %s is a sub-agent run, which %s does not reopen on its own — `deja resume %s` reopens the session that spawned it", digest.Short(s.ID), s.Harness, s.Parent)
 	}
 	// Nor a Kimi /btw side question, which runs in a fork of the session it
@@ -278,6 +280,13 @@ func resumeCommand(s model.Session) (string, string, error) {
 			return "", "", fmt.Errorf("session %s is a history.jsonl entry with no rollout, nothing to resume", digest.Short(s.ID))
 		}
 		return "", "traex resume " + s.ID, nil
+	case "muse":
+		// `muse resume <uuid>` finds the session from any directory, then
+		// takes the directory it was run from as the workspace, so the cd is
+		// what puts its tools back in the right tree. With the workspace gone
+		// the conversation still reopens, so the bare command is printed
+		// (#4710).
+		return existingDir(sources.MuseWorkspace(s.Path)), "muse resume " + s.ID, nil
 	case "opencode":
 		// opencode sessions carry their project directory. opencode reopens a
 		// session from anywhere, so a deleted one is left out rather than
@@ -537,6 +546,22 @@ func resumeCommand(s model.Session) (string, string, error) {
 			return "", "", fmt.Errorf("session %s has no workspace to run in and its path holds characters deja will not place in a command — run reasonix --resume with the file %s", digest.Short(s.ID), s.Path)
 		}
 		return "", "reasonix --resume " + s.Path, nil
+	case "codebuddy":
+		// `codebuddy -r <id>` looks the id up under the folder of the
+		// directory it runs in and answers "No conversation found" from any
+		// other, like qwen (#4707).
+		short := digest.Short(s.ID)
+		if sources.IsWorkBuddyTranscript(s.Path) {
+			return "", "", fmt.Errorf("session %s is WorkBuddy's, and deja knows no command that reopens one — `deja show %s` has the conversation", short, short)
+		}
+		dir := sources.CodeBuddySessionDir(s.Path)
+		if dir == "" {
+			return "", "", fmt.Errorf("codebuddy session %s records no directory, and `codebuddy -r` finds a session only from the one it ran in — `deja show %s` has the conversation", short, short)
+		}
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			return "", "", fmt.Errorf("codebuddy session %s ran in %s, which is gone, and `codebuddy -r` finds a session only from there — `deja show %s` has the conversation", short, dir, short)
+		}
+		return dir, "codebuddy -r " + s.ID, nil
 	case "qwen":
 		// qwen keys its sessions by the directory they ran in: run anywhere
 		// else, `qwen -r <id>` answers "No saved session found". Unlike

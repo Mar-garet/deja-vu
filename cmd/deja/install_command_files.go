@@ -99,6 +99,9 @@ func commandFilePath(harness string) string {
 		// an install checks `$HOME/.gjc/agent/commands/<name>.md` and invokes
 		// the entries as `/omg:*`. Same shape as the others here.
 		return filepath.Join(sources.GjcConfigDir(), "commands", "deja.md")
+	case "codebuddy":
+		// getHomeCommandsDir: <config>/commands/*.md, invoked by file name.
+		return filepath.Join(sources.CodeBuddyConfigDir(), "commands", "deja.md")
 	case "omp":
 		// The default profile's agent directory, ~/.omp/agent. A named
 		// profile reads its own and does not get the command.

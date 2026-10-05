@@ -94,6 +94,14 @@ var sharedSkillHarnesses = map[string]bool{
 	// Crush's own config source lists ~/.agents/skills among the directories it
 	// scans by default, alongside ~/.claude/skills and its own.
 	"crush": true,
+	// TRAE CLI 0.207.1: `traex debug prompt-input` lists a skill placed only
+	// in ~/.agents/skills among the skills it offers the model.
+	"trae": true,
+	// Muse Code 1.4.2: `muse skills list --source user` lists a skill placed
+	// only here, beside ~/.claude/skills and its own config directory (#4709).
+	// With Claude's copy there too it loads one and starts without a word;
+	// only `muse skills list` notes the other as shadowed.
+	"muse": true,
 }
 
 // sharedSkillPath is the one file all of them read. Claude Code is deliberately
@@ -124,6 +132,10 @@ func guidancePath(harness string) string {
 		return continueSkillPath()
 	case "copilot":
 		return filepath.Join(sources.CopilotHome(), "skills", "deja-history", "SKILL.md")
+	case "codebuddy":
+		// <config>/skills, the user root of CodeBuddy's loadSkills; it does
+		// not read ~/.agents/skills (#4708).
+		return filepath.Join(sources.CodeBuddyConfigDir(), "skills", "deja-history", "SKILL.md")
 	case "pi":
 		return filepath.Join(sources.PiConfigDir(), "skills", "deja-history", "SKILL.md")
 	case "hermes":
@@ -634,7 +646,7 @@ func guidanceOwnsWholeFile(harness string) bool {
 		return true
 	}
 	switch harness {
-	case "claude-code", "claude", "antigravity", "copilot", "pi", "opencode", "hermes", "vscode", "continue":
+	case "claude-code", "claude", "antigravity", "copilot", "pi", "opencode", "hermes", "vscode", "continue", "codebuddy":
 		return true
 	}
 	return false

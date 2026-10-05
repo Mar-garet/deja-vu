@@ -55,14 +55,18 @@ of them the way Claude Code does.
 
 ## Known quirks and drift
 
-- **Read from the bundle, not a live store.** The record shapes, the store
-  path, `CODEBUDDY_CONFIG_DIR`, the plumbing flags, the title order, the MCP
-  file order and the hook events were read out of
-  `@tencent-ai/codebuddy-code` 2.161.2 (`dist/codebuddy.js`) and CodeBuddy's
-  CLI docs; the fixture is synthetic.
+- **Checked against a live 2.161.2.** Sessions written by the CLI itself
+  (pointed at a local model through `models.json`) match the record shapes,
+  the store path and the hook payloads read out of `dist/codebuddy.js`; the
+  fixture is synthetic.
 - **The IDE store is separate.** The IDE and the VS Code extension keep their
   history under `CodeBuddyExtension/Data/...` in the platform data directory,
   never in this tree. Not read yet (#4681).
-- **No exit codes.** The Bash result text carries no exit status line deja
-  has checked, so a command is stored without `→ exit N`.
+- **Exit codes from the result text.** A shell result ends with
+  `Exit Code: N` (`(none)` when a signal ended it), and `status` stays
+  `completed` either way, so the code is read off that line.
+- **`/compact` writes its instruction prompt as a user record** marked only
+  `providerData.agent: "compact"`; it is skipped, as the summary after it is.
+- **Resume needs the session's directory.** `codebuddy -r <id>` finds a
+  session only under the folder of the directory it is run from.
 - **WorkBuddy shares the harness id.** Its sessions read as `codebuddy`.

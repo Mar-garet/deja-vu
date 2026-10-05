@@ -441,6 +441,14 @@ func runHookContextMode(dir string, plain, once bool) error {
 		}
 		return nil
 	}
+	// CodeBuddy injects SessionStart context only while the input holds one
+	// user message (isFirstOrResumeMessage, 2.161.2), and after a compaction it
+	// holds the summary and the next prompt. Whatever this answered would be
+	// marked delivered and never arrive, so the packet waits for the prompt
+	// hook, which does reach the model (#4705).
+	if input.Source == "compact" && sources.IsCodeBuddyTranscript(input.TranscriptPath) {
+		return nil
+	}
 	if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "SessionStart", shape, os.Stdout); delivered {
 		return err
 	}

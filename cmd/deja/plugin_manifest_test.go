@@ -128,12 +128,11 @@ func TestPluginBridgeHandlesMissingBinary(t *testing.T) {
 }
 
 // Users who already ran `deja install claude-auto` and then install the
-// plugin must not get the digest twice.
+// plugin must not get the digest twice. Whether it stands down is run, not
+// read, in TestPluginBridgesStandDownBesideTheInstaller: a string check here
+// held the grep that never matched what the installer writes (#4706).
 func TestPluginBridgeStandsDownWhenLocallyInstalled(t *testing.T) {
 	script := string(repoFile(t, "claude-plugin/hooks/deja.sh"))
-	if !strings.Contains(script, `grep -q "deja hook-"`) {
-		t.Fatalf("bridge does not detect an existing local install:\n%s", script)
-	}
 	if !strings.Contains(script, "CLAUDE_CONFIG_DIR") {
 		t.Fatal("bridge ignores CLAUDE_CONFIG_DIR when looking for settings.json")
 	}

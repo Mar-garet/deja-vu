@@ -77,7 +77,8 @@
 <p>those are skipped, or every subagent objective would read as something the</p>
 <p>person typed. The workspace is <code>workspace_root</code> in the</p>
 <p><code>runtime.session.metadata</code> record, else <code>cwd</code> in</p>
-<p><code>runtime.session.route_facts</code>; the title is the latest</p>
+<p><code>runtime.session.route_facts</code>, else <code>workspace_root</code> in</p>
+<p><code>session.workspace_branch.observed</code>; the title is the latest</p>
 <p><code>session.name.changed</code> <code>new_name</code>.</p>
 <p><strong>Last verified:</strong> 2026-10-05</p>
 <h2 id="sources">Sources</h2>
@@ -87,13 +88,35 @@
 <p><code>sessions/muse.rs</code> (PR #1349), which also notes that the parent&#39;s</p>
 <p><code>workflow_child_lifecycle</code> usage duplicates the subagent logs. The fixture is</p>
 <p>synthetic.</p>
-<h2 id="not-wired-yet">Not wired yet</h2>
-<p>Muse has user hooks in <code>~/.config/muse/settings.json</code>, project hooks in</p>
-<p><code>.muse/hooks.json</code> and an <code>mcp_servers</code> block in the same settings file.</p>
-<p>openharness measured the hooks not firing, and nothing read here documents</p>
-<p>the <code>mcp_servers</code> entry shape, so <code>deja install</code> writes nothing for Muse yet.</p>
-<p><code>muse resume &lt;id&gt;</code> reopens a session; <code>deja resume</code> does not print it yet</p>
-<p>(#4679).</p>
+<h2 id="wiring">Wiring</h2>
+<p>Measured on Muse Code 1.4.2 against a local provider stub, without a login</p>
+<p>(#4709). <code>deja install muse</code> writes the server into</p>
+<p><code>${XDG_CONFIG_HOME:-~/.config}/muse/settings.json</code>:</p>
+<pre><code class="language-json">{&#34;mcpServers&#34;: {&#34;deja&#34;: {&#34;type&#34;: &#34;stdio&#34;, &#34;command&#34;: &#34;deja&#34;, &#34;args&#34;: [&#34;mcp&#34;], &#34;mode&#34;: &#34;optional&#34;}}}</code></pre>
+<p>The model sees the tool <code>deja</code> under Muse&#39;s <code>mcp__&lt;server&gt;</code> namespace. Muse still loads the legacy</p>
+<p><code>mcp_servers</code> key on its own, but with both keys present it loads no MCP</p>
+<p>server at all, so install writes into whichever key the file already has and</p>
+<p>refuses a file that has both.</p>
+<p><code>deja install muse-auto</code> adds hooks to the same file in Claude Code&#39;s shape,</p>
+<p><code>{&#34;hooks&#34;: {Event: [{matcher, hooks: [{type, command, timeout}]}]}}</code>, timeout</p>
+<p>in seconds: SessionStart, UserPromptSubmit, PreToolUse on</p>
+<p><code>bash|edit_file|write_file</code>, PostToolUse and PostToolUseFailure on <code>bash</code>, and</p>
+<p>SessionEnd. They fire in an untrusted workspace too, the payload is Claude</p>
+<p>Code&#39;s with <code>transcript_path: null</code>, and what a hook returns, as</p>
+<p><code>hookSpecificOutput.additionalContext</code> or plain stdout, reaches the model as a</p>
+<p>developer message. <code>edit_file</code> and <code>write_file</code> name the file under</p>
+<p><code>tool_input.path</code>.</p>
+<p>Muse reads user skills from <code>~/.agents/skills</code>, so install writes the</p>
+<p>deja-history skill there. Slash commands come only from plugins.</p>
+<p><code>deja resume &lt;id&gt;</code> prints <code>muse resume &lt;id&gt;</code> in the session&#39;s</p>
+<p><code>workspace_root</code>: Muse finds the session from anywhere but takes the directory</p>
+<p>it runs in as the workspace (#4710). A subagent is not resumable on its own</p>
+<p>(<code>has no saved log</code>), so it is refused with the parent&#39;s id.</p>
+<p>Under <code>DEJA_INCLUDE_SUBAGENTS=1</code> only children that name a workspace are read.</p>
+<p>Muse also logs its reminder and verification observers as children; their</p>
+<p>prompt is Muse&#39;s own instruction text and they record no workspace (#4711). A</p>
+<p>workflow child names its workspace in <code>session.workspace_branch.observed</code></p>
+<p>(#4712).</p>
 
 <hr>
 <p>deja reads this format and thirty-seven others, and turns what it finds into memory your

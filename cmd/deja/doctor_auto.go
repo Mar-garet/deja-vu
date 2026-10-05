@@ -45,6 +45,8 @@ func autoWirings() []autoWiring {
 		}, "hook-context", ""},
 		{"qwen", func() string { return filepath.Join(sources.QwenConfigDir(), "settings.json") }, "hook-prompt", ""},
 		{"codebuddy", codeBuddySettingsPath, "hook-context", ""},
+		{"trae", traeHooksPath, "hook-context", ""},
+		{"muse", museSettingsPath, "hook-context", ""},
 		// The digest hook, not the prompt one: a config written before kimi had
 		// all three blocks still carries hook-prompt, and reading that as wired
 		// hides a machine that is missing the session digest and the forget on
@@ -112,7 +114,7 @@ func autoWirings() []autoWiring {
 // rather than one deja writes whole. Those exist whether deja ever wrote to
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
-	"cursor": true, "qwen": true, "codebuddy": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+	"cursor": true, "qwen": true, "codebuddy": true, "trae": true, "muse": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
 	"copilot": true,
 }
 
@@ -414,6 +416,12 @@ func doctorAutoRecall(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %-11s %s%s\n", a.name, "wired", reportPath(path), note)
 			if off := autoWiringSwitchedOff(a.name); off != "" {
 				fmt.Fprintf(w, "  %-12s %s\n", "", off)
+			}
+			// TRAE keeps Codex's per-hook trust, and a hook nobody trusted
+			// does not run. How it keys that trust is not read here, so the
+			// row says where to look rather than guessing either way.
+			if a.name == "trae" {
+				fmt.Fprintf(w, "  %-12s %s\n", "", "traex runs these only once trusted — it asks at start-up, and /hooks shows which")
 			}
 		}
 		// Under the row whatever the row said. A machine that upgraded is most
