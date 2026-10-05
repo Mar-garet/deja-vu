@@ -573,6 +573,8 @@ leaves. The `deepseek` row carries `plugin_missing` when
 from starting at all. The `pi` row is `no-adapter`, with the fix in `note`,
 when `mcp.json` declares deja and pi's packages do not include
 pi-mcp-adapter, the only thing in pi that reads that file.
+The `workbuddy` row is `untrusted`, with the fix in `note`, when WorkBuddy AI's
+`mcp-approvals.json` has no approval for deja's entry as written.
 `cherrystudio` is read from the app's own database: `wired`
 with that database as `path` when one of its servers runs `deja mcp`, and
 `disabled` with the database as `path` when deja's server is there with its

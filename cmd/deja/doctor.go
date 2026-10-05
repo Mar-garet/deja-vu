@@ -1439,7 +1439,18 @@ func doctorMCP(w io.Writer) {
 			fmt.Fprintf(w, "  %-12s %s\n", "", piNoAdapterNote)
 			continue
 		}
-		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", c.name, status, guidanceStatus(guidanceHarness(c.name)), reportPath(c.path))
+		// WorkBuddy AI declares the server and starts it only once the user
+		// has clicked Trust for it (#4740).
+		label, trust := status, ""
+		if status == "wired" && c.name == "workbuddy" {
+			if trust = workBuddyUntrustedNote(); trust != "" {
+				label = "untrusted"
+			}
+		}
+		fmt.Fprintf(w, "  %-12s %-14s guidance %-11s %s\n", c.name, label, guidanceStatus(guidanceHarness(c.name)), reportPath(c.path))
+		if trust != "" {
+			fmt.Fprintf(w, "  %-12s %s\n", "", trust)
+		}
 		// One "wired" can be two registrations: a hand add under another name
 		// — the project is called deja-vu, after all — plus the `deja` a later
 		// install wrote beside it. Each session then starts the server twice

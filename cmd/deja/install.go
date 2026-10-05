@@ -3419,6 +3419,11 @@ func installClientOffNotes(target string) []string {
 	if n := clientMCPDenied(mcp); n != "" {
 		notes = append(notes, n)
 	}
+	if mcp == "workbuddy" {
+		if n := workBuddyUntrustedNote(); n != "" {
+			notes = append(notes, n)
+		}
+	}
 	return notes
 }
 
