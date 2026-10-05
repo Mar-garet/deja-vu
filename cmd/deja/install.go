@@ -2252,6 +2252,12 @@ func hookBinariesBefore(prefix string) []string {
 // Deliberately narrow: the token must be named like a deja build *and* be
 // running one of deja's hook subcommands. A line that merely contains deja's
 // hook inside something bigger is still hookWrapsDejas and is left alone.
+//
+// A build is `deja` or `deja-<name>`, bare or .exe, and `deja.test` is the
+// test binary. A script is not: `deja-wrapper.cmd`, `deja-run.sh` and
+// `dejavu-notify` are somebody's own programs that happen to take deja's
+// subcommand, and reading them as ours rewrote them on install and deleted
+// them on uninstall (#4728 review).
 func hookTokenIsDejas(tok string) bool {
 	if isDejaBinaryToken(tok) {
 		return true
@@ -2260,8 +2266,11 @@ func hookTokenIsDejas(tok string) bool {
 	if i := strings.LastIndexAny(tok, `/\`); i >= 0 {
 		tok = tok[i+1:]
 	}
-	tok = strings.ToLower(strings.TrimSuffix(strings.ToLower(tok), ".exe"))
-	return strings.HasPrefix(tok, "deja")
+	tok = strings.TrimSuffix(strings.TrimSuffix(strings.ToLower(tok), ".exe"), ".test")
+	if strings.Contains(tok, ".") {
+		return false
+	}
+	return tok == "deja" || strings.HasPrefix(tok, "deja-")
 }
 
 // isDejaHookCommand reports whether deja's hook runs in this command at all,
@@ -2271,14 +2280,18 @@ func isDejaHookCommand(existing any, cmd string) bool {
 	return hookCommandKindOf(existing, cmd) != hookNotDejas
 }
 
-// powerShellHookHead is how codeBuddyHookRun's Windows line opens.
-const powerShellHookHead = `powershell -NoProfile -Command "`
+// powerShellHookHead and powerShellHookTail are how codeBuddyHookRun's Windows
+// line opens and closes.
+const (
+	powerShellHookHead = `powershell -NoProfile -Command "`
+	powerShellHookTail = `; exit (Get-Variable LASTEXITCODE -ValueOnly)"`
+)
 
 // unwrapPowerShellHook is the command inside codeBuddyHookRun's Windows line,
 // and the line itself when it is not one.
 func unwrapPowerShellHook(s string) string {
-	if len(s) > len(powerShellHookHead) && strings.HasPrefix(s, powerShellHookHead) && strings.HasSuffix(s, `"`) {
-		return s[len(powerShellHookHead) : len(s)-1]
+	if len(s) > len(powerShellHookHead)+len(powerShellHookTail) && strings.HasPrefix(s, powerShellHookHead) && strings.HasSuffix(s, powerShellHookTail) {
+		return s[len(powerShellHookHead) : len(s)-len(powerShellHookTail)]
 	}
 	return s
 }

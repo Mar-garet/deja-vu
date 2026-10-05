@@ -7,19 +7,25 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 // hookEchoEnv turns the test binary into a stand-in for deja: it prints its
-// arguments on one line and then whatever came in on stdin, and exits 0.
-const hookEchoEnv = "DEJA_TEST_HOOK_ECHO"
+// arguments on one line and then whatever came in on stdin, and exits 0, or
+// with the code in hookEchoExitEnv.
+const (
+	hookEchoEnv     = "DEJA_TEST_HOOK_ECHO"
+	hookEchoExitEnv = "DEJA_TEST_HOOK_EXIT"
+)
 
 func hookEcho() {
 	in, _ := io.ReadAll(os.Stdin)
 	_, _ = os.Stdout.WriteString(strings.Join(os.Args[1:], " ") + "\n")
 	_, _ = os.Stdout.Write(in)
-	os.Exit(0)
+	code, _ := strconv.Atoi(os.Getenv(hookEchoExitEnv))
+	os.Exit(code)
 }
 
 // cbParseCommandLine is CodeBuddy's parseCommandLine (2.161.3): split on
@@ -88,7 +94,7 @@ func cbIsPowerShell(exe string) bool {
 func TestCodeBuddyWindowsHookLineForAPathWithASpace(t *testing.T) {
 	exe := `C:\Users\First Last\AppData\Local\deja\deja.exe`
 	line := codeBuddyHookRun("windows", exe, "hook-context")
-	want := `powershell -NoProfile -Command "& 'C:/Users/First Last/AppData/Local/deja/deja.exe' hook-context"`
+	want := `powershell -NoProfile -Command "& 'C:/Users/First Last/AppData/Local/deja/deja.exe' hook-context; exit (Get-Variable LASTEXITCODE -ValueOnly)"`
 	if line != want {
 		t.Fatalf("line\n got %s\nwant %s", line, want)
 	}
@@ -96,7 +102,7 @@ func TestCodeBuddyWindowsHookLineForAPathWithASpace(t *testing.T) {
 	if err != nil || !cbIsPowerShell(prog) {
 		t.Fatalf("CodeBuddy would not spawn this directly: %q %q %v", prog, args, err)
 	}
-	if got := args[len(args)-1]; got != `& 'C:/Users/First Last/AppData/Local/deja/deja.exe' hook-context` {
+	if got := args[len(args)-1]; got != `& 'C:/Users/First Last/AppData/Local/deja/deja.exe' hook-context; exit (Get-Variable LASTEXITCODE -ValueOnly)` {
 		t.Errorf("the command PowerShell gets: %q", got)
 	}
 
@@ -176,6 +182,12 @@ func TestCodeBuddyWindowsHookLineReplacesTheQuotedOne(t *testing.T) {
 // no Git Bash, and to Git Bash when there is one. The payload carries non-ASCII
 // text both ways, as a prompt does. Before #4728 the first two failed with
 // PowerShell's "Unexpected token 'hook-context'".
+//
+// And a failing deja: CodeBuddy acts on a hook's exit code, and PowerShell
+// turns any failed native command into 1. Where CodeBuddy spawns the line, or
+// Git Bash runs it, the code deja exited with is the one it sees. An older
+// CodeBuddy that wraps the line in a second PowerShell flattens it again, out
+// of deja's reach; there it only has to stay a failure.
 func TestCodeBuddyHookLineRunsInEveryWindowsShell(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("CodeBuddy's Windows hook executor")
@@ -197,24 +209,25 @@ func TestCodeBuddyHookLineRunsInEveryWindowsShell(t *testing.T) {
 	want := sub + "\n" + payload
 
 	type run struct {
-		name string
-		argv []string
+		name  string
+		argv  []string
+		exact bool // the exit code passes through unchanged
 	}
 	var runs []run
 	// CodeBuddy 2.161: tryBuildDirectPowerShellHookCommand, else the shell.
 	if prog, args, err := cbParseCommandLine(line); err == nil && cbIsPowerShell(prog) {
 		args = append(append([]string{}, args[:len(args)-2]...), append([]string{"-NonInteractive", "-WindowStyle", "Hidden"}, args[len(args)-2:]...)...)
-		runs = append(runs, run{"CodeBuddy, spawned directly", append([]string{prog}, args...)})
+		runs = append(runs, run{"CodeBuddy, spawned directly", append([]string{prog}, args...), true})
 	} else {
-		runs = append(runs, run{"CodeBuddy, no Git Bash", []string{"powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", line}})
+		runs = append(runs, run{"CodeBuddy, no Git Bash", []string{"powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", line}, true})
 	}
 	// An older CodeBuddy without the direct spawn, and no Git Bash.
-	runs = append(runs, run{"PowerShell -Command", []string{"powershell", "-NoProfile", "-NonInteractive", "-Command", line}})
+	runs = append(runs, run{"PowerShell -Command", []string{"powershell", "-NoProfile", "-NonInteractive", "-Command", line}, false})
 	if _, err := exec.LookPath("pwsh"); err == nil {
-		runs = append(runs, run{"pwsh -Command", []string{"pwsh", "-NoProfile", "-NonInteractive", "-Command", line}})
+		runs = append(runs, run{"pwsh -Command", []string{"pwsh", "-NoProfile", "-NonInteractive", "-Command", line}, false})
 	}
 	if bash := gitBashPath(); bash != "" {
-		runs = append(runs, run{"Git Bash", []string{bash, "-c", line}})
+		runs = append(runs, run{"Git Bash", []string{bash, "-c", line}, true})
 	} else {
 		t.Log("no Git Bash on this machine; the bash leg is not run")
 	}
@@ -228,6 +241,24 @@ func TestCodeBuddyHookLineRunsInEveryWindowsShell(t *testing.T) {
 		got := strings.ReplaceAll(string(out), "\r\n", "\n")
 		if err != nil || got != want {
 			t.Errorf("%s ran %q:\n err %v\n out %q\nwant %q\n stderr %s", r.name, line, err, got, want, stderr.String())
+		}
+
+		c = exec.Command(r.argv[0], r.argv[1:]...)
+		c.Env = append(os.Environ(), hookEchoEnv+"=1", hookEchoExitEnv+"=3")
+		c.Stdin = strings.NewReader(payload)
+		err = c.Run()
+		code := 0
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Errorf("%s: %v", r.name, err)
+			continue
+		}
+		if r.exact && code != 3 {
+			t.Errorf("%s: deja exited 3, CodeBuddy sees %d", r.name, code)
+		} else if code == 0 {
+			t.Errorf("%s: deja exited 3, CodeBuddy sees success", r.name)
 		}
 	}
 }

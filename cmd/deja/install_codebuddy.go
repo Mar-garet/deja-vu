@@ -116,12 +116,16 @@ func installCodeBuddyHooksIn(path, exe string, uninstall bool) (installResult, e
 // Only for a path that needs quoting: a plain one already runs in both shells
 // and costs no extra process. A `$` or backtick would be expanded inside the
 // double quotes by bash or PowerShell, so such a path keeps the old line.
+//
+// PowerShell exits 1 for any failed native command, so the line passes deja's
+// own exit code on. It is read with Get-Variable because `$LASTEXITCODE`
+// would be expanded by bash or an outer PowerShell before the inner one ran.
 func codeBuddyHookRun(goos, exe, sub string) string {
 	p := strings.ReplaceAll(exe, `\`, "/")
 	if goos != "windows" || !strings.ContainsAny(p, " \t") || strings.ContainsAny(p, "$`") {
 		return hookCommandQuoteFor(goos, exe) + " " + sub
 	}
-	return `powershell -NoProfile -Command "& '` + strings.ReplaceAll(p, "'", "''") + `' ` + sub + `"`
+	return powerShellHookHead + "& '" + strings.ReplaceAll(p, "'", "''") + "' " + sub + powerShellHookTail
 }
 
 // installCodeBuddyAuto writes the hooks first: a settings file deja refuses
