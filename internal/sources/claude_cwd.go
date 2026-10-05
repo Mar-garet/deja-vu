@@ -117,12 +117,13 @@ var claudeCWDNameCache sync.Map // project folder -> display name
 // cwdProjectName is the project named by a recorded working directory: its
 // last two segments, as a decoded folder name would give them. A file:// URI
 // is read as the path it names, escapes decoded (#4461), and a drive is not a
-// parent: C:\proj is "proj".
+// parent: C:\proj is "proj". A WorkBuddy chat folder names the workspace root
+// it sits in (ChatWorkspaceRoot).
 func cwdProjectName(cwd string) string {
 	if p, ok := fileURIPath(cwd); ok {
 		cwd = p
 	}
-	segs := strings.FieldsFunc(cwd, func(r rune) bool { return r == '/' || r == '\\' })
+	segs := dropChatFolder(strings.FieldsFunc(cwd, func(r rune) bool { return r == '/' || r == '\\' }))
 	switch {
 	case len(segs) >= 2 && !isDriveSegment(segs[len(segs)-2]):
 		return projectSegments(segs[len(segs)-2], segs[len(segs)-1])

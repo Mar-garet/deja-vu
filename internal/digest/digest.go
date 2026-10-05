@@ -500,6 +500,11 @@ func UTF8SafeCut(s string, n int) string {
 }
 
 func ProjectNameCandidates(cwd string) []string {
+	// A WorkBuddy chat folder is named for the workspace root it sits in,
+	// as the session recorded there is (#4735).
+	if root, ok := sources.ChatWorkspaceRoot(cwd); ok {
+		cwd = root
+	}
 	names := []string{sources.ClaudeProjectName(cwd)}
 	add := func(name string) {
 		for _, n := range names {
