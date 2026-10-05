@@ -330,3 +330,21 @@ func TestParseMuseWorkflowChildProject(t *testing.T) {
 		t.Errorf("project = %q, want the workspace_branch root", s.Project)
 	}
 }
+
+// The workspace resume runs in is the session's own: a child's
+// workspace_branch record logged in the parent under the child's stream is
+// not it.
+func TestMuseWorkspaceIgnoresOtherStreams(t *testing.T) {
+	lines := museConversation(t)[1:]
+	lines = append(lines, museRec("018f0000-0000-0000-0000-000000000001", "session.workspace_branch.observed",
+		map[string]any{"kind": "workspace_branch", "record": map[string]any{"workspace_root": "/w/child-tree"}}, 21))
+	dir := filepath.Join(t.TempDir(), "2026", "09", "18", museTestID)
+	p := writeMuseLog(t, dir, lines...)
+	if ws := MuseWorkspace(p); ws != "" {
+		t.Errorf("workspace = %q, want none: the only one named is another stream's", ws)
+	}
+	full := writeMuseLog(t, filepath.Join(t.TempDir(), museTestID), museConversation(t)...)
+	if ws := MuseWorkspace(full); ws != "/w/poollab" {
+		t.Errorf("workspace = %q, want the metadata's", ws)
+	}
+}

@@ -67,7 +67,7 @@ Measured on Muse Code 1.4.2 against a local provider stub, without a login
 {"mcpServers": {"deja": {"type": "stdio", "command": "deja", "args": ["mcp"], "mode": "optional"}}}
 ```
 
-The model sees it as `mcp__deja__deja`. Muse still loads the legacy
+The model sees the tool `deja` under Muse's `mcp__<server>` namespace. Muse still loads the legacy
 `mcp_servers` key on its own, but with both keys present it loads no MCP
 server at all, so install writes into whichever key the file already has and
 refuses a file that has both.

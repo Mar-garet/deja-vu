@@ -57,8 +57,10 @@ func museMCPKey(path string) (string, error) {
 		// Not ours to diagnose here: the writer reports the parse error.
 		return "mcpServers", nil
 	}
-	_, legacy := root["mcp_servers"]
-	_, current := root["mcpServers"]
+	// A key set to null holds no servers, so it counts as absent, as it
+	// does for doctor.
+	legacy := root["mcp_servers"] != nil
+	current := root["mcpServers"] != nil
 	switch {
 	case legacy && current:
 		return "", fmt.Errorf("%s has both mcp_servers and mcpServers, and Muse loads no MCP server at all while both are there — move the entries under mcpServers and run this again", path)
@@ -70,16 +72,28 @@ func museMCPKey(path string) (string, error) {
 
 func installMuseMCP(exe string, uninstall bool) (installResult, error) {
 	path := museSettingsPath()
-	key, err := museMCPKey(path)
-	if err != nil {
-		if uninstall {
-			return installResult{Path: path, Action: "unchanged"}, nil
-		}
-		return installResult{}, err
-	}
 	command, args := mcpCommandArgs(exe)
 	entry := map[string]any{"type": "stdio", "command": command, "args": args, "mode": "optional"}
-	return installMCPJSONEntry(path, key, entry, uninstall)
+	if uninstall {
+		// Out of both blocks: the user may have added the other one since
+		// the install, and deja's entry is still in the file either way.
+		var res installResult
+		for i, key := range []string{"mcpServers", "mcp_servers"} {
+			r, err := installMCPJSONEntry(path, key, entry, true)
+			if err != nil {
+				return installResult{}, err
+			}
+			if i == 0 || (res.Action == "unchanged" && r.Action != "unchanged") {
+				res = r
+			}
+		}
+		return res, nil
+	}
+	key, err := museMCPKey(path)
+	if err != nil {
+		return installResult{}, err
+	}
+	return installMCPJSONEntry(path, key, entry, false)
 }
 
 func installMuseHooks(exe string, uninstall bool) (installResult, error) {
@@ -101,6 +115,13 @@ func installMuseHooks(exe string, uninstall bool) (installResult, error) {
 // installMuseAuto writes the hooks first: a settings file deja refuses
 // should leave nothing half-wired (#2745).
 func installMuseAuto(exe string, uninstall bool) (installResult, error) {
+	// The MCP block's refusal comes before any hook is written, for the same
+	// reason.
+	if !uninstall {
+		if _, err := museMCPKey(museSettingsPath()); err != nil {
+			return installResult{}, err
+		}
+	}
 	hooks, err := installMuseHooks(exe, uninstall)
 	if err != nil {
 		return installResult{}, err

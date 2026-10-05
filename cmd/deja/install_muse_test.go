@@ -239,3 +239,43 @@ func TestResumeMuseRunsInTheWorkspace(t *testing.T) {
 		t.Fatalf("child: err = %v, want a pointer to the parent", err)
 	}
 }
+
+// A file muse-auto refuses over its MCP blocks gets no hooks either, and an
+// uninstall takes deja out of whichever block it ended up in, including one
+// the user put beside it after the install.
+func TestInstallMuseAutoRefusesWhole(t *testing.T) {
+	home := filepath.Join(hermeticEnv(t), "home")
+	path := filepath.Join(home, ".config", "muse", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	both := `{"mcp_servers":{},"mcpServers":{}}`
+	if err := os.WriteFile(path, []byte(both), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installTarget("muse-auto", "/bin/deja", false); err == nil {
+		t.Fatal("muse-auto installed over both MCP blocks")
+	}
+	if b, _ := os.ReadFile(path); string(b) != both {
+		t.Fatalf("refused install still wrote:\n%s", b)
+	}
+
+	if err := os.WriteFile(path, []byte(`{"schema_version":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installTarget("muse", "/bin/deja", false); err != nil {
+		t.Fatal(err)
+	}
+	root := readMuseSettings(t, path)
+	root["mcp_servers"] = map[string]any{"docs": map[string]any{"command": "docs-mcp"}}
+	b, _ := json.Marshal(root)
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installTarget("muse", "/bin/deja", true); err != nil {
+		t.Fatal(err)
+	}
+	if servers, _ := readMuseSettings(t, path)["mcpServers"].(map[string]any); servers["deja"] != nil {
+		t.Fatalf("uninstall left deja in mcpServers: %v", servers)
+	}
+}

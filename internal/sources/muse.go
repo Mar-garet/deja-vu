@@ -154,6 +154,13 @@ func museRecords(m map[string]any) []map[string]any {
 
 // ParseMuseFile reads one session log.
 func ParseMuseFile(path string) ([]model.Session, error) {
+	ss, _, err := parseMuseLog(path)
+	return ss, err
+}
+
+// parseMuseLog is ParseMuseFile, also returning the workspace the session
+// names, read from the session's own stream only.
+func parseMuseLog(path string) ([]model.Session, string, error) {
 	dir := filepath.Dir(path)
 	s := model.Session{Harness: "muse", ID: filepath.Base(dir), Path: path}
 	child := MuseSubagentFile(path)
@@ -162,7 +169,7 @@ func ParseMuseFile(path string) ([]model.Session, error) {
 		s.Parent = filepath.Base(filepath.Dir(filepath.Dir(dir)))
 	}
 	streamID := ""
-	workspace, cwd, branchRoot := "", "", ""
+	var ws museWorkspaceFacts
 	exits := commandExits{}
 	err := scanJSONL(path, func(line map[string]any) {
 		for _, rec := range museRecords(line) {
@@ -178,24 +185,11 @@ func ParseMuseFile(path string) ([]model.Session, error) {
 			if sid != "" && streamID != "" && sid != streamID {
 				continue
 			}
+			if ws.take(rec) {
+				continue
+			}
 			payload, _ := rec["payload"].(map[string]any)
-			inner, _ := payload["record"].(map[string]any)
 			switch rec["payload_type"] {
-			case "runtime.session.metadata":
-				if v, _ := inner["workspace_root"].(string); v != "" && workspace == "" {
-					workspace = v
-				}
-				continue
-			case "runtime.session.route_facts":
-				if v, _ := inner["cwd"].(string); v != "" && cwd == "" {
-					cwd = v
-				}
-				continue
-			case "session.workspace_branch.observed":
-				if v, _ := inner["workspace_root"].(string); v != "" && branchRoot == "" {
-					branchRoot = v
-				}
-				continue
 			case "session.name.changed":
 				if v, _ := payload["new_name"].(string); strings.TrimSpace(v) != "" {
 					s.Title = firstLineTrim(v)
@@ -253,26 +247,20 @@ func ParseMuseFile(path string) ([]model.Session, error) {
 			s.ID = streamID
 		}
 	}
-	if workspace == "" {
-		workspace = cwd
-	}
-	// A workflow child records its workspace only here (#4712).
-	if workspace == "" {
-		workspace = branchRoot
-	}
+	workspace := ws.root()
 	// Muse runs a reminder observer beside every session, and a verification
 	// one after tool use, as children logged like a delegated agent. Their
 	// prompt is Muse's own instruction text. They are the children that name
 	// no workspace: a workflow child records the one it works in, an observer
 	// only reads the parent's conversation (#4711).
 	if child && workspace == "" {
-		return nil, err
+		return nil, "", err
 	}
 	s.Project = projectName(workspace)
 	if len(s.Messages) == 0 {
-		return nil, err
+		return nil, workspace, err
 	}
-	return []model.Session{s}, err
+	return []model.Session{s}, workspace, err
 }
 
 // museToolCalls puts the calls in the tool_use shape the shared extractors
@@ -363,37 +351,48 @@ func museWorkRecords(calls []any, t time.Time) []model.Message {
 	return out
 }
 
-// MuseWorkspace is the directory a session ran in, read from its log the way
+// museWorkspaceFacts collects where a session says it ran: runtime.session.
+// metadata's workspace_root, else route_facts' cwd, else the workspace_root of
+// session.workspace_branch.observed, which is the only one a workflow child
+// records (#4712).
+type museWorkspaceFacts struct{ metadata, cwd, branch string }
+
+// take reads rec if it is one of the three records, and reports whether it was.
+func (w *museWorkspaceFacts) take(rec map[string]any) bool {
+	payload, _ := rec["payload"].(map[string]any)
+	inner, _ := payload["record"].(map[string]any)
+	var key string
+	var dst *string
+	switch rec["payload_type"] {
+	case "runtime.session.metadata":
+		key, dst = "workspace_root", &w.metadata
+	case "runtime.session.route_facts":
+		key, dst = "cwd", &w.cwd
+	case "session.workspace_branch.observed":
+		key, dst = "workspace_root", &w.branch
+	default:
+		return false
+	}
+	if v, _ := inner[key].(string); v != "" && *dst == "" {
+		*dst = v
+	}
+	return true
+}
+
+func (w museWorkspaceFacts) root() string {
+	for _, v := range []string{w.metadata, w.cwd, w.branch} {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// MuseWorkspace is the directory a session ran in, read from its log as
 // ParseMuseFile reads it, or "" when the log names none. `muse resume` adopts
 // the directory it is run from as the workspace, so this is where deja resume
 // runs it (#4710).
 func MuseWorkspace(path string) string {
-	var workspace, cwd, branchRoot string
-	_ = scanJSONL(path, func(line map[string]any) {
-		for _, rec := range museRecords(line) {
-			payload, _ := rec["payload"].(map[string]any)
-			inner, _ := payload["record"].(map[string]any)
-			var key string
-			var dst *string
-			switch rec["payload_type"] {
-			case "runtime.session.metadata":
-				key, dst = "workspace_root", &workspace
-			case "runtime.session.route_facts":
-				key, dst = "cwd", &cwd
-			case "session.workspace_branch.observed":
-				key, dst = "workspace_root", &branchRoot
-			default:
-				continue
-			}
-			if v, _ := inner[key].(string); v != "" && *dst == "" {
-				*dst = v
-			}
-		}
-	})
-	for _, w := range []string{workspace, cwd, branchRoot} {
-		if w != "" {
-			return w
-		}
-	}
-	return ""
+	_, ws, _ := parseMuseLog(path)
+	return ws
 }

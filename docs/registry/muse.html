@@ -93,7 +93,7 @@
 <p>(#4709). <code>deja install muse</code> writes the server into</p>
 <p><code>${XDG_CONFIG_HOME:-~/.config}/muse/settings.json</code>:</p>
 <pre><code class="language-json">{&#34;mcpServers&#34;: {&#34;deja&#34;: {&#34;type&#34;: &#34;stdio&#34;, &#34;command&#34;: &#34;deja&#34;, &#34;args&#34;: [&#34;mcp&#34;], &#34;mode&#34;: &#34;optional&#34;}}}</code></pre>
-<p>The model sees it as <code>mcp__deja__deja</code>. Muse still loads the legacy</p>
+<p>The model sees the tool <code>deja</code> under Muse&#39;s <code>mcp__&lt;server&gt;</code> namespace. Muse still loads the legacy</p>
 <p><code>mcp_servers</code> key on its own, but with both keys present it loads no MCP</p>
 <p>server at all, so install writes into whichever key the file already has and</p>
 <p>refuses a file that has both.</p>
