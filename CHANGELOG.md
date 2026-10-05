@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CodeBuddy Code sessions are read from `~/.codebuddy/projects`, WorkBuddy's from `~/.workbuddy/projects`, and Muse Code's from `~/.local/share/muse/sessions`; `deja install codebuddy` and `codebuddy-auto` wire recall into CodeBuddy (#4681, #4679).
 - `deja install workbuddy` and `workbuddy-auto` wire recall into WorkBuddy, whose agent reads its config from the WorkBuddy home rather than `~/.codebuddy`; a new MCP file there is the app's own `mcp.json` (#4720).
 - `deja install trae` adds the MCP server to TRAE CLI's `traecli.toml`, and `trae-auto` adds the session-start, per-prompt, tool and compaction hooks to its `hooks.json`; TRAE runs them once you trust them at start-up (#4702).
+- `deja install trae-ide` wires TRAE IDE: the MCP server in `User/mcp.json` and the skill in `~/.trae/skills` (`Trae CN` and `~/.trae-cn` for the CN build). `trae-ide-auto` adds hooks to `~/.trae/hooks.json`, which TRAE IDE runs only after you turn hooks on in Settings > Hooks; install and doctor both say so. Its chats are encrypted and not indexed (#4731).
 
 ### Fixed
 

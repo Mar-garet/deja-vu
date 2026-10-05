@@ -138,6 +138,9 @@ func guidancePath(harness string) string {
 		return filepath.Join(sources.CodeBuddyConfigDir(), "skills", "deja-history", "SKILL.md")
 	case "workbuddy":
 		return filepath.Join(sources.WorkBuddyConfigDir(), "skills", "deja-history", "SKILL.md")
+	case "trae-ide":
+		// The IDE's global skill root; it does not read ~/.agents/skills.
+		return traeIDESkillPath()
 	case "pi":
 		return filepath.Join(sources.PiConfigDir(), "skills", "deja-history", "SKILL.md")
 	case "hermes":
@@ -648,7 +651,7 @@ func guidanceOwnsWholeFile(harness string) bool {
 		return true
 	}
 	switch harness {
-	case "claude-code", "claude", "antigravity", "copilot", "pi", "opencode", "hermes", "vscode", "continue", "codebuddy", "workbuddy":
+	case "claude-code", "claude", "antigravity", "copilot", "pi", "opencode", "hermes", "vscode", "continue", "codebuddy", "workbuddy", "trae-ide":
 		return true
 	}
 	return false

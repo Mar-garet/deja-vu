@@ -66,7 +66,10 @@ const (
 type toolHookInput struct {
 	HookEventName string `json:"hook_event_name"`
 	ToolName      string `json:"tool_name"`
-	ToolInput     struct {
+	// TRAE IDE's hook payload names the tool here; whether it also sends
+	// tool_name is not measured (#4731).
+	LLMToolName string `json:"llm_tool_name"`
+	ToolInput   struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
 		// Claude's NotebookEdit names its file here and not under file_path
@@ -96,7 +99,7 @@ func (i *toolHookInput) adopt() {
 	i.SessionID = adoptGrok(adoptGrok(i.SessionID, i.grokEnvelope.SessionID), i.ConversationID)
 	i.TranscriptPath = adoptGrok(i.TranscriptPath, i.grokEnvelope.TranscriptPath)
 	i.WorkspaceRoots = adoptGrokRoots(i.WorkspaceRoots, i.WorkspaceRoot)
-	i.ToolName = adoptGrok(i.ToolName, i.grokEnvelope.ToolName)
+	i.ToolName = adoptGrok(adoptGrok(i.ToolName, i.grokEnvelope.ToolName), i.LLMToolName)
 	i.ToolInput.Command = adoptGrok(i.ToolInput.Command, i.grokEnvelope.ToolInput.Command)
 	i.ToolInput.FilePath = adoptGrok(i.ToolInput.FilePath, i.grokEnvelope.ToolInput.FilePath)
 	if i.ToolInput.FilePath == "" {
@@ -310,6 +313,8 @@ func toolHookLineSkipping(dir, cwd string, input toolHookInput, used func(string
 		// Command Code sends its internal names; EDIT and WRITE are only what
 		// its matcher sees (#4371).
 		"edit_file", "write_file",
+		// TRAE IDE's file tools, as its agent library names them (#4731).
+		"write_to_file", "update_file", "edit_file_fast_apply",
 		// pi and omp have no pre-tool seam: the only handler whose return the
 		// model reads is the one holding a finished tool result. An edit there
 		// is already made, so the file's history goes out on their lowercase

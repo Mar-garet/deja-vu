@@ -888,6 +888,10 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 			return installResult{}, err
 		}
 		return installTraeAuto(exe, uninstall)
+	case "trae-ide":
+		return installTraeIDE(exe, uninstall)
+	case "trae-ide-auto":
+		return installTraeIDEAuto(exe, uninstall)
 	case "codebuddy":
 		return installCodeBuddyMCP(exe, uninstall)
 	case "codebuddy-auto":
@@ -4909,6 +4913,7 @@ func installTargetNames() []string {
 		"codebuddy", "codebuddy-auto",
 		"workbuddy", "workbuddy-auto",
 		"trae", "trae-auto",
+		"trae-ide", "trae-ide-auto",
 		"muse", "muse-auto",
 		"kimi", "kimi-auto",
 		"hermes", "hermes-auto",
@@ -5081,6 +5086,8 @@ func existingTargetChecks() map[string]string {
 		"workbuddy":    filepath.Join(sources.WorkBuddyConfigDir(), "projects"),
 		"trae":         filepath.Join(sources.TraeRoot(), "sessions"), // the same: deja creates traecli.toml
 		"muse":         sources.MuseRoot(),                            // the same: deja creates ~/.config/muse
+		// The IDE's own globalStorage, not User/: deja writes User/mcp.json.
+		"trae-ide": filepath.Join(traeIDEUserDir(), "globalStorage"),
 		// Reasonix's own config.toml, which it writes on first run. deja
 		// writes beside it — plugins/ and plugin-packages.json — and never
 		// into it, so keying on the home itself would make every machine a

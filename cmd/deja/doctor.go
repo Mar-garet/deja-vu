@@ -1973,6 +1973,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"codebuddy", codeBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"workbuddy", workBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"trae", traeConfigPath(), doctorTOMLWired, doctorTOMLDejaKeys},
+		{"trae-ide", traeIDEMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"muse", museSettingsPath(), doctorJSONWiredIn(doctorMuseServers), doctorJSONDejaKeysIn(doctorMuseServers)},
 		{"kimi", filepath.Join(sources.KimiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"cline", sources.ClineMCPSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},

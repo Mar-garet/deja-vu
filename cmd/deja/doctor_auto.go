@@ -47,6 +47,7 @@ func autoWirings() []autoWiring {
 		{"codebuddy", codeBuddySettingsPath, "hook-context", ""},
 		{"workbuddy", workBuddySettingsPath, "hook-context", ""},
 		{"trae", traeHooksPath, "hook-context", ""},
+		{"trae-ide", traeIDEHooksPath, "hook-context", ""},
 		{"muse", museSettingsPath, "hook-context", ""},
 		// The digest hook, not the prompt one: a config written before kimi had
 		// all three blocks still carries hook-prompt, and reading that as wired
@@ -115,7 +116,7 @@ func autoWirings() []autoWiring {
 // rather than one deja writes whole. Those exist whether deja ever wrote to
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
-	"cursor": true, "qwen": true, "codebuddy": true, "workbuddy": true, "trae": true, "muse": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+	"cursor": true, "qwen": true, "codebuddy": true, "workbuddy": true, "trae": true, "trae-ide": true, "muse": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
 	"copilot": true,
 }
 
@@ -423,6 +424,11 @@ func doctorAutoRecall(w io.Writer) {
 			// row says where to look rather than guessing either way.
 			if a.name == "trae" {
 				fmt.Fprintf(w, "  %-12s %s\n", "", "traex runs these only once trusted — it asks at start-up, and /hooks shows which")
+			}
+			// TRAE IDE keeps its hooks switch with the agent's settings, off
+			// by default and not in a file deja can read.
+			if a.name == "trae-ide" {
+				fmt.Fprintf(w, "  %-12s %s\n", "", traeIDEHooksOffNote)
 			}
 		}
 		// Under the row whatever the row said. A machine that upgraded is most

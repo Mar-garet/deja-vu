@@ -417,6 +417,11 @@
       "path": "<tmp>/home/.trae/traecli.toml"
     },
     {
+      "name": "trae-ide",
+      "state": "config-missing",
+      "path": "<tmp>/home/.config/Trae/User/mcp.json"
+    },
+    {
       "name": "muse",
       "state": "config-missing",
       "path": "<tmp>/home/.config/muse/settings.json"
@@ -597,6 +602,11 @@
       "name": "trae",
       "state": "missing",
       "path": "<tmp>/home/.trae/cli/hooks.json"
+    },
+    {
+      "name": "trae-ide",
+      "state": "missing",
+      "path": "<tmp>/home/.trae/hooks.json"
     },
     {
       "name": "muse",
