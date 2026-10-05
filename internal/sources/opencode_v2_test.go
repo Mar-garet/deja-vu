@@ -447,3 +447,26 @@ insert into part values('p3','m3','s3',1770000000000,1770000000000,'{"type":"tex
 		t.Fatalf("messages = %+v, want both turns in order", m)
 	}
 }
+
+// A turn with no stamp keeps its place beside the turn read before it when a
+// split session is put back in order; compared as-is it sorted to the top.
+func TestSortTurnsByTimeKeepsUnstampedTurnsInPlace(t *testing.T) {
+	at := func(s int) time.Time { return time.Unix(1767409600+int64(s), 0) }
+	ms := []model.Message{
+		{Text: "unstamped first"},
+		{Text: "run 1", Time: at(2)},
+		{Text: "run 1 output"},
+		{Text: "run 2", Time: at(4)},
+		{Text: "api 1", Time: at(1)},
+		{Text: "api 2", Time: at(3)},
+	}
+	sortTurnsByTime(ms)
+	var got []string
+	for _, m := range ms {
+		got = append(got, m.Text)
+	}
+	want := "api 1|unstamped first|run 1|run 1 output|api 2|run 2"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("order = %q, want %q", strings.Join(got, "|"), want)
+	}
+}

@@ -288,7 +288,7 @@ func parseOpencodeLayouts(harness, db, where1, where2 string, limit int) ([]mode
 	// back in the order they were said.
 	for id, n := range v1Turns {
 		if s := by[id]; n > 0 && len(s.Messages) > n {
-			sort.SliceStable(s.Messages, func(i, j int) bool { return s.Messages[i].Time.Before(s.Messages[j].Time) })
+			sortTurnsByTime(s.Messages)
 		}
 	}
 	if rows == 0 {
@@ -883,6 +883,38 @@ func opencodeThinTitle(t string) bool {
 		return true
 	}
 	return len(strings.Fields(t)) <= 2 && len([]rune(t)) <= 12
+}
+
+// sortTurnsByTime orders turns by when they were said. A turn with no stamp
+// sorts with the turn read before it (the first stamped one, at the start), so
+// it stays beside its neighbours instead of sinking to the top.
+func sortTurnsByTime(ms []model.Message) {
+	keys := make([]time.Time, len(ms))
+	var last time.Time
+	for i, m := range ms {
+		if !m.Time.IsZero() {
+			last = m.Time
+		}
+		keys[i] = last
+	}
+	for i := 0; i < len(keys) && keys[i].IsZero(); i++ {
+		for _, m := range ms[i:] {
+			if !m.Time.IsZero() {
+				keys[i] = m.Time
+				break
+			}
+		}
+	}
+	idx := make([]int, len(ms))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return keys[idx[a]].Before(keys[idx[b]]) })
+	out := make([]model.Message, len(ms))
+	for i, j := range idx {
+		out[i] = ms[j]
+	}
+	copy(ms, out)
 }
 
 // partTime prefers the part's own timestamp and falls back to the message's.
