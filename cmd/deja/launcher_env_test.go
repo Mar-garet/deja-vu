@@ -107,6 +107,7 @@ func TestLauncherCarriesNothingOnADefaultSetup(t *testing.T) {
 	home := t.TempDir()
 	env := []string{"HOME=" + home, "PATH=/bin", "XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "XDG_DATA_HOME=relative", "TERM=xterm", "DEJA_DEBUG=1", "DEJA_PASS_HOME=1"}
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if got := launcherEnv(env); len(got) != 0 {
 		t.Errorf("a default setup carries %v", got)
 	}
