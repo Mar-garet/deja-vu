@@ -37,6 +37,7 @@ This registry records observed on-disk session formats for the harnesses that de
 | [ZCode](zcode.md) | flat role/content JSONL per session, plus the CLI's OpenCode-schema SQLite |
 | [CodeWhale](codewhale.md) | one JSON document per session, Anthropic-shaped content blocks |
 | [Reasonix](reasonix.md) | flat role/content JSONL per session, clock and workspace in a sidecar; 1.x keeps a zstd-framed event log per session directory |
+| [TRAE CLI](trae.md) | Codex rollouts under `~/.trae/cli`, user turns from events only, tool calls in `history_mutation` |
 | [Cherry Studio](cherrystudio.md) | Claude Code transcripts under the desktop app's data, one snapshot per stream chunk |
 | [Continue](continue.md) | one JSON document per session, list beside it |
 | [Crush](crush.md) | one SQLite store per project, registry in the data home |

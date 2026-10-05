@@ -1057,6 +1057,51 @@
         "prereq": "zstd for 1.x sessions"
       },
       "gaps": {}
+    },
+    {
+      "id": "trae",
+      "store_paths": [
+        "${TRAE_HOME:-~/.trae}/cli/sessions/**/rollout-*.jsonl",
+        "${TRAE_HOME:-~/.trae}/cli/sessions/**/rollout-*.jsonl.zst",
+        "${TRAE_HOME:-~/.trae}/cli/archived_sessions/**/rollout-*.jsonl",
+        "${TRAE_HOME:-~/.trae}/cli/history.jsonl",
+        "${DEJA_TRAE_ROOT}/sessions/**/rollout-*.jsonl"
+      ],
+      "format_kind": "jsonl-rollout-and-history",
+      "fixture_paths": [
+        "fixtures/registry/trae/rollout-2026-10-01T09-00-00-019fbcca-0000-7000-8000-00000000trae.jsonl"
+      ],
+      "parser_source": "internal/sources/trae.go",
+      "last_verified": "2026-10-05",
+      "display_name": "TRAE CLI",
+      "capabilities": {
+        "mcp": false,
+        "auto": false,
+        "skill": false,
+        "command": false,
+        "resume": true,
+        "handoff": "paste",
+        "prereq": "none"
+      },
+      "gaps": {
+        "mcp": {
+          "state": "todo",
+          "why": "TRAE CLI shares codex-rs's config schema, so an MCP server entry is likely the Codex one; not written yet, this release reads the store and wires nothing (#4680)."
+        },
+        "auto": {
+          "state": "todo",
+          "why": "TRAE CLI reads hooks from ~/.trae/cli/hooks.json; the event names and the reply envelope have not been checked against a live install, so no hook is written yet (#4680)."
+        },
+        "skill": {
+          "state": "unknown",
+          "why": "TRAE CLI keeps skills under ~/.trae/skills; deja does not install one there yet.",
+          "source": "https://github.com/deepcoldy/botmux/blob/main/src/adapters/cli/traex.ts"
+        },
+        "command": {
+          "state": "unknown",
+          "why": "No custom-command directory for TRAE CLI was found in the sources read (#4680)."
+        }
+      }
     }
   ]
 }

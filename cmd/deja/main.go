@@ -3317,6 +3317,7 @@ func printSources(dir string) {
 	}{
 		{"claude", strings.Join(sources.ClaudeRoots(), string(os.PathListSeparator)), sources.ClaudeRoots(), sources.ClaudeFiles, sources.LoadClaude},
 		{"codex", strings.Join(sources.CodexRoots(), string(os.PathListSeparator)), sources.CodexRoots(), sources.CodexFiles, sources.LoadCodex},
+		{"trae", sources.TraeRoot(), []string{sources.TraeRoot()}, sources.TraeFiles, sources.LoadTrae},
 		{"gemini", sources.GeminiRoot(), []string{filepath.Join(sources.GeminiRoot(), "tmp")}, sources.GeminiChatFiles, sources.LoadGemini},
 		{"cursor", strings.Join([]string{sources.CursorUserRoot(), sources.CursorCLIRoot()}, string(os.PathListSeparator)), []string{sources.CursorUserRoot(), sources.CursorCLIRoot()}, cursorReadFiles, sources.LoadCursor},
 		{"antigravity", antigravityLocation, antigravityRoots, sources.AntigravityTranscripts, sources.LoadAntigravity},

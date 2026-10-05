@@ -887,6 +887,9 @@ func doctorHarnesses(w io.Writer, dir string) {
 		codexPresent = codexPresent || doctorExists(root)
 	}
 	printFilesBesideIn("codex", codexLocation, codexRoots, false, codexPresent, sources.CodexFiles(), sources.CodexSidecarFiles()...)
+	// TRAE CLI keeps its state database, config and skills beside the codex-rs
+	// store, so only the session directories are walked for unread files.
+	printFilesBesideIn("trae", sources.TraeRoot(), sources.TraeSessionDirs(), false, doctorExists(sources.TraeRoot()), sources.TraeFiles())
 
 	ocDB := sources.OpencodeDB()
 	printRow("opencode", ocDB, doctorFilePresent(ocDB), doctorSQLiteDetail(ocDB, sqlite))

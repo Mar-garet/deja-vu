@@ -61,6 +61,8 @@ func hermeticEnv(t *testing.T) string {
 	t.Setenv("DEJA_GOOSE_ROOT", filepath.Join(home, ".local", "share", "goose"))
 	t.Setenv("DEJA_CODEX_ROOT", filepath.Join(tmp, "codex"))
 	t.Setenv("DEJA_XCODE_CODEX_ROOT", filepath.Join(tmp, "xcode-codex"))
+	t.Setenv("DEJA_TRAE_ROOT", filepath.Join(tmp, "trae"))
+	t.Setenv("TRAE_HOME", "")
 	t.Setenv("DEJA_OPENCODE_DB", filepath.Join(tmp, "opencode.db"))
 	t.Setenv("DEJA_INDEX_DIR", filepath.Join(tmp, "index.db"))
 	t.Setenv("DEJA_NOTES_FILE", filepath.Join(tmp, "notes.jsonl"))

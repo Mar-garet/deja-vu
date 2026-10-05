@@ -184,6 +184,27 @@ func allHarnesses() []Harness {
 			},
 		},
 		{
+			// TRAE CLI 2.0, a codex-rs fork writing Codex rollouts under
+			// ~/.trae/cli. Its own entry rather than another Codex root: the
+			// sessions resume with traex, and its user-turn rule differs.
+			Name: "trae", Load: LoadTrae, Files: TraeFiles,
+			Kinds: []FileKind{
+				{
+					Name:      "trae-history",
+					Match:     func(p string) bool { return hasBase(p, "history.jsonl") && underCodexRoot(p, TraeRoot()) },
+					Parse:     fullParse(ParseTraeHistory),
+					ParseFrom: offsetParse(ParseTraeHistoryFromOffset),
+				},
+				{
+					Name:      "trae",
+					Match:     func(p string) bool { return codexRolloutWanted(p) && underTraeSessions(p) },
+					Parse:     fullParse(ParseTraeRollout),
+					ParseFrom: offsetParse(ParseTraeRolloutFromOffset),
+					Resumes:   traeResumes,
+				},
+			},
+		},
+		{
 			Name: "opencode", Load: LoadOpencode,
 			Files: func() []string {
 				return append([]string{OpencodeDB()}, OpencodeDiffFiles()...)
