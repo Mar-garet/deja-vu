@@ -260,9 +260,14 @@ func codeBuddyPlumbing(m map[string]any) bool {
 
 // codeBuddyText joins the text items of a message, dropping the ones that are
 // an envelope rather than speech: a reminder rides in the same record as the
-// prompt it was attached to.
+// prompt it was attached to. WorkBuddy's desktop app puts the reminders and
+// the prompt in one item, the prompt last inside <user_query>; that item is
+// the prompt.
 func codeBuddyText(v any) string {
 	if s, ok := v.(string); ok {
+		if q, ok := UserQuery(s); ok {
+			return q
+		}
 		if codeBuddyEnvelope(s) {
 			return ""
 		}
@@ -278,6 +283,9 @@ func codeBuddyText(v any) string {
 			continue
 		}
 		txt, _ := m["text"].(string)
+		if q, ok := UserQuery(txt); ok {
+			txt = q
+		}
 		if txt = strings.TrimSpace(txt); txt == "" || codeBuddyEnvelope(txt) {
 			continue
 		}
