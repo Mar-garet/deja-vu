@@ -164,6 +164,7 @@ func TestTraeStoreIsItsOwnHarness(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("TRAE_HOME", "")
 	t.Setenv("DEJA_TRAE_ROOT", "")
+	t.Setenv("TRAECLI_HOME", "")
 	t.Setenv("CODEX_HOME", "")
 	t.Setenv("DEJA_CODEX_ROOT", "")
 	t.Setenv("DEJA_XCODE_CODEX_ROOT", "")
@@ -258,5 +259,30 @@ func TestTraeResumesWholeOnSplitMirror(t *testing.T) {
 	}
 	if got, want := textsOf(ss[0], "user"), []string{"now run the tests"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("tail user turns = %q, want %q", got, want)
+	}
+}
+
+// TRAECLI_HOME is TRAE CLI's own state directory: `TRAECLI_HOME=x traex
+// archive <id>` moves the rollout to x/archived_sessions, and `traex doctor`
+// reports it beside TRAE_HOME (traecli 0.207.1). DEJA_TRAE_ROOT still wins.
+func TestTraeRootFollowsTraecliHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("TRAE_HOME", filepath.Join(home, "th"))
+	t.Setenv("DEJA_TRAE_ROOT", "")
+	cli := filepath.Join(home, "state")
+	t.Setenv("TRAECLI_HOME", cli)
+	if got := TraeRoot(); got != cli {
+		t.Fatalf("TraeRoot with TRAECLI_HOME = %q, want %q", got, cli)
+	}
+	turn := `{"timestamp":"2026-10-01T09:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"hello trae"}}`
+	writeTraeRollout(t, filepath.Join(cli, "archived_sessions"), traeMeta, turn)
+	if n := len(LoadTrae()); n != 1 {
+		t.Fatalf("sessions = %d, want 1", n)
+	}
+	t.Setenv("DEJA_TRAE_ROOT", filepath.Join(home, "override"))
+	if got, want := TraeRoot(), filepath.Join(home, "override"); got != want {
+		t.Fatalf("TraeRoot with DEJA_TRAE_ROOT = %q, want %q", got, want)
 	}
 }

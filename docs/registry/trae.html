@@ -40,7 +40,7 @@
 <ul>
 <li><strong>ID</strong>: <code>trae</code></li>
 <li><strong>Store</strong>: <code>${TRAE_HOME:-~/.trae}/cli/sessions/YYYY/MM/DD/rollout-&lt;timestamp&gt;-&lt;uuid&gt;.jsonl</code>, plus <code>archived_sessions/</code> for <code>traex archive &lt;id&gt;</code> and <code>history.jsonl</code> beside them</li>
-<li><strong>Read override</strong>: <code>DEJA_TRAE_ROOT</code> replaces the <code>cli</code> directory; <code>TRAE_HOME</code> moves TRAE&#39;s whole home, and deja follows it</li>
+<li><strong>Read override</strong>: <code>DEJA_TRAE_ROOT</code> replaces the <code>cli</code> directory; <code>TRAECLI_HOME</code> moves that directory and <code>TRAE_HOME</code> moves TRAE&#39;s whole home, and deja follows both</li>
 <li><strong>Format</strong>: JSONL — Codex rollouts: <code>session_meta</code>, <code>turn_context</code>, <code>response_item</code>, <code>event_msg</code>, plus TRAE&#39;s own <code>history_mutation</code></li>
 <li><strong>Needs</strong>: nothing (<code>zstd</code> only for a compressed rollout)</li>
 <li><strong>Resume</strong>: <code>traex resume &lt;id&gt;</code></li>

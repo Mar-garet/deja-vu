@@ -27,9 +27,11 @@ func TraeHome() string {
 
 // TraeRoot is the codex-rs store under that home: sessions/YYYY/MM/DD,
 // archived_sessions and history.jsonl, one level down at cli/ where Codex has
-// none. DEJA_TRAE_ROOT overrides it.
+// none. TRAECLI_HOME is TRAE's own name for this directory and moves the
+// sessions and hooks.json with it (traecli 0.207.1: `TRAECLI_HOME=x traex
+// archive <id>` writes x/archived_sessions). DEJA_TRAE_ROOT overrides both.
 func TraeRoot() string {
-	return EnvPath("DEJA_TRAE_ROOT", filepath.Join(TraeHome(), "cli"))
+	return EnvPath("DEJA_TRAE_ROOT", EnvPath("TRAECLI_HOME", filepath.Join(TraeHome(), "cli")))
 }
 
 // TraeSessionDirs are the directories TRAE's rollouts live in.
