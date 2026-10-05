@@ -37,6 +37,7 @@ against the loader list.
 | CodeWhale | `codewhale.go` | one JSON document per session under `${CODEWHALE_HOME:-~/.codewhale}/sessions`, and the pre-rebrand `~/.deepseek` root |
 | Reasonix | `reasonix.go`, `reasonix_stores.go`, `reasonix_v4.go` | under `~/.reasonix` (`%APPDATA%\reasonix` on Windows): flat role/content JSONL in `sessions/` and `projects/<slug>/sessions/`, and the 1.x session directories (`sessions-v4/<id>/`, `desktop-sessions-v5/by-id/<id>/`) whose `events.frames` log is zstd-framed JSON |
 | TRAE CLI | `trae.go`, `codex.go` | Codex rollouts under `${TRAE_HOME:-~/.trae}/cli` (`sessions/`, `archived_sessions/`, `history.jsonl`); user turns from `user_message` and `item_completed` events only, tool calls from `history_mutation` |
+| Muse Code | `muse.go` | one event-sourced JSONL per session under `${XDG_DATA_HOME:-~/.local/share}/muse/sessions/YYYY/MM/DD/<id>/`, `retained_frame` children unwrapped; subagent logs under `subagent/` only with `DEJA_INCLUDE_SUBAGENTS=1` |
 | Zed | `zed.go` | threads in the SQLite store at `Zed/threads/threads.db` |
 | Crush | `crush.go` | SQLite databases named by `projects.json`, plus `<project>/.crush/crush.db` |
 | Cherry Studio | `cherrystudio.go` | Claude-format JSONL under the app's `Data/Agents/.claude/projects`, plus pi and dsh logs under `Data/Agents/.pi` and `.dsh`; a data dir moved in the app's settings is read from `~/.cherrystudio/boot-config.json` |

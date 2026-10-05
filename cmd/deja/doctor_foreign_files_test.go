@@ -47,6 +47,15 @@ func TestAClientsOwnFilesAreNotUnreadTranscripts(t *testing.T) {
 			want: "1 subagent transcripts skipped — set DEJA_INCLUDE_SUBAGENTS=1",
 		},
 		{
+			// Muse keeps cron.db, goals.db and spilled tool output in each
+			// session directory, and its subagents' logs one level down.
+			row: "muse", env: "DEJA_MUSE_ROOTS",
+			session: "2026/09/18/u1/session.jsonl",
+			own: []string{"2026/09/18/u1/cron.db", "2026/09/18/u1/goals.db",
+				"2026/09/18/u1/tool-outputs/call_1.txt", "2026/09/18/u1/subagent/c1/session.jsonl"},
+			want: "1 subagent transcripts skipped — set DEJA_INCLUDE_SUBAGENTS=1",
+		},
+		{
 			row: "copilot", env: "DEJA_COPILOT_ROOT",
 			session: "s1/events.jsonl",
 			own:     []string{"s1/autopilot-objective.json"},

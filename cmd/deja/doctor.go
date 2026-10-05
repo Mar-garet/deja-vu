@@ -1104,6 +1104,11 @@ func doctorHarnesses(w io.Writer, dir string) {
 	rxRoot := sources.ReasonixRoot()
 	printFilesBesideIn("reasonix", rxRoot, sources.ReasonixSessionDirsAll(), false, doctorExists(rxRoot),
 		sources.ReasonixSessionFiles(), sources.ReasonixSidecarFiles()...)
+	// Muse keeps cron.db, goals.db and spilled tool output beside each log, and
+	// its subagents' logs one level down, read only when asked for.
+	museRoots := sources.MuseRoots()
+	printFilesSkippingIn("muse", strings.Join(museRoots, string(os.PathListSeparator)), museRoots, doctorAnyExists(museRoots),
+		sources.MuseSessionFiles(), sources.MuseSubagentFile, sources.MuseSidecarFiles()...)
 	dshRoot := sources.DeepSeekRoot()
 	printFiles("deepseek", dshRoot, doctorExists(dshRoot), sources.DeepSeekSessionFiles())
 	zedDB := sources.ZedDB()
