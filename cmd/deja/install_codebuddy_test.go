@@ -36,7 +36,7 @@ func TestInstallCodeBuddyMCP(t *testing.T) {
 	}
 	servers, _ := readCodeBuddyJSON(t, want)["mcpServers"].(map[string]any)
 	entry, _ := servers["deja"].(map[string]any)
-	if entry["command"] != "/bin/deja" {
+	if command, _ := mcpCommandArgs("/bin/deja"); entry["command"] != command {
 		t.Fatalf("mcpServers.deja = %v", entry)
 	}
 

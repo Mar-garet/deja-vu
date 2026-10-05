@@ -5067,7 +5067,6 @@ func existingTargetChecks() map[string]string {
 		"commandcode":  commandCodeFirstRoot(),
 		"codebuddy":    sources.CodeBuddyRoot(),                       // its session store; deja creates the config dir
 		"trae":         filepath.Join(sources.TraeRoot(), "sessions"), // the same: deja creates traecli.toml
-		"codebuddy":    sources.CodeBuddyRoot(),                       // its session store; deja creates the config dir
 		"muse":         sources.MuseRoot(),                            // the same: deja creates ~/.config/muse
 		// Reasonix's own config.toml, which it writes on first run. deja
 		// writes beside it — plugins/ and plugin-packages.json — and never

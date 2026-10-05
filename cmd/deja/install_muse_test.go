@@ -38,11 +38,13 @@ func TestInstallMuseMCP(t *testing.T) {
 	}
 	servers, _ := readMuseSettings(t, want)["mcpServers"].(map[string]any)
 	entry, _ := servers["deja"].(map[string]any)
-	if entry["type"] != "stdio" || entry["command"] != "/bin/deja" || entry["mode"] != "optional" {
+	// Windows gets the cmd /c wrapper every stdio entry there carries.
+	command, args := mcpCommandArgs("/bin/deja")
+	if entry["type"] != "stdio" || entry["command"] != command || entry["mode"] != "optional" {
 		t.Fatalf("mcpServers.deja = %v", entry)
 	}
-	if args, _ := entry["args"].([]any); len(args) != 1 || args[0] != "mcp" {
-		t.Fatalf("args = %v", entry["args"])
+	if got, _ := json.Marshal(entry["args"]); string(got) != func() string { b, _ := json.Marshal(args); return string(b) }() {
+		t.Fatalf("args = %s, want %v", got, args)
 	}
 
 	// XDG_CONFIG_HOME moves it, as it moves Muse's own settings.
