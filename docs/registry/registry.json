@@ -1028,6 +1028,47 @@
       }
     },
     {
+      "id": "codebuddy",
+      "store_paths": [
+        "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
+        "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>/subagents/agent-<id>.jsonl",
+        "${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
+        "${DEJA_CODEBUDDY_ROOTS}/<mangled-cwd>/<session-id>.jsonl"
+      ],
+      "format_kind": "jsonl",
+      "fixture_paths": [
+        "fixtures/registry/codebuddy/projects/workspace-registry-demo/registry-codebuddy.jsonl"
+      ],
+      "parser_source": "internal/sources/codebuddy.go",
+      "last_verified": "2026-10-05",
+      "display_name": "CodeBuddy Code",
+      "capabilities": {
+        "mcp": true,
+        "auto": true,
+        "skill": false,
+        "command": false,
+        "resume": false,
+        "handoff": "paste",
+        "prereq": "none"
+      },
+      "gaps": {
+        "skill": {
+          "state": "todo",
+          "why": "CodeBuddy reads skills from ~/.codebuddy/skills/<name>/SKILL.md and from plugins; install does not write the shared skill there yet (#4681).",
+          "source": "https://www.codebuddy.ai/docs/cli/plugins-reference"
+        },
+        "command": {
+          "state": "todo",
+          "why": "Custom slash commands are Markdown files under ~/.codebuddy/commands/ or a plugin's commands/; install does not write one yet (#4681).",
+          "source": "https://www.codebuddy.ai/docs/cli/plugins-reference"
+        },
+        "resume": {
+          "state": "todo",
+          "why": "The CLI resumes a session by id the way Claude Code does, but the flag has not been checked against a live install, so resumeCommand does not build it yet (#4681)."
+        }
+      }
+    },
+    {
       "id": "reasonix",
       "store_paths": [
         "${REASONIX_STATE_HOME:-~/.reasonix}/sessions/<id>.jsonl",
@@ -1057,6 +1098,98 @@
         "prereq": "zstd for 1.x sessions"
       },
       "gaps": {}
+    },
+    {
+      "id": "trae",
+      "store_paths": [
+        "${TRAE_HOME:-~/.trae}/cli/sessions/**/rollout-*.jsonl",
+        "${TRAE_HOME:-~/.trae}/cli/sessions/**/rollout-*.jsonl.zst",
+        "${TRAE_HOME:-~/.trae}/cli/archived_sessions/**/rollout-*.jsonl",
+        "${TRAE_HOME:-~/.trae}/cli/history.jsonl",
+        "${DEJA_TRAE_ROOT}/sessions/**/rollout-*.jsonl"
+      ],
+      "format_kind": "jsonl-rollout-and-history",
+      "fixture_paths": [
+        "fixtures/registry/trae/rollout-2026-10-01T09-00-00-019fbcca-0000-7000-8000-00000000trae.jsonl"
+      ],
+      "parser_source": "internal/sources/trae.go",
+      "last_verified": "2026-10-05",
+      "display_name": "TRAE CLI",
+      "capabilities": {
+        "mcp": false,
+        "auto": false,
+        "skill": false,
+        "command": false,
+        "resume": true,
+        "handoff": "paste",
+        "prereq": "none"
+      },
+      "gaps": {
+        "mcp": {
+          "state": "todo",
+          "why": "TRAE CLI shares codex-rs's config schema, so an MCP server entry is likely the Codex one; not written yet, this release reads the store and wires nothing (#4680)."
+        },
+        "auto": {
+          "state": "todo",
+          "why": "TRAE CLI reads hooks from ~/.trae/cli/hooks.json; the event names and the reply envelope have not been checked against a live install, so no hook is written yet (#4680)."
+        },
+        "skill": {
+          "state": "unknown",
+          "why": "TRAE CLI keeps skills under ~/.trae/skills; deja does not install one there yet.",
+          "source": "https://github.com/deepcoldy/botmux/blob/main/src/adapters/cli/traex.ts"
+        },
+        "command": {
+          "state": "unknown",
+          "why": "No custom-command directory for TRAE CLI was found in the sources read (#4680)."
+        }
+      }
+    },
+    {
+      "id": "muse",
+      "store_paths": [
+        "${XDG_DATA_HOME:-~/.local/share}/muse/sessions/YYYY/MM/DD/<id>/session.jsonl",
+        "${XDG_DATA_HOME:-~/.local/share}/muse/sessions/YYYY/MM/DD/<id>/subagent/<child>/session.jsonl",
+        "${DEJA_MUSE_ROOTS}/YYYY/MM/DD/<id>/session.jsonl"
+      ],
+      "format_kind": "jsonl",
+      "fixture_paths": [
+        "fixtures/registry/muse/sessions/2026/09/18/01a0b7d1-0000-7000-8000-00000000d3a0/session.jsonl"
+      ],
+      "parser_source": "internal/sources/muse.go",
+      "last_verified": "2026-10-05",
+      "display_name": "Muse Code",
+      "capabilities": {
+        "mcp": false,
+        "auto": false,
+        "skill": false,
+        "command": false,
+        "resume": false,
+        "handoff": "paste",
+        "prereq": "none"
+      },
+      "gaps": {
+        "mcp": {
+          "state": "unknown",
+          "why": "Muse reads an mcp_servers block from ~/.config/muse/settings.json, but nothing read so far documents the entry's shape, so deja does not write one yet (#4679)."
+        },
+        "auto": {
+          "state": "blocked",
+          "why": "Muse has user hooks in ~/.config/muse/settings.json and project hooks in .muse/hooks.json, but openharness measured them not firing, in `muse exec` or in the TUI, and discovers sessions by scanning instead. A hook deja wrote would run nowhere (#4679).",
+          "source": "https://github.com/autonomous-ai/openharness/blob/main/cli/src/engines/muse/normalizer.ts"
+        },
+        "skill": {
+          "state": "unknown",
+          "why": "Muse has a read_skill tool and ships skills of its own, but no source read here names a user-level skill directory deja could write to (#4679)."
+        },
+        "command": {
+          "state": "unknown",
+          "why": "No source read here documents a directory Muse loads custom slash commands from, so there is no file for deja to write (#4679)."
+        },
+        "resume": {
+          "state": "todo",
+          "why": "`muse resume <session-id>` reopens a session (agent-session-kit's resume builder and specstory's provider both use it); deja reads the store but does not print the command yet (#4679)."
+        }
+      }
     }
   ]
 }

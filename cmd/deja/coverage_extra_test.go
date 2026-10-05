@@ -45,6 +45,7 @@ func hermeticEnv(t *testing.T) string {
 	t.Setenv("COPILOT_HOME", "")
 	t.Setenv("REASONIX_STATE_HOME", "")
 	t.Setenv("DEJA_REASONIX_ROOT", "")
+	t.Setenv("DEJA_MUSE_ROOTS", "")
 	// Windows resolvers read APPDATA rather than the home directory — goose's
 	// config is one — so leaving it alone lets one test's install show up in
 	// another's report.
@@ -61,6 +62,8 @@ func hermeticEnv(t *testing.T) string {
 	t.Setenv("DEJA_GOOSE_ROOT", filepath.Join(home, ".local", "share", "goose"))
 	t.Setenv("DEJA_CODEX_ROOT", filepath.Join(tmp, "codex"))
 	t.Setenv("DEJA_XCODE_CODEX_ROOT", filepath.Join(tmp, "xcode-codex"))
+	t.Setenv("DEJA_TRAE_ROOT", filepath.Join(tmp, "trae"))
+	t.Setenv("TRAE_HOME", "")
 	t.Setenv("DEJA_OPENCODE_DB", filepath.Join(tmp, "opencode.db"))
 	t.Setenv("DEJA_INDEX_DIR", filepath.Join(tmp, "index.db"))
 	t.Setenv("DEJA_NOTES_FILE", filepath.Join(tmp, "notes.jsonl"))
@@ -98,6 +101,10 @@ func hermeticEnv(t *testing.T) string {
 	// it would put their real store in a golden.
 	t.Setenv("HERMES_HOME", "")
 	t.Setenv("DEJA_HERMES_HOME", "")
+	// CodeBuddy and WorkBuddy move their homes with these, and deja follows.
+	t.Setenv("CODEBUDDY_CONFIG_DIR", "")
+	t.Setenv("WORKBUDDY_CONFIG_DIR", "")
+	t.Setenv("DEJA_CODEBUDDY_ROOTS", "")
 	t.Setenv("NO_COLOR", "1")
 	return tmp
 }

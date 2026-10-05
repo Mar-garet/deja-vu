@@ -15,7 +15,7 @@ deja महीनों पुराने समेत सब कुछ इं�
 
 <p align="center"><sub><em>किसी ने खोजा नहीं — एजेंट ने deja को खुद बुलाया। असली मॉडल और असली टूल कॉल्स के साथ दो असली रन, एक सिंथेटिक कॉर्पस पर: किसी का इतिहास सार्वजनिक नहीं किया जाता।</em></sub></p>
 
-<p align="center"><b>deja पहले ही मिनट से भरी हुई है: वह इतिहास जो 35 एजेंट पहले ही लिख चुके हैं, कुछ सेकंड में इंडेक्स, न कोई मॉडल, न कोई अलग कैप्चर स्टेप।</b></p>
+<p align="center"><b>deja पहले ही मिनट से भरी हुई है: वह इतिहास जो 38 एजेंट पहले ही लिख चुके हैं, कुछ सेकंड में इंडेक्स, न कोई मॉडल, न कोई अलग कैप्चर स्टेप।</b></p>
 
 <p align="center"><b>जितनी कोडिंग-एजेंट मेमोरी हम माप सके, उनमें सबसे सटीक, चलाने में सबसे सस्ती और सबसे तेज़।</b></p>
 
@@ -101,7 +101,7 @@ skill आपके इंस्टॉल किए हुए `deja` बाइन
 
 ## इससे क्या मिलता है
 
-**Codex में हल हुआ, Claude को याद है।** पैंतीस कोडिंग एजेंट हर बातचीत को लोकल फ़ाइलों में लिखते हैं, और deja उन
+**Codex में हल हुआ, Claude को याद है।** अड़तीस कोडिंग एजेंट हर बातचीत को लोकल फ़ाइलों में लिखते हैं, और deja उन
 फ़ाइलों को एक ऐसी मेमोरी परत में बदल देता है जिसे वे सब पढ़ सकते हैं।
 
 | | |
@@ -197,7 +197,8 @@ Claude Code · Cline · Codex CLI · opencode · aider · Gemini CLI · Cursor �
 Grok Build · Hermes · Goose · Qwen Code · Kimi Code · pi · omp (Oh My Pi) · OpenClaw ·
 Copilot CLI · VS Code Copilot Chat · Amp · prime-agent (PrimeIntellect) · Roo Code ·
 Continue · Crush · DeepSeek Harness · Cherry Studio · Senpi · gajae-code · Kimchi Coding ·
-Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · Zed.
+Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · CodeBuddy Code ·
+TRAE CLI · Muse Code · Zed.
 
 इनमें से हर एक क्या समर्थन करता है — MCP रिकॉल, ऑटोमैटिक रिकॉल, skills, कमांड, resume, handoff — यह
 [अंग्रेज़ी README की क्षमता तालिका](../../README.md#supported-harnesses) में है। अलग स्टोरेज जगहें `DEJA_*_ROOT`

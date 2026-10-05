@@ -887,6 +887,9 @@ func doctorHarnesses(w io.Writer, dir string) {
 		codexPresent = codexPresent || doctorExists(root)
 	}
 	printFilesBesideIn("codex", codexLocation, codexRoots, false, codexPresent, sources.CodexFiles(), sources.CodexSidecarFiles()...)
+	// TRAE CLI keeps its state database, config and skills beside the codex-rs
+	// store, so only the session directories are walked for unread files.
+	printFilesBesideIn("trae", sources.TraeRoot(), sources.TraeSessionDirs(), false, doctorExists(sources.TraeRoot()), sources.TraeFiles())
 
 	ocDB := sources.OpencodeDB()
 	printRow("opencode", ocDB, doctorFilePresent(ocDB), doctorSQLiteDetail(ocDB, sqlite))
@@ -925,6 +928,12 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// `extract-cursor.json` are qwen's own bookkeeping (#3676).
 	printFilesSkippingIn("qwen", qwenRoot, []string{qwenRoot}, doctorExists(qwenRoot),
 		sources.QwenSessionFiles(), sources.QwenSubagentFile, sources.QwenSidecarFiles()...)
+
+	// CodeBuddy's tree is Claude Code's: sub-agents under the session that
+	// spawned them, a meta file per session and a memory/ directory beside.
+	cbRoots := sources.CodeBuddyRoots()
+	printFilesSkippingIn("codebuddy", strings.Join(cbRoots, string(os.PathListSeparator)), cbRoots, doctorAnyExists(cbRoots),
+		sources.CodeBuddySessionFiles(), sources.CodeBuddySubagentFile, sources.CodeBuddySidecarFiles()...)
 
 	kimiRoot := filepath.Join(sources.KimiRoot(), "sessions")
 	printFilesSkippingIn("kimi", kimiRoot, []string{kimiRoot}, doctorExists(kimiRoot),
@@ -1101,6 +1110,11 @@ func doctorHarnesses(w io.Writer, dir string) {
 	rxRoot := sources.ReasonixRoot()
 	printFilesBesideIn("reasonix", rxRoot, sources.ReasonixSessionDirsAll(), false, doctorExists(rxRoot),
 		sources.ReasonixSessionFiles(), sources.ReasonixSidecarFiles()...)
+	// Muse keeps cron.db, goals.db and spilled tool output beside each log, and
+	// its subagents' logs one level down, read only when asked for.
+	museRoots := sources.MuseRoots()
+	printFilesSkippingIn("muse", strings.Join(museRoots, string(os.PathListSeparator)), museRoots, doctorAnyExists(museRoots),
+		sources.MuseSessionFiles(), sources.MuseSubagentFile, sources.MuseSidecarFiles()...)
 	dshRoot := sources.DeepSeekRoot()
 	printFiles("deepseek", dshRoot, doctorExists(dshRoot), sources.DeepSeekSessionFiles())
 	zedDB := sources.ZedDB()
@@ -1945,6 +1959,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"antigravity", filepath.Join(antigravityConfigHome(), "mcp_config.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"grok", filepath.Join(sources.GrokHome(), "config.toml"), doctorTOMLWired, doctorTOMLDejaKeys},
 		{"qwen", filepath.Join(sources.QwenConfigDir(), "settings.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
+		{"codebuddy", codeBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"kimi", filepath.Join(sources.KimiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"cline", sources.ClineMCPSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"pi", filepath.Join(sources.PiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},

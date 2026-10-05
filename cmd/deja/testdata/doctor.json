@@ -21,6 +21,15 @@
       "indexed_sessions": 0
     },
     {
+      "name": "trae",
+      "state": "missing",
+      "paths": [
+        "<tmp>/trae"
+      ],
+      "files": 0,
+      "indexed_sessions": 0
+    },
+    {
       "name": "opencode",
       "state": "missing",
       "paths": [
@@ -91,6 +100,15 @@
       "state": "missing",
       "paths": [
         "<tmp>/qwen/projects"
+      ],
+      "files": 0,
+      "indexed_sessions": 0
+    },
+    {
+      "name": "codebuddy",
+      "state": "missing",
+      "paths": [
+        "<tmp>/home/.codebuddy/projects"
       ],
       "files": 0,
       "indexed_sessions": 0
@@ -300,6 +318,15 @@
       "indexed_sessions": 0
     },
     {
+      "name": "muse",
+      "state": "missing",
+      "paths": [
+        "<tmp>/home/.local/share/muse/sessions"
+      ],
+      "files": 0,
+      "indexed_sessions": 0
+    },
+    {
       "name": "deepseek",
       "state": "missing",
       "paths": [
@@ -373,6 +400,11 @@
       "name": "qwen",
       "state": "config-missing",
       "path": "<tmp>/home/.qwen/settings.json"
+    },
+    {
+      "name": "codebuddy",
+      "state": "config-missing",
+      "path": "<tmp>/home/.codebuddy/.mcp.json"
     },
     {
       "name": "kimi",
@@ -535,6 +567,11 @@
       "name": "qwen",
       "state": "missing",
       "path": "<tmp>/home/.qwen/settings.json"
+    },
+    {
+      "name": "codebuddy",
+      "state": "missing",
+      "path": "<tmp>/home/.codebuddy/settings.json"
     },
     {
       "name": "kimi",

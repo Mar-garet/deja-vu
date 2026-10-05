@@ -15,7 +15,7 @@ al agente que está trabajando ahora.</p>
 
 <p align="center"><sub><em>Nadie buscó nada: el agente llamó a deja por su cuenta. Dos ejecuciones reales, modelo real, llamadas a herramientas reales, sobre un corpus sintético: no se publica el historial de nadie.</em></sub></p>
 
-<p align="center"><b>deja está llena desde el primer minuto: el historial que 35 agentes ya escribieron, indexado en segundos, sin modelo y sin un paso aparte de captura.</b></p>
+<p align="center"><b>deja está llena desde el primer minuto: el historial que 38 agentes ya escribieron, indexado en segundos, sin modelo y sin un paso aparte de captura.</b></p>
 
 <p align="center"><b>La memoria para agentes de código más precisa, la más barata de usar y la más rápida que pudimos medir.</b></p>
 
@@ -101,7 +101,7 @@ recall al inicio de sesión: vale la pena, pero es opcional.
 
 ## Qué obtienes
 
-**Resuelto en Codex, recordado por Claude.** Treinta y cinco agentes de código escriben cada conversación en
+**Resuelto en Codex, recordado por Claude.** Treinta y ocho agentes de código escriben cada conversación en
 archivos locales y deja convierte esos archivos en una capa de memoria que todos pueden leer.
 
 | | |
@@ -200,7 +200,8 @@ Claude Code · Cline · Codex CLI · opencode · aider · Gemini CLI · Cursor �
 Grok Build · Hermes · Goose · Qwen Code · Kimi Code · pi · omp (Oh My Pi) · OpenClaw ·
 Copilot CLI · VS Code Copilot Chat · Amp · prime-agent (PrimeIntellect) · Roo Code ·
 Continue · Crush · DeepSeek Harness · Cherry Studio · Senpi · gajae-code · Kimchi Coding ·
-Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · Zed.
+Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · CodeBuddy Code ·
+TRAE CLI · Muse Code · Zed.
 
 Qué soporta cada uno —recall por MCP, recall automático, skills, comandos, resume, handoff— está en la
 [matriz de capacidades del README en inglés](../../README.md#supported-harnesses). Las rutas de almacenamiento

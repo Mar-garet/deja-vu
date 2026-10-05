@@ -881,6 +881,10 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		// meant a machine that already had the server was told "unchanged"
 		// while the hooks under it were being rewired.
 		return wroteAll(hooks, mcp), nil
+	case "codebuddy":
+		return installCodeBuddyMCP(exe, uninstall)
+	case "codebuddy-auto":
+		return installCodeBuddyAuto(exe, uninstall)
 	case "kimi":
 		return installMCPJSON(filepath.Join(sources.KimiConfigDir(), "mcp.json"), exe, uninstall)
 	case "kimi-auto":
@@ -4874,6 +4878,7 @@ func installTargetNames() []string {
 		"gemini", "gemini-auto",
 		"antigravity", "antigravity-auto",
 		"qwen", "qwen-auto",
+		"codebuddy", "codebuddy-auto",
 		"kimi", "kimi-auto",
 		"hermes", "hermes-auto",
 		"pi", "pi-auto",
@@ -5041,6 +5046,7 @@ func existingTargetChecks() map[string]string {
 		"gjc":          sources.GjcRoot(),
 		"zcode":        sources.ZCodeRoot(),
 		"commandcode":  commandCodeFirstRoot(),
+		"codebuddy":    sources.CodeBuddyRoot(), // its session store; deja creates the config dir
 		// Reasonix's own config.toml, which it writes on first run. deja
 		// writes beside it — plugins/ and plugin-packages.json — and never
 		// into it, so keying on the home itself would make every machine a

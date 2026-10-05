@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<script>document.documentElement.className=document.documentElement.className.replace("no-js","js")</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where TRAE CLI stores its history — session format</title>
+<meta name="description" content="Where TRAE CLI writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.">
+<link rel="canonical" href="https://vshulcz.github.io/deja-vu/registry/trae.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Where TRAE CLI stores its history — session format">
+<meta property="og:description" content="Where TRAE CLI writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.">
+<meta property="og:url" content="https://vshulcz.github.io/deja-vu/registry/trae.html">
+<meta property="og:image" content="https://vshulcz.github.io/deja-vu/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" sizes="16x16" href="../assets/favicon.svg">
+<link rel="icon" type="image/svg+xml" sizes="any" href="../assets/icon.svg">
+<link rel="stylesheet" href="../assets/site.css">
+<meta name="author" content="vshulcz">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<meta name="theme-color" content="#0d0b16">
+<meta name="color-scheme" content="dark light">
+<meta property="og:site_name" content="deja-vu">
+<meta name="twitter:title" content="Where TRAE CLI stores its history — session format">
+<meta name="twitter:description" content="Where TRAE CLI writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.">
+<meta name="twitter:image" content="https://vshulcz.github.io/deja-vu/assets/og.png">
+<link rel="apple-touch-icon" href="../assets/icon.svg">
+<link rel="sitemap" type="application/xml" href="https://vshulcz.github.io/deja-vu/sitemap.xml">
+<link rel="describedby" type="text/markdown" href="https://vshulcz.github.io/deja-vu/llms.txt">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","author":{"@type":"Person","name":"vshulcz"},"description":"Where TRAE CLI writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.","headline":"TRAE CLI","inLanguage":"en","isPartOf":{"@type":"WebSite","name":"deja-vu","url":"https://vshulcz.github.io/deja-vu/"},"publisher":{"@type":"Person","name":"vshulcz"},"url":"https://vshulcz.github.io/deja-vu/registry/trae.html"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://vshulcz.github.io/deja-vu/","name":"deja-vu","position":1},{"@type":"ListItem","item":"https://vshulcz.github.io/deja-vu/guide/harnesses.html","name":"Harnesses","position":2},{"@type":"ListItem","item":"https://vshulcz.github.io/deja-vu/registry/trae.html","name":"TRAE CLI","position":3}]}</script>
+</head>
+<body>
+<div class="glow"></div>
+<nav><a class="brand" href="../"><img src="../assets/icon.svg" alt="" width="22" height="22">deja-vu</a><span class="spacer"></span><a class="lnk" href="../">Home</a><a class="lnk" href="../guide/getting-started.html">Docs</a><a class="lnk" href="https://github.com/vshulcz/deja-vu">GitHub</a></nav>
+<div class="wrap"><div class="doc">
+<aside><a href="../">&larr; deja-vu</a><div class="grp">Guide</div><a href="../guide/getting-started.html">Getting started</a><a href="../guide/harnesses.html">Harnesses</a><div class="grp">Session formats</div><a href="README.html">All formats</a><a href="aider.html">aider</a><a href="amp.html">Amp</a><a href="antigravity.html">Antigravity</a><a href="cherrystudio.html">Cherry Studio</a><a href="claude-code.html">Claude Code</a><a href="cline.html">Cline</a><a href="codebuddy.html">CodeBuddy Code</a><a href="codewhale.html">CodeWhale</a><a href="codex.html">Codex CLI</a><a href="commandcode.html">Command Code</a><a href="continue.html">Continue</a><a href="copilot.html">Copilot CLI</a><a href="crush.html">Crush</a><a href="cursor.html">Cursor</a><a href="deepseek.html">DeepSeek Harness</a><a href="gjc.html">gajae-code</a><a href="gemini.html">Gemini CLI</a><a href="goose.html">Goose</a><a href="grok.html">Grok Build</a><a href="hermes.html">Hermes</a><a href="kilocode.html">Kilo Code</a><a href="kimchi.html">Kimchi Coding</a><a href="kimi.html">Kimi Code</a><a href="kiro.html">Kiro</a><a href="muse.html">Muse Code</a><a href="omp.html">omp (Oh My Pi)</a><a href="openclaw.html">OpenClaw</a><a href="opencode.html">opencode</a><a href="pi.html">pi</a><a href="prime.html">prime-agent (PrimeIntellect)</a><a href="qwen.html">Qwen Code</a><a href="reasonix.html">Reasonix</a><a href="roo.html">Roo Code</a><a href="senpi.html">Senpi</a><a href="trae.html" aria-current="page">TRAE CLI</a><a href="copilot-chat.html">VS Code Copilot Chat</a><a href="zcode.html">ZCode</a><a href="zed.html">Zed</a></aside>
+<article>
+<h1>TRAE CLI</h1>
+<ul>
+<li><strong>ID</strong>: <code>trae</code></li>
+<li><strong>Store</strong>: <code>${TRAE_HOME:-~/.trae}/cli/sessions/YYYY/MM/DD/rollout-&lt;timestamp&gt;-&lt;uuid&gt;.jsonl</code>, plus <code>archived_sessions/</code> for <code>traex archive &lt;id&gt;</code> and <code>history.jsonl</code> beside them</li>
+<li><strong>Read override</strong>: <code>DEJA_TRAE_ROOT</code> replaces the <code>cli</code> directory; <code>TRAE_HOME</code> moves TRAE&#39;s whole home, and deja follows it</li>
+<li><strong>Format</strong>: JSONL — Codex rollouts: <code>session_meta</code>, <code>turn_context</code>, <code>response_item</code>, <code>event_msg</code>, plus TRAE&#39;s own <code>history_mutation</code></li>
+<li><strong>Needs</strong>: nothing (<code>zstd</code> only for a compressed rollout)</li>
+<li><strong>Resume</strong>: <code>traex resume &lt;id&gt;</code></li>
+</ul>
+<p>TRAE CLI 2.0 ships as <code>traex</code> and reports itself as <code>traecli 0.200.x</code>. It is a</p>
+<p>closed-source fork of codex-rs and writes the same rollout files Codex does,</p>
+<p>with <code>originator: &#34;codex-tui&#34;</code>, one level further down at <code>~/.trae/cli</code>. deja</p>
+<p>reads them with the Codex reader and files the sessions under <code>trae</code>, not</p>
+<p><code>codex</code>, because they resume with <code>traex</code> and three things in them are read</p>
+<p>differently.</p>
+<p><strong>Who said it.</strong> TRAE writes its own runtime injections — environment context,</p>
+<p>process-limit notices — as <code>response_item</code> messages under the <code>user</code> role, so</p>
+<p>that record is not evidence a person typed anything. A prompt is taken only</p>
+<p>from <code>event_msg</code> <code>user_message</code> or, from 0.201.4, <code>event_msg</code> <code>item_completed</code></p>
+<p>carrying a <code>UserMessage</code> item. The two can describe the same prompt, in either</p>
+<p>order, and the older one sometimes has no <code>turn_id</code>; a pair is read once — same</p>
+<p>text and turn id, or same text within five seconds when one side has no id — and the same</p>
+<p>words in a later turn are a second prompt.</p>
+<p><strong>The answer.</strong> It is taken from the first of these that the rollout has:</p>
+<p>assistant <code>response_item</code> messages, assistant messages in <code>history_mutation</code>,</p>
+<p><code>item_completed</code> <code>AgentMessage</code> items (text blocks typed <code>Text</code>, <code>text</code> or</p>
+<p><code>output_text</code>), and <code>agent_message</code> events.</p>
+<p><strong>Tool calls.</strong> They ride in <code>history_mutation</code> records with `operation:</p>
+<p>&#34;append&#34;<code>. The shell is </code>exec<code> with an argv under </code>command`</p>
+<p>(<code>[&#34;bash&#34;,&#34;-lc&#34;,&#34;&lt;script&gt;&#34;]</code>, the script is what is kept); a result&#39;s <code>output</code></p>
+<p>is a block list whose text blocks are joined; <code>apply_patch</code> is the Codex patch</p>
+<p>format. A call seen both there and as a <code>response_item</code> is read once, by</p>
+<p><code>call_id</code>. A <code>replace</code> re-sends history the file already holds and is skipped.</p>
+<p><strong>Last verified:</strong> 2026-10-05</p>
+<h2 id="known-quirks-and-drift">Known quirks and drift</h2>
+<ul>
+<li><strong>The shapes come from other readers, not from a running install.</strong> The</li>
+</ul>
+<p>user-turn rule, the <code>item_completed</code> dialect and <code>history_mutation</code> are read</p>
+<p>from botmux&#39;s TRAE reader (<code>src/services/traex-transcript.ts</code> and its tests);</p>
+<p>the store layout and the resume command from agentsview&#39;s TraeX provider</p>
+<p>(<code>internal/parser/traex.go</code>, <code>types.go</code>, <code>server/resume.go</code>). Nothing here</p>
+<p>has been checked against a rollout TRAE wrote on this machine.</p>
+<ul>
+<li><strong>An append that splits a pair is read whole.</strong> When the new bytes hold the</li>
+</ul>
+<p>second record of a prompt, or a repeat of a call, read before the offset,</p>
+<p>the incremental pass reads the file from the start, so neither lands twice.</p>
+<ul>
+<li><strong>The 1.x store is not read.</strong> TRAE CLI 1.x (<code>traecli</code>, internally CoCo)</li>
+</ul>
+<p>wrote <code>events.jsonl</code> under <code>~/Library/Caches/coco/sessions/</code> on macOS and</p>
+<p><code>~/.cache/coco/sessions/</code> on Linux, a different format.</p>
+<ul>
+<li><strong>The IDE store is not read.</strong> TRAE, TRAE CN and TRAE SOLO keep chat in a</li>
+</ul>
+<p>SQLCipher-encrypted <code>ModularData/ai-agent/database.db</code>.</p>
+<ul>
+<li><strong>Nothing is wired.</strong> TRAE CLI has hooks (<code>~/.trae/cli/hooks.json</code>) and MCP</li>
+</ul>
+<p>through its config; deja reads the store and writes nothing into TRAE yet.</p>
+
+<hr>
+<p>deja reads this format and thirty-seven others, and turns what it finds into memory your
+agents can search. See the <a href="../guide/harnesses.html">harness matrix</a> for what is
+wired where, or <a href="../guide/getting-started.html">install it</a> and search your own
+history.</p>
+<p class="star-cta">Found this useful? <a href="https://github.com/vshulcz/deja-vu">Star deja-vu on GitHub</a>.</p>
+</article>
+</div>
+</div>
+<footer>deja-vu is MIT-licensed and runs on your machine. <a href="https://github.com/vshulcz/deja-vu">Source on GitHub</a> · <a href="../">Home</a></footer>
+<script src="../assets/guide.js" defer></script>
+</body>
+</html>

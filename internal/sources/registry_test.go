@@ -35,7 +35,7 @@ func TestFormatRegistryConformance(t *testing.T) {
 	for _, key := range []string{
 		"AIDER_CHAT_HISTORY_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME",
 		"CURSOR_CONFIG_DIR", "DEJA_AIDER_ROOTS", "DEJA_AMP_ROOT", "DEJA_ANTIGRAVITY_ROOT",
-		"DEJA_CLAUDE_ROOT", "DEJA_CODEX_ROOT", "DEJA_CURSOR_CLI_ROOT",
+		"DEJA_CLAUDE_ROOT", "DEJA_CODEX_ROOT", "DEJA_TRAE_ROOT", "TRAE_HOME", "DEJA_CURSOR_CLI_ROOT",
 		"DEJA_CURSOR_ROOT", "DEJA_GEMINI_ROOT", "DEJA_GROK_ROOT", "DEJA_GOOSE_ROOT", "DEJA_GOOSE_DB",
 		"DEJA_PI_ROOT", "DEJA_OMP_ROOT", "DEJA_QWEN_ROOT", "DEJA_KIMI_ROOT", "KIMI_CODE_HOME",
 		"DEJA_CLINE_ROOT", "DEJA_CLINE_ROOTS", "CLINE_DIR", "CLINE_DATA_DIR",
@@ -46,6 +46,8 @@ func TestFormatRegistryConformance(t *testing.T) {
 		"GROK_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
 		"DEJA_ZED_ROOT", "DEJA_ZED_DB", "FLATPAK_XDG_DATA_HOME",
 		"DEJA_REASONIX_ROOT", "REASONIX_HOME", "REASONIX_STATE_HOME",
+		"DEJA_MUSE_ROOTS",
+		"DEJA_CODEBUDDY_ROOTS", "CODEBUDDY_CONFIG_DIR", "WORKBUDDY_CONFIG_DIR",
 		"DEJA_NOTES_FILE",
 	} {
 		t.Setenv(key, "")
@@ -148,6 +150,8 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 		sessions, err = ParseClaudeFile(path)
 	case "codex":
 		sessions, err = ParseCodexRollout(path)
+	case "trae":
+		sessions, err = ParseTraeRollout(path)
 	case "kimi":
 		sessions, err = ParseKimiFile(path)
 	case "cline":
@@ -183,6 +187,10 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 		sessions, err = ParseKimchiFile(path)
 	case "codewhale":
 		sessions, err = ParseCodeWhaleFile(path)
+	case "muse":
+		sessions, err = ParseMuseFile(path)
+	case "codebuddy":
+		sessions, err = ParseCodeBuddyFile(path)
 	case "reasonix":
 		// The 1.x fixture is zstd frames, which only the CLI reads.
 		if filepath.Base(path) == "events.frames" && !ZstdAvailable() {
@@ -362,7 +370,7 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 
 // registryFixturesWithCalls are the registry fixtures whose tool calls are
 // read into work records.
-var registryFixturesWithCalls = map[string]bool{"deepseek": true, "continue": true}
+var registryFixturesWithCalls = map[string]bool{"deepseek": true, "continue": true, "trae": true, "muse": true, "codebuddy": true}
 
 func validateRegistrySessions(t *testing.T, id string, sessions []model.Session) {
 	t.Helper()

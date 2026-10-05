@@ -113,6 +113,7 @@ https://vshulcz.github.io/deja-vu/guide/recover-a-deleted-session.html
 https://vshulcz.github.io/deja-vu/registry/kilocode.html
 https://vshulcz.github.io/deja-vu/registry/cherrystudio.html
 https://vshulcz.github.io/deja-vu/registry/kiro.html
+https://vshulcz.github.io/deja-vu/registry/muse.html
 https://vshulcz.github.io/deja-vu/registry/commandcode.html
 https://vshulcz.github.io/deja-vu/registry/kimchi.html
 https://vshulcz.github.io/deja-vu/registry/senpi.html
@@ -124,7 +125,9 @@ https://vshulcz.github.io/deja-vu/zh/guide/privacy.html
 https://vshulcz.github.io/deja-vu/zh/guide/find-a-session.html
 https://vshulcz.github.io/deja-vu/zh/guide/recover-a-deleted-session.html
 https://vshulcz.github.io/deja-vu/zh/guide/lost-context.html
+https://vshulcz.github.io/deja-vu/registry/codebuddy.html
 https://vshulcz.github.io/deja-vu/registry/codewhale.html
 https://vshulcz.github.io/deja-vu/registry/reasonix.html
+https://vshulcz.github.io/deja-vu/registry/trae.html
 https://vshulcz.github.io/deja-vu/guide/delete-roo-task-history.html
 https://vshulcz.github.io/deja-vu/guide/delete-zed-thread-history.html

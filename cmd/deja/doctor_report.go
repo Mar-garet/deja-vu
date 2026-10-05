@@ -521,6 +521,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 	checks := []doctorStoreCheck{
 		{"claude", sources.ClaudeRoots(), sources.ClaudeFiles(), sources.ParseClaudeFile},
 		{"codex", sources.CodexRoots(), sources.CodexFiles(), parseDoctorCodex},
+		{"trae", []string{sources.TraeRoot()}, sources.TraeFiles(), parseDoctorTrae},
 		{"opencode", []string{sources.OpencodeDB()}, presentDoctorFile(sources.OpencodeDB()), doctorProbeOpencode},
 		{"aider", aiderPaths, sources.AiderFiles(), sources.ParseAiderFile},
 		{"gemini", []string{sources.GeminiRoot()}, sources.GeminiChatFiles(), sources.ParseGeminiFile},
@@ -529,6 +530,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 		{"grok", []string{filepath.Join(sources.GrokRoot(), "sessions")}, sources.GrokSessionFiles(), sources.ParseGrokFile},
 		{"hermes", []string{sources.HermesHome(), sources.HermesProfilesRoot()}, sources.HermesSessionFiles(), parseDoctorHermes},
 		{"qwen", []string{filepath.Join(sources.QwenRoot(), "projects")}, sources.QwenSessionFiles(), sources.ParseQwenFile},
+		{"codebuddy", sources.CodeBuddyRoots(), sources.CodeBuddySessionFiles(), sources.ParseCodeBuddyFile},
 		{"kimi", []string{filepath.Join(sources.KimiRoot(), "sessions")}, sources.KimiSessionFiles(), sources.ParseKimiFile},
 		{"goose", sources.GooseSessionsDirs(), sources.GooseSessionFiles(), parseDoctorGoose},
 		{"continue", []string{filepath.Join(sources.ContinueRoot(), "sessions")}, sources.ContinueSessionFiles(), sources.ParseContinueFile},
@@ -565,6 +567,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 		{"gjc", []string{sources.GjcRoot()}, sources.GjcSessionFiles(), sources.ParseGjcFile},
 		{"codewhale", sources.CodeWhaleRoots(), sources.CodeWhaleSessionFiles(), sources.ParseCodeWhaleFile},
 		{"reasonix", sources.ReasonixRoots(), sources.ReasonixSessionFiles(), sources.ParseReasonixFile},
+		{"muse", sources.MuseRoots(), sources.MuseSessionFiles(), sources.ParseMuseFile},
 		{"deepseek", []string{sources.DeepSeekRoot()}, sources.DeepSeekSessionFiles(), sources.ParseDeepSeekFile},
 		// Zed keeps one SQLite store rather than session files, so the file
 		// list is the database itself — the shape opencode's row uses.
@@ -675,6 +678,13 @@ func parseDoctorCodex(path string) ([]model.Session, error) {
 		return sources.ParseCodexHistory(path)
 	}
 	return sources.ParseCodexRollout(path)
+}
+
+func parseDoctorTrae(path string) ([]model.Session, error) {
+	if filepath.Base(path) == "history.jsonl" {
+		return sources.ParseTraeHistory(path)
+	}
+	return sources.ParseTraeRollout(path)
 }
 
 // parseDoctorOpenClaw reads whichever OpenClaw store the newest path is: the
