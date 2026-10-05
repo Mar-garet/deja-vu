@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The per-prompt hook searches on the question even when an instruction comes before it on the same line ("without reading any files: what jitter constant…"); the instruction used to take all six search terms and the hook stayed silent (#4751).
 - WorkBuddy AI desktop chats index with your prompts: the app wraps each one in a `<user_query>` envelope, and deja read the whole record as harness context (#4734).
 - A new WorkBuddy AI desktop chat recalls the earlier ones: each chat runs in its own `~/WorkBuddy AI/<timestamp>` folder, and those folders now count as one project. Index version 67 refiles chats already indexed (#4735).
 - `deja install workbuddy` and `deja doctor` say when WorkBuddy AI is holding deja's MCP server until you click Trust in its MCP settings; doctor reports it as `untrusted` (#4740).
