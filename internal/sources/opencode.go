@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -181,6 +182,13 @@ func parseOpencodeSchemaDBSince(harness, db string, t time.Time) ([]model.Sessio
 	// comparison is a strict >. A session read twice replaces itself, so going
 	// back costs a re-read and nothing else (#4207).
 	t = t.Add(-opencodeSinceSlack)
+	if opencodeSchemaOf(db).mixed {
+		// A session can have turns in both layouts, and a session read again
+		// replaces what the index holds, so one touched on either side is read
+		// from both.
+		w := opencodeSessionTouched("session", t, opencodeV1Touched(db, t)+" union "+opencodeV2Touched(db, t))
+		return parseOpencodeLayouts(harness, db, w, w, 0)
+	}
 	return parseOpencodeLayouts(harness, db, opencodeSinceWhere(db, t), opencodeV2SinceWhere(db, t), 0)
 }
 
@@ -198,6 +206,11 @@ const opencodeSinceSlack = 5 * time.Second
 // and a session read again replaces what the index holds for it
 // (rereadsWholeSessions), so the turns it already had are not added twice.
 func opencodeSinceWhere(db string, t time.Time) string {
+	return opencodeSessionTouched("session", t, opencodeV1Touched(db, t))
+}
+
+// opencodeV1Touched names the sessions with a message or part stamped after t.
+func opencodeV1Touched(db string, t time.Time) string {
 	// Each a column of its own, so the subquery reads row headers and never a
 	// blob: 3–5 s on a 3.8 GB store, against 9 s for the row-level clause.
 	touched := fmt.Sprintf("select session_id from message where %s or %s union "+
@@ -212,7 +225,7 @@ func opencodeSinceWhere(db string, t time.Time) string {
 			newerThanEpoch("m2.time_created", t), rfc,
 			newerThanEpoch("json_extract(p2.data,'$.time.start')", t), rfc)
 	}
-	return opencodeSessionTouched("session", t, touched)
+	return touched
 }
 
 // opencodeSessionTouched bounds a read to the sessions in table whose own stamp
@@ -246,7 +259,7 @@ func parseOpencodeLayouts(harness, db, where1, where2 string, limit int) ([]mode
 	schema := opencodeSchemaOf(db)
 	by := map[string]*model.Session{}
 	rows := 0
-	if !schema.v2 || schema.legacy {
+	if !schema.v2 || schema.legacy || schema.mixed {
 		w := where1
 		if schema.legacy {
 			w = opencodeNotMoved + w
@@ -257,12 +270,26 @@ func parseOpencodeLayouts(harness, db, where1, where2 string, limit int) ([]mode
 		}
 		rows += n
 	}
+	var v1Turns map[string]int
+	if schema.mixed {
+		v1Turns = make(map[string]int, len(by))
+		for id, s := range by {
+			v1Turns[id] = len(s.Messages)
+		}
+	}
 	if schema.v2 {
 		n, err := readOpencodeRows(harness, db, opencodeV2Query(schema.sessionTable, where2, limit), by)
 		if err != nil {
 			return nil, err
 		}
 		rows += n
+	}
+	// A session with turns in both layouts got the old ones first; put them
+	// back in the order they were said.
+	for id, n := range v1Turns {
+		if s := by[id]; n > 0 && len(s.Messages) > n {
+			sortTurnsByTime(s.Messages)
+		}
 	}
 	if rows == 0 {
 		return nil, nil
@@ -702,6 +729,9 @@ func OpencodeCounts() (sessions, messages int, err error) {
 			"(select count(*) from part p join message m on m.id=p.message_id join session s on s.id=m.session_id " +
 			"where json_extract(p.data,'$.type')='text'" + opencodeNotMoved + ")" +
 			"+(select count(*) from session_message where type in ('user','assistant'))"
+	case sc.mixed:
+		q = "select (select count(*) from session),(select count(*) from part where json_extract(data,'$.type')='text')" +
+			"+(select count(*) from session_message where type in ('user','assistant'))"
 	case sc.v2:
 		// A 2.x turn holds its parts in its own blob, so the second figure is
 		// the turns that carry words rather than the text parts under them.
@@ -766,7 +796,7 @@ func ParseOpencodeNewest(db string) ([]model.Session, error) {
 		"where x.session_id=s.id and x.type in " + opencodeTurnTypes + ")"
 	from := v1
 	switch {
-	case sc.legacy:
+	case sc.legacy, sc.mixed:
 		// Either layout: a store mid-migration can have its latest work in
 		// the old tables or the new.
 		from = v1 + " union all " + v2
@@ -853,6 +883,38 @@ func opencodeThinTitle(t string) bool {
 		return true
 	}
 	return len(strings.Fields(t)) <= 2 && len([]rune(t)) <= 12
+}
+
+// sortTurnsByTime orders turns by when they were said. A turn with no stamp
+// sorts with the turn read before it (the first stamped one, at the start), so
+// it stays beside its neighbours instead of sinking to the top.
+func sortTurnsByTime(ms []model.Message) {
+	keys := make([]time.Time, len(ms))
+	var last time.Time
+	for i, m := range ms {
+		if !m.Time.IsZero() {
+			last = m.Time
+		}
+		keys[i] = last
+	}
+	for i := 0; i < len(keys) && keys[i].IsZero(); i++ {
+		for _, m := range ms[i:] {
+			if !m.Time.IsZero() {
+				keys[i] = m.Time
+				break
+			}
+		}
+	}
+	idx := make([]int, len(ms))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return keys[idx[a]].Before(keys[idx[b]]) })
+	out := make([]model.Message, len(ms))
+	for i, j := range idx {
+		out[i] = ms[j]
+	}
+	copy(ms, out)
 }
 
 // partTime prefers the part's own timestamp and falls back to the message's.

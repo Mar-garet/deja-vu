@@ -13,9 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CodeBuddy Code sessions are read from `~/.codebuddy/projects`, WorkBuddy's from `~/.workbuddy/projects`, and Muse Code's from `~/.local/share/muse/sessions`; `deja install codebuddy` and `codebuddy-auto` wire recall into CodeBuddy (#4681, #4679).
 - `deja install workbuddy` and `workbuddy-auto` wire recall into WorkBuddy, whose agent reads its config from the WorkBuddy home rather than `~/.codebuddy`; a new MCP file there is the app's own `mcp.json` (#4720).
 - `deja install trae` adds the MCP server to TRAE CLI's `traecli.toml`, and `trae-auto` adds the session-start, per-prompt, tool and compaction hooks to its `hooks.json`; TRAE runs them once you trust them at start-up (#4702).
+- `deja install trae-ide` wires TRAE IDE: the MCP server in `User/mcp.json` and the skill in `~/.trae/skills` (`Trae CN` and `~/.trae-cn` for the CN build; with both builds installed, each gets its own). `trae-ide-auto` adds hooks to `~/.trae/hooks.json`, which TRAE IDE runs only after you turn hooks on in Settings > Hooks; install and doctor both say so. Its chats are encrypted and not indexed (#4731).
 
 ### Fixed
 
+- The per-prompt hook searches on the question even when an instruction comes before it on the same line ("without reading any files: what jitter constant…"); the instruction used to take all six search terms and the hook stayed silent (#4751).
+- Kilo CLI: a store where a few sessions went through Kilo's `/api/session` route indexes every session again; deja read only those few and dropped the rest, and a session continued from `kilo run` keeps both halves (#4694).
 - WorkBuddy AI desktop chats index with your prompts: the app wraps each one in a `<user_query>` envelope, and deja read the whole record as harness context (#4734).
 - A new WorkBuddy AI desktop chat recalls the earlier ones: each chat runs in its own `~/WorkBuddy AI/<timestamp>` folder, and those folders now count as one project. Index version 67 refiles chats already indexed (#4735).
 - `deja install workbuddy` and `deja doctor` say when WorkBuddy AI is holding deja's MCP server until you click Trust in its MCP settings; doctor reports it as `untrusted` (#4740).
@@ -27,11 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja install muse` and `muse-auto` wire recall into Muse Code: the MCP server and Claude-shaped hooks in `~/.config/muse/settings.json`, and the skill in `~/.agents/skills`. `deja resume` prints `muse resume <id>` in the session's workspace (#4709, #4710).
 - `deja install muse` and `muse-auto` on a machine with no Muse settings file write one Muse starts with: it refused a file without `schema_version` (#4736).
 - A Muse Code session that compacts gets its recovery packet with the next prompt or edit; `muse-auto` now wires PreCompact, and the log is found by session id (#4737).
+- Hooks see the index, policy and stores the CLI uses when the host starts them without your environment, as Muse Code does: the `deja-hook` launcher now carries the `XDG_*` and `DEJA_*` locations and indexing settings in effect at install, and your own environment still wins (#4738).
+- Turning `DEJA_INCLUDE_SUBAGENTS` off drops the child transcripts on the next index pass, as a rebuild does, instead of keeping them and calling them "no longer on disk". A pass that cannot see a store at all keeps its sessions and says so (#4739).
 - Under `DEJA_INCLUDE_SUBAGENTS=1`, Muse Code's reminder and verification observers are no longer indexed as sessions, and a workflow subagent gets its project (#4711, #4712).
 - CodeBuddy: `deja resume` prints `codebuddy -c -r <id>` in the directory the session ran in, so the session-start recall reaches the reopened session (#4718), and `install codebuddy-auto` writes the `deja-history` skill and the `/deja` command where CodeBuddy reads them (#4707, #4708).
 - CodeBuddy: a failed command keeps its exit code, the `/compact` instruction prompt is no longer indexed as your words, and the recovery packet after a compaction arrives with the next prompt (#4703, #4704, #4705).
 - A fix learned from a CodeBuddy or Qwen Code shell call answers the same error anywhere: the `Stdout:`/`Output:` label in front of the first line is no longer part of the error (#4717).
 - The Claude Code and CodeBuddy plugins stand down when `deja install <h>-auto` already wired the same hooks, instead of running every hook twice (#4706).
+- CodeBuddy on Windows: when the deja path has a space, `install codebuddy-auto` writes hooks that run through `powershell -NoProfile -Command "& '…'"`, so they work without Git Bash; the quoted line written before is replaced, not left beside it (#4728).
 
 ## [0.21.6] - 2026-10-04
 

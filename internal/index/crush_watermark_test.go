@@ -55,9 +55,9 @@ func crushSQL(t *testing.T, db, sql string) {
 // stamp, which is what Crush's own update does.
 func crushTurn(t *testing.T, db, session, id, text string, at int) {
 	t.Helper()
-	crushSQL(t, db, fmt.Sprintf(`insert or ignore into sessions values (%[1]q,null,'retry',%[4]d,%[4]d);
-insert into messages values (%[2]q,%[1]q,'user','[{"type":"text","data":{"text":%[3]q}}]',%[4]d,%[4]d);
-update sessions set updated_at=%[4]d where id=%[1]q;`, session, id, text, at))
+	crushSQL(t, db, fmt.Sprintf(`insert or ignore into sessions values ('%[1]s',null,'retry',%[4]d,%[4]d);
+insert into messages values ('%[2]s','%[1]s','user','[{"type":"text","data":{"text":%[3]q}}]',%[4]d,%[4]d);
+update sessions set updated_at=%[4]d where id='%[1]s';`, session, id, text, at))
 }
 
 // Every Crush message used to re-read the whole project store: the store was

@@ -52,7 +52,15 @@ format. A call seen both there and as a `response_item` is read once, by
 - **The 1.x store is not read.** TRAE CLI 1.x (`traecli`, internally CoCo)
   wrote `events.jsonl` under `~/Library/Caches/coco/sessions/` on macOS and
   `~/.cache/coco/sessions/` on Linux, a different format.
-- **The IDE store is not read.** TRAE, TRAE CN and TRAE SOLO keep chat in a
-  SQLCipher-encrypted `ModularData/ai-agent/database.db`.
-- **Nothing is wired.** TRAE CLI has hooks (`~/.trae/cli/hooks.json`) and MCP
-  through its config; deja reads the store and writes nothing into TRAE yet.
+- **The IDE store is not read, but the IDE is wired.** TRAE, TRAE CN and TRAE
+  SOLO keep chat in a SQLCipher-encrypted `ModularData/ai-agent/database.db`.
+  `deja install trae-ide` adds the server to `<user data>/User/mcp.json`
+  (`~/Library/Application Support/Trae`, `%APPDATA%\Trae` or `~/.config/Trae`;
+  `Trae CN` for the CN build) with no `type` key, which its schema rejects, and
+  the skill to `~/.trae/skills` (`~/.trae-cn/skills`); with both builds installed,
+  each is wired in its own files.
+  `deja install trae-ide-auto` adds Claude-shaped hooks to `~/.trae/hooks.json`. The IDE ships
+  with hooks off and keeps that switch in its own settings store, so deja cannot
+  tell whether they run: turn them on in Settings > Hooks and run them locally.
+- **`~/.trae/hooks.json` is the IDE's, not the CLI's.** TRAE CLI 1.x read it;
+  2.0 reads `cli/hooks.json` and says the old file is no longer read.

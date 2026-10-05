@@ -231,6 +231,11 @@ type promptReport struct {
 	// first, and a person pasting context then asking about it is the shape the
 	// hook meets most (#3183).
 	Pasted promptArmReport `json:"pasted_preamble"`
+	// The same questions on one line behind an instruction — "without calling
+	// any MCP tool and without reading any files: …". There is no newline to
+	// split on, so the lead-in spends the budget unless the clause holding the
+	// question is read first (#4751).
+	LeadIn promptArmReport `json:"inline_lead_in"`
 }
 
 // pastedPreambles are what sits above a question in a real prompt: a repo
@@ -242,6 +247,17 @@ func pastedPreambles() []string {
 		"cmd/quokkabloom main.go install.go index.go search.go docs/registry Makefile go.mod",
 		"@quokkabloom/fetch.go @quokkabloom/fetch_test.go @quokkabloom/client.go @quokkabloom/retry.go @quokkabloom/dial.go",
 		"panic: runtime error: index out of range [7]\n\tgoroutine 41 [running]:\n\tquokkabloom/retry.dialLoop(0xc000123456)",
+	}
+}
+
+// leadIns are instructions typed in front of a question on the same line. Each
+// carries six terms of its own, the whole budget, and ends on a different
+// clause boundary.
+func leadIns() []string {
+	return []string{
+		"Without calling any MCP tool and without reading any files: ",
+		"Do not open the editor, terminal or browser tabs, answer from memory only. ",
+		"Before touching the quokkabloom staging rollout dashboard panels — ",
 	}
 }
 
@@ -608,6 +624,15 @@ func measurePrompt(seed int64) (promptReport, error) {
 		}
 	}
 	finishPromptArm(&report.Pasted, nil)
+	for i, c := range crossed {
+		lead := leadIns()[i%len(leadIns())]
+		report.LeadIn.Cases++
+		if fired, _ := promptBenchProbe(indexDir, c.Project, c.ID, prompt.Terms(lead+c.Question)); fired {
+			report.LeadIn.Fired++
+			report.LeadIn.Correct++
+		}
+	}
+	finishPromptArm(&report.LeadIn, nil)
 	finishPromptArm(&report.Real, realTerms)
 	finishPromptArm(&report.Negative, negTerms)
 	finishPromptArm(&report.Marathon, nil)

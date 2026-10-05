@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/vshulcz/deja-vu/internal/model"
 )
 
 // opencodeV2Fixture writes a store in opencode 2.x's schema, with the shapes a
@@ -363,5 +365,108 @@ insert into session_message values('e2','s1','agent-switched',2,1767409201500,17
 	}
 	if ss[0].Messages[0].Role != "user" || ss[0].Messages[1].Role != "assistant" {
 		t.Fatalf("roles = %q, %q", ss[0].Messages[0].Role, ss[0].Messages[1].Role)
+	}
+}
+
+// Kilo CLI keeps sessions in `session` and almost every turn in message and
+// part, while session_message holds switch events and the few turns sent
+// through its /api/session route, and there is no session_v2 (#4694). Read
+// only through session_message, every other session was dropped. s3 was
+// started through the API and continued with `kilo run -s`, so its turns are
+// split across both layouts, the API one first.
+func TestOpencodeReadsOldTurnsWhenSessionMessageHasAFewTurns(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not installed")
+	}
+	db := filepath.Join(t.TempDir(), "kilo.db")
+	script := `create table session(id text primary key, directory text, title text, time_created integer, time_updated integer);
+create table message(id text primary key, session_id text, time_created integer, data text);
+create table part(id text primary key, message_id text, data text);
+create table session_message(id text primary key, session_id text, type text, seq integer, time_created integer, time_updated integer, data text);
+insert into session values('s1','/w','turns in message and part',1767409200000,1767409300000);
+insert into message values('m1','s1',1767409201000,'{"role":"user","time":{"created":1767409201000}}');
+insert into part values('p1','m1','{"type":"text","text":"why does TestRetry flake","time":{"start":1767409201000}}');
+insert into session_message values('e1','s1','agent-switched',1,1767409200500,1767409200500,'{}');
+insert into session values('s2','/w','turns in session_message',1767409400000,1767409500000);
+insert into session_message values('t2','s2','user',1,1767409401000,1767409401000,'{"time":{"created":1767409401000},"text":"what changed in the retry policy"}');
+insert into session values('s3','/w','split across both layouts',1767409600000,1767409700000);
+insert into session_message values('t3','s3','user',1,1767409601000,1767409601000,'{"time":{"created":1767409601000},"text":"bump the backoff cap"}');
+insert into message values('m3','s3',1767409602000,'{"role":"user","time":{"created":1767409602000}}');
+insert into part values('p3','m3','{"type":"text","text":"and log each retry","time":{"start":1767409602000}}');`
+	if out, err := exec.Command("sqlite3", db, script).CombinedOutput(); err != nil {
+		t.Fatalf("sqlite setup: %v %s", err, out)
+	}
+	ss, err := ParseOpencodeDB(db)
+	if err != nil || len(ss) != 3 {
+		t.Fatalf("len=%d err=%v, want all three sessions", len(ss), err)
+	}
+	byID := map[string]model.Session{}
+	for _, s := range ss {
+		byID[s.ID] = s
+	}
+	for id, want := range map[string][]string{
+		"s1": {"why does TestRetry flake"},
+		"s2": {"what changed in the retry policy"},
+		"s3": {"bump the backoff cap", "and log each retry"},
+	} {
+		var got []string
+		for _, m := range byID[id].Messages {
+			got = append(got, m.Text)
+		}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("%s messages = %q, want %q", id, got, want)
+		}
+	}
+}
+
+// The since read of a store in both layouts: a session touched only in message
+// and part is read again with its session_message turns, or reading it again
+// would replace the indexed session with half of it.
+func TestOpencodeSinceReadsASplitSessionWhole(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not installed")
+	}
+	db := filepath.Join(t.TempDir(), "kilo.db")
+	script := `create table session(id text primary key, directory text, title text, time_created integer, time_updated integer);
+create table message(id text primary key, session_id text, time_created integer, time_updated integer, data text);
+create table part(id text primary key, message_id text, session_id text, time_created integer, time_updated integer, data text);
+create table session_message(id text primary key, session_id text, type text, seq integer, time_created integer, time_updated integer, data text);
+insert into session values('s3','/w','split',1767409600000,1767409600000);
+insert into session_message values('t3','s3','user',1,1767409601000,1767409601000,'{"time":{"created":1767409601000},"text":"bump the backoff cap"}');
+insert into message values('m3','s3',1770000000000,1770000000000,'{"role":"user","time":{"created":1770000000000}}');
+insert into part values('p3','m3','s3',1770000000000,1770000000000,'{"type":"text","text":"and log each retry","time":{"start":1770000000000}}');`
+	if out, err := exec.Command("sqlite3", db, script).CombinedOutput(); err != nil {
+		t.Fatalf("sqlite setup: %v %s", err, out)
+	}
+	// After the API turn, before the one sent with `kilo run -s`.
+	ss, err := ParseOpencodeDBSince(db, time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC))
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("len=%d err=%v", len(ss), err)
+	}
+	if m := ss[0].Messages; len(m) != 2 || m[0].Text != "bump the backoff cap" || m[1].Text != "and log each retry" {
+		t.Fatalf("messages = %+v, want both turns in order", m)
+	}
+}
+
+// A turn with no stamp keeps its place beside the turn read before it when a
+// split session is put back in order; compared as-is it sorted to the top.
+func TestSortTurnsByTimeKeepsUnstampedTurnsInPlace(t *testing.T) {
+	at := func(s int) time.Time { return time.Unix(1767409600+int64(s), 0) }
+	ms := []model.Message{
+		{Text: "unstamped first"},
+		{Text: "run 1", Time: at(2)},
+		{Text: "run 1 output"},
+		{Text: "run 2", Time: at(4)},
+		{Text: "api 1", Time: at(1)},
+		{Text: "api 2", Time: at(3)},
+	}
+	sortTurnsByTime(ms)
+	var got []string
+	for _, m := range ms {
+		got = append(got, m.Text)
+	}
+	want := "api 1|unstamped first|run 1|run 1 output|api 2|run 2"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("order = %q, want %q", strings.Join(got, "|"), want)
 	}
 }

@@ -292,3 +292,10 @@ runs the first executable it finds among `DEJA_BIN`, the path the install ran
 from, the `PATH`, and the usual install locations — so anything that can write
 those can already run code as that user. It is removed when the last target is
 uninstalled.
+
+The script also records the `XDG_*` base directories that differ from the
+defaults and the `DEJA_*` index, store-location and indexing settings that were
+set at install, and exports each one only when the hook's own environment
+leaves it unset. That is for hosts such as Muse Code that start hooks with only
+`HOME` and `PATH`. Keys, connection strings (`DEJA_EMBED_KEY`,
+`DEJA_HERMES_PG_DSN`) and debug switches are never written to it.

@@ -206,6 +206,9 @@ func TestDoctorJSONGolden(t *testing.T) {
 	// golden stores.
 	got = strings.ReplaceAll(got, "<tmp>/home/Library/Application Support/Code", "<tmp>/home/.config/Code")
 	got = strings.ReplaceAll(got, "<tmp>/home/AppData/Roaming/Code", "<tmp>/home/.config/Code")
+	// TRAE IDE keeps the same layout as VS Code.
+	got = strings.ReplaceAll(got, "<tmp>/home/Library/Application Support/Trae", "<tmp>/home/.config/Trae")
+	got = strings.ReplaceAll(got, "<tmp>/home/AppData/Roaming/Trae", "<tmp>/home/.config/Trae")
 	wantRaw, err := os.ReadFile(filepath.Join("testdata", "doctor.json"))
 	if err != nil {
 		t.Fatal(err)

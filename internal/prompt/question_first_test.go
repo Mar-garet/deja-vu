@@ -90,3 +90,107 @@ func TestWhichLineCountsAsTheAsk(t *testing.T) {
 		t.Errorf("trailing blank lines hid the ask: %q", ask)
 	}
 }
+
+// On one line an instruction in front of the question spends the six terms
+// before the question is reached, and the hook said nothing (#4751). The
+// clause holding the question leads, whatever boundary sets it off.
+func TestTheQuestionBehindAnInstructionOnOneLineIsWhatIsSearched(t *testing.T) {
+	cases := []struct {
+		name   string
+		prompt string
+		want   string
+	}{
+		{
+			"colon",
+			"Without calling any MCP tool and without reading any files: what batch flush threshold did we settle on for queue.go?",
+			"flush",
+		},
+		{
+			"full stop",
+			"Do not open the editor, terminal or browser tabs, answer from memory only. why does the zebraquux fetcher time out?",
+			"zebraquux",
+		},
+		{
+			"dash",
+			"Before touching the staging rollout dashboard panels and alerts — did we add jitter to the quokkabloom backoff?",
+			"quokkabloom",
+		},
+		{
+			"no question mark",
+			"Without calling any MCP tool and without reading any files: what jitter constant did the quokkabloom backoff use",
+			"quokkabloom",
+		},
+		{
+			"imperative",
+			"Do not open the editor, terminal or browser tabs, answer from memory only. start the quokkabloom retry now",
+			"quokkabloom",
+		},
+		{
+			"russian",
+			"Не вызывай инструменты, не открывай файлы, отвечай только по памяти: напомни, что мы решали про квоккаблум",
+			"квоккаблум",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Terms(c.prompt)
+			if !has(got, c.want) {
+				t.Errorf("terms %q carry nothing from the question (%q)", got, c.want)
+			}
+		})
+	}
+}
+
+// The control: the lead-in alone fills the budget, so the cases above are not
+// passing on spare room.
+func TestTheLeadInAloneFillsTheBudget(t *testing.T) {
+	for _, p := range []string{
+		"Without calling any MCP tool and without reading any files:",
+		"Do not open the editor, terminal or browser tabs, answer from memory only.",
+	} {
+		if got := Terms(p); len(got) < 6 {
+			t.Errorf("Terms(%q) = %q, want the full six", p, got)
+		}
+	}
+}
+
+// Words joined by a dot or colon with no space are one token, not a boundary,
+// and a line of one clause is not split. Among several, the last question is
+// the ask, and with no question the last clause is, as with lines.
+func TestWhichClauseCountsAsTheAsk(t *testing.T) {
+	for _, p := range []string{
+		"why does main.go fail at 10:30 on http://127.0.0.1:8080?",
+		"?! ...",
+	} {
+		if ask, rest := splitAsk(p); ask != "" || rest != p {
+			t.Errorf("splitAsk(%q) = (%q, %q), want no split", p, ask, rest)
+		}
+	}
+	ask, rest := splitAsk("is this thing on? no tools: why does the zebraquux fetcher time out? answer briefly")
+	if ask != "why does the zebraquux fetcher time out?" {
+		t.Errorf("ask = %q, want the last question", ask)
+	}
+	if rest != "is this thing on? no tools: answer briefly" {
+		t.Errorf("rest = %q, want every other clause kept", rest)
+	}
+	if ask, _ := splitAsk("Without reading any files: start the quokkabloom retry now"); ask != "start the quokkabloom retry now" {
+		t.Errorf("ask = %q, want the clause after the instruction", ask)
+	}
+	ask, rest = splitAsk("cmd/deja main.go\nno tools: why does the zebraquux fetcher time out?\ntrailing note")
+	if ask != "why does the zebraquux fetcher time out?" || rest != "cmd/deja main.go\nno tools:\ntrailing note" {
+		t.Errorf("splitAsk on a pasted prompt = (%q, %q)", ask, rest)
+	}
+}
+
+// A command quoted in a question is one thing being asked about: a colon or a
+// full stop inside backticks or double quotes is not a clause boundary.
+func TestAQuotedCommandInAQuestionIsNotCut(t *testing.T) {
+	p := "why does `git commit -m \"fix: x. y\"` fail on the zebraquux hook?"
+	if ask, rest := splitAsk(p); ask != "" || rest != p {
+		t.Errorf("splitAsk(%q) = (%q, %q), want no split", p, ask, rest)
+	}
+	got, want := Terms(p), []string{"git", "commit", "fail", "zebraquux", "hook"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("Terms = %q, want %q", got, want)
+	}
+}
