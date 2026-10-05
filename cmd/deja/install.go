@@ -892,6 +892,10 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return installCodeBuddyMCP(exe, uninstall)
 	case "codebuddy-auto":
 		return installCodeBuddyAuto(exe, uninstall)
+	case "workbuddy":
+		return installMCPJSON(workBuddyMCPPath(), exe, uninstall)
+	case "workbuddy-auto":
+		return installWorkBuddyAuto(exe, uninstall)
 	case "muse":
 		return installMuseMCP(exe, uninstall)
 	case "muse-auto":
@@ -4896,6 +4900,7 @@ func installTargetNames() []string {
 		"antigravity", "antigravity-auto",
 		"qwen", "qwen-auto",
 		"codebuddy", "codebuddy-auto",
+		"workbuddy", "workbuddy-auto",
 		"trae", "trae-auto",
 		"muse", "muse-auto",
 		"kimi", "kimi-auto",
@@ -5065,7 +5070,8 @@ func existingTargetChecks() map[string]string {
 		"gjc":          sources.GjcRoot(),
 		"zcode":        sources.ZCodeRoot(),
 		"commandcode":  commandCodeFirstRoot(),
-		"codebuddy":    sources.CodeBuddyRoot(),                       // its session store; deja creates the config dir
+		"codebuddy":    sources.CodeBuddyRoot(), // its session store; deja creates the config dir
+		"workbuddy":    filepath.Join(sources.WorkBuddyConfigDir(), "projects"),
 		"trae":         filepath.Join(sources.TraeRoot(), "sessions"), // the same: deja creates traecli.toml
 		"muse":         sources.MuseRoot(),                            // the same: deja creates ~/.config/muse
 		// Reasonix's own config.toml, which it writes on first run. deja

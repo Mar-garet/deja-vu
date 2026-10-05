@@ -28,11 +28,16 @@ import (
 // deja's hooks already answer in.
 
 func codeBuddyMCPPath() string {
-	cfg := sources.CodeBuddyConfigDir()
 	base := homeDir()
 	if v := strings.TrimSpace(os.Getenv("CODEBUDDY_CONFIG_DIR")); v != "" {
 		base = v
 	}
+	return codeBuddyMCPPathIn(sources.CodeBuddyConfigDir(), base, ".mcp.json")
+}
+
+// codeBuddyMCPPathIn is the first of the files the agent reads that exists,
+// else <config>/<create>.
+func codeBuddyMCPPathIn(cfg, base, create string) string {
 	candidates := []string{
 		filepath.Join(cfg, ".mcp.json"),
 		filepath.Join(cfg, "mcp.json"),
@@ -43,11 +48,25 @@ func codeBuddyMCPPath() string {
 			return p
 		}
 	}
-	return candidates[0]
+	return filepath.Join(cfg, create)
 }
 
 func codeBuddySettingsPath() string {
 	return filepath.Join(sources.CodeBuddyConfigDir(), "settings.json")
+}
+
+// WorkBuddy runs the same agent with CODEBUDDY_CONFIG_DIR set to its own home
+// (buildAgentCliRuntimeEnv in the app), so its wiring is CodeBuddy's in that
+// directory. A new MCP file is the app's own mcp.json, the one its server
+// settings write: the agent reads only the first of .mcp.json and mcp.json,
+// and a .mcp.json from deja would hide every server added in the app.
+func workBuddyMCPPath() string {
+	cfg := sources.WorkBuddyConfigDir()
+	return codeBuddyMCPPathIn(cfg, cfg, "mcp.json")
+}
+
+func workBuddySettingsPath() string {
+	return filepath.Join(sources.WorkBuddyConfigDir(), "settings.json")
 }
 
 // codeBuddyHookWiring is every event deja installs into CodeBuddy. Bash and
@@ -69,9 +88,8 @@ func installCodeBuddyMCP(exe string, uninstall bool) (installResult, error) {
 	return installMCPJSON(codeBuddyMCPPath(), exe, uninstall)
 }
 
-func installCodeBuddyHooks(exe string, uninstall bool) (installResult, error) {
+func installCodeBuddyHooksIn(path, exe string, uninstall bool) (installResult, error) {
 	exe = hookExeFor(exe, uninstall)
-	path := codeBuddySettingsPath()
 	var res installResult
 	for i, h := range codeBuddyHookWiring {
 		r, err := installSettingsHookCmd(path, h.Event, h.Matcher, codeBuddyHookTimeout, hookRun(exe, h.Sub), uninstall)
@@ -88,11 +106,19 @@ func installCodeBuddyHooks(exe string, uninstall bool) (installResult, error) {
 // installCodeBuddyAuto writes the hooks first: a settings file deja refuses
 // should leave nothing half-wired (#2745).
 func installCodeBuddyAuto(exe string, uninstall bool) (installResult, error) {
-	hooks, err := installCodeBuddyHooks(exe, uninstall)
+	return installCodeBuddyAutoIn(codeBuddySettingsPath(), codeBuddyMCPPath(), exe, uninstall)
+}
+
+func installWorkBuddyAuto(exe string, uninstall bool) (installResult, error) {
+	return installCodeBuddyAutoIn(workBuddySettingsPath(), workBuddyMCPPath(), exe, uninstall)
+}
+
+func installCodeBuddyAutoIn(settings, mcpPath, exe string, uninstall bool) (installResult, error) {
+	hooks, err := installCodeBuddyHooksIn(settings, exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
-	mcp, err := installCodeBuddyMCP(exe, uninstall)
+	mcp, err := installMCPJSON(mcpPath, exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
