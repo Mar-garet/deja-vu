@@ -46,6 +46,9 @@ const (
 	// The same plugin in the Agent Plugins v1 layout, which directories such as
 	// awesome-copilot read: plugin.json at the plugin root.
 	claudeAgentPlugin = "claude-plugin/plugin.json"
+	// The CodeBuddy marketplace installs from the default branch too, so the
+	// version committed here is the one its listing shows.
+	codebuddyPlugin = "codebuddy-plugin/.codebuddy-plugin/plugin.json"
 	// The Gemini gallery crawls the manifest at the repository root and shows
 	// its version, and `gemini extensions install` reads the same file.
 	geminiExtension = "gemini-extension.json"
@@ -161,6 +164,7 @@ func targets() map[string]func(pins) ([]byte, error) {
 		codexPlugin:       renderPluginVersion(codexPlugin),
 		claudePlugin:      renderPluginVersion(claudePlugin),
 		claudeAgentPlugin: renderPluginVersion(claudeAgentPlugin),
+		codebuddyPlugin:   renderPluginVersion(codebuddyPlugin),
 		geminiExtension:   renderPluginVersion(geminiExtension),
 		kimiPlugin:        renderPluginVersion(kimiPlugin),
 		kimiPacked:        renderPluginVersion(kimiPacked),

@@ -36,6 +36,7 @@ This registry records observed on-disk session formats for the harnesses that de
 | [Command Code](commandcode.md) | session header + message envelopes, JSONL per session |
 | [ZCode](zcode.md) | flat role/content JSONL per session, plus the CLI's OpenCode-schema SQLite |
 | [CodeWhale](codewhale.md) | one JSON document per session, Anthropic-shaped content blocks |
+| [CodeBuddy Code](codebuddy.md) | Claude Code's project tree, OpenAI Responses-style items per line |
 | [Reasonix](reasonix.md) | flat role/content JSONL per session, clock and workspace in a sidecar; 1.x keeps a zstd-framed event log per session directory |
 | [TRAE CLI](trae.md) | Codex rollouts under `~/.trae/cli`, user turns from events only, tool calls in `history_mutation` |
 | [Muse Code](muse.md) | event-sourced JSONL per session directory, sharded by day |

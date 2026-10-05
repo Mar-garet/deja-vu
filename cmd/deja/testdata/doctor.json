@@ -105,6 +105,15 @@
       "indexed_sessions": 0
     },
     {
+      "name": "codebuddy",
+      "state": "missing",
+      "paths": [
+        "<tmp>/home/.codebuddy/projects"
+      ],
+      "files": 0,
+      "indexed_sessions": 0
+    },
+    {
       "name": "kimi",
       "state": "missing",
       "paths": [
@@ -393,6 +402,11 @@
       "path": "<tmp>/home/.qwen/settings.json"
     },
     {
+      "name": "codebuddy",
+      "state": "config-missing",
+      "path": "<tmp>/home/.codebuddy/.mcp.json"
+    },
+    {
       "name": "kimi",
       "state": "config-missing",
       "path": "<tmp>/home/.kimi-code/mcp.json"
@@ -553,6 +567,11 @@
       "name": "qwen",
       "state": "missing",
       "path": "<tmp>/home/.qwen/settings.json"
+    },
+    {
+      "name": "codebuddy",
+      "state": "missing",
+      "path": "<tmp>/home/.codebuddy/settings.json"
     },
     {
       "name": "kimi",

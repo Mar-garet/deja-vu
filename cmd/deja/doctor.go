@@ -929,6 +929,12 @@ func doctorHarnesses(w io.Writer, dir string) {
 	printFilesSkippingIn("qwen", qwenRoot, []string{qwenRoot}, doctorExists(qwenRoot),
 		sources.QwenSessionFiles(), sources.QwenSubagentFile, sources.QwenSidecarFiles()...)
 
+	// CodeBuddy's tree is Claude Code's: sub-agents under the session that
+	// spawned them, a meta file per session and a memory/ directory beside.
+	cbRoots := sources.CodeBuddyRoots()
+	printFilesSkippingIn("codebuddy", strings.Join(cbRoots, string(os.PathListSeparator)), cbRoots, doctorAnyExists(cbRoots),
+		sources.CodeBuddySessionFiles(), sources.CodeBuddySubagentFile, sources.CodeBuddySidecarFiles()...)
+
 	kimiRoot := filepath.Join(sources.KimiRoot(), "sessions")
 	printFilesSkippingIn("kimi", kimiRoot, []string{kimiRoot}, doctorExists(kimiRoot),
 		sources.KimiSessionFiles(), sources.KimiSubagentFile, sources.KimiSidecarFiles()...)
@@ -1953,6 +1959,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"antigravity", filepath.Join(antigravityConfigHome(), "mcp_config.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"grok", filepath.Join(sources.GrokHome(), "config.toml"), doctorTOMLWired, doctorTOMLDejaKeys},
 		{"qwen", filepath.Join(sources.QwenConfigDir(), "settings.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
+		{"codebuddy", codeBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"kimi", filepath.Join(sources.KimiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"cline", sources.ClineMCPSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"pi", filepath.Join(sources.PiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},

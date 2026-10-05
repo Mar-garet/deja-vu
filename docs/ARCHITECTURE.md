@@ -35,6 +35,7 @@ against the loader list.
 | prime-agent (PrimeIntellect) | `prime.go` | JSONL transcripts under `~/.prime/agent/sessions` |
 | DeepSeek Harness | `deepseek.go` | zstd-compressed session JSONL under `~/.dsh/sessions` |
 | CodeWhale | `codewhale.go` | one JSON document per session under `${CODEWHALE_HOME:-~/.codewhale}/sessions`, and the pre-rebrand `~/.deepseek` root |
+| CodeBuddy Code | `codebuddy.go` | JSONL per session under `${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<cwd>/`, OpenAI Responses-style items; WorkBuddy's `~/.workbuddy` too |
 | Reasonix | `reasonix.go`, `reasonix_stores.go`, `reasonix_v4.go` | under `~/.reasonix` (`%APPDATA%\reasonix` on Windows): flat role/content JSONL in `sessions/` and `projects/<slug>/sessions/`, and the 1.x session directories (`sessions-v4/<id>/`, `desktop-sessions-v5/by-id/<id>/`) whose `events.frames` log is zstd-framed JSON |
 | TRAE CLI | `trae.go`, `codex.go` | Codex rollouts under `${TRAE_HOME:-~/.trae}/cli` (`sessions/`, `archived_sessions/`, `history.jsonl`); user turns from `user_message` and `item_completed` events only, tool calls from `history_mutation` |
 | Muse Code | `muse.go` | one event-sourced JSONL per session under `${XDG_DATA_HOME:-~/.local/share}/muse/sessions/YYYY/MM/DD/<id>/`, `retained_frame` children unwrapped; subagent logs under `subagent/` only with `DEJA_INCLUDE_SUBAGENTS=1` |

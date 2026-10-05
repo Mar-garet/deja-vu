@@ -47,6 +47,7 @@ func TestFormatRegistryConformance(t *testing.T) {
 		"DEJA_ZED_ROOT", "DEJA_ZED_DB", "FLATPAK_XDG_DATA_HOME",
 		"DEJA_REASONIX_ROOT", "REASONIX_HOME", "REASONIX_STATE_HOME",
 		"DEJA_MUSE_ROOTS",
+		"DEJA_CODEBUDDY_ROOTS", "CODEBUDDY_CONFIG_DIR", "WORKBUDDY_CONFIG_DIR",
 		"DEJA_NOTES_FILE",
 	} {
 		t.Setenv(key, "")
@@ -188,6 +189,8 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 		sessions, err = ParseCodeWhaleFile(path)
 	case "muse":
 		sessions, err = ParseMuseFile(path)
+	case "codebuddy":
+		sessions, err = ParseCodeBuddyFile(path)
 	case "reasonix":
 		// The 1.x fixture is zstd frames, which only the CLI reads.
 		if filepath.Base(path) == "events.frames" && !ZstdAvailable() {
@@ -367,7 +370,7 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 
 // registryFixturesWithCalls are the registry fixtures whose tool calls are
 // read into work records.
-var registryFixturesWithCalls = map[string]bool{"deepseek": true, "continue": true, "trae": true, "muse": true}
+var registryFixturesWithCalls = map[string]bool{"deepseek": true, "continue": true, "trae": true, "muse": true, "codebuddy": true}
 
 func validateRegistrySessions(t *testing.T, id string, sessions []model.Session) {
 	t.Helper()
