@@ -272,6 +272,12 @@ func ParseCodexHistory(path string) ([]model.Session, error) {
 }
 
 func ParseCodexHistoryFromOffset(path string, offset int64) ([]model.Session, error) {
+	return parseRolloutHistory(path, offset, "codex")
+}
+
+// parseRolloutHistory reads a codex-rs history.jsonl for the harness that
+// wrote it: Codex's own, or a fork's beside its own sessions.
+func parseRolloutHistory(path string, offset int64, harness string) ([]model.Session, error) {
 	// A line whose session has a rollout repeats that rollout's prompt, a
 	// moment earlier and to the second, so nothing collapses the pair. The
 	// full build has dropped those since history.jsonl was first read; the
@@ -294,7 +300,7 @@ func ParseCodexHistoryFromOffset(path string, offset int64) ([]model.Session, er
 		if !ok {
 			i = len(out)
 			at[id] = i
-			out = append(out, model.Session{Harness: "codex", ID: id, Project: "history", Path: path})
+			out = append(out, model.Session{Harness: harness, ID: id, Project: "history", Path: path})
 		}
 		out[i].Touch(t)
 		out[i].Messages = append(out[i].Messages, model.Message{Role: "user", Text: txt, Time: t})
@@ -307,6 +313,12 @@ func ParseCodexRollout(path string) ([]model.Session, error) {
 }
 
 func ParseCodexRolloutFromOffset(path string, offset int64) ([]model.Session, error) {
+	return parseRolloutFile(path, offset, "codex")
+}
+
+// parseRolloutFile reads one codex-rs rollout, plain or compressed, as the
+// sessions of the harness that wrote it.
+func parseRolloutFile(path string, offset int64, harness string) ([]model.Session, error) {
 	// A compressed rollout is read through the same scanner as a plain one, by
 	// decompressing it to a temporary file first — the pattern openclaw's
 	// archives already use, because every transcript parser here takes a path.
@@ -314,22 +326,22 @@ func ParseCodexRolloutFromOffset(path string, offset int64) ([]model.Session, er
 	// before appending, so the offset the incremental pass carries for a
 	// compressed file is a whole-file read (#3640).
 	if codexCompressed(path) {
-		plain, err := zstdToTempNamed(path, "codex")
+		plain, err := zstdToTempNamed(path, harness)
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = os.Remove(plain) }()
-		ss, err := parseCodexRolloutPath(plain, 0, codexSessionID(path), filepath.Base(filepath.Dir(path)))
+		ss, err := parseCodexRolloutPath(plain, 0, codexSessionID(path), filepath.Base(filepath.Dir(path)), harness)
 		for i := range ss {
 			ss[i].Path = path
 		}
 		return ss, err
 	}
-	return parseCodexRolloutPath(path, offset, codexSessionID(path), filepath.Base(filepath.Dir(path)))
+	return parseCodexRolloutPath(path, offset, codexSessionID(path), filepath.Base(filepath.Dir(path)), harness)
 }
 
-func parseCodexRolloutPath(path string, offset int64, id, project string) ([]model.Session, error) {
-	s := model.Session{Harness: "codex", ID: id, Project: project, Path: path}
+func parseCodexRolloutPath(path string, offset int64, id, project, harness string) ([]model.Session, error) {
+	s := model.Session{Harness: harness, ID: id, Project: project, Path: path}
 	// An appended rollout is parsed from where the last read stopped, so the
 	// session_meta line at the top is never seen again and the id falls back
 	// to the filename — which matches the real ThreadId in 0 of 28 rollouts on
@@ -380,6 +392,10 @@ func parseCodexRolloutWithScanner(s model.Session, idSettled bool, knownCWD stri
 	// a child's turns under its parent and left the child unreachable (#3933).
 	metaSeen := idSettled
 	var events []model.Message
+	var trae *traeTurns
+	if s.Harness == "trae" {
+		trae = newTraeTurns()
+	}
 	err := scan(func(m map[string]any) {
 		t := parseTimeAny(m["timestamp"])
 		s.Touch(t)
@@ -430,6 +446,10 @@ func parseCodexRolloutWithScanner(s model.Session, idSettled bool, knownCWD stri
 				s.Project = projectName(c)
 			}
 			s.Kind, s.Parent = codexLineage(payload)
+			return
+		}
+		if trae != nil {
+			trae.record(&s, m, payload, cwd, t, calls)
 			return
 		}
 		switch pt, _ := payload["type"].(string); pt {
@@ -486,6 +506,9 @@ func parseCodexRolloutWithScanner(s model.Session, idSettled bool, knownCWD stri
 			s.Messages = append(s.Messages, model.Message{Role: role, Text: txt, Time: t})
 		}
 	})
+	if trae != nil {
+		trae.finish(&s)
+	}
 	// Only when the roled stream said nothing: an older rollout that carries
 	// its turns as events alone still has to be readable.
 	if len(s.Messages) == 0 {

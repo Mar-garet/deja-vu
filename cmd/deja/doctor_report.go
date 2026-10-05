@@ -521,6 +521,7 @@ func doctorStoreChecks() []doctorStoreCheck {
 	checks := []doctorStoreCheck{
 		{"claude", sources.ClaudeRoots(), sources.ClaudeFiles(), sources.ParseClaudeFile},
 		{"codex", sources.CodexRoots(), sources.CodexFiles(), parseDoctorCodex},
+		{"trae", []string{sources.TraeRoot()}, sources.TraeFiles(), parseDoctorTrae},
 		{"opencode", []string{sources.OpencodeDB()}, presentDoctorFile(sources.OpencodeDB()), doctorProbeOpencode},
 		{"aider", aiderPaths, sources.AiderFiles(), sources.ParseAiderFile},
 		{"gemini", []string{sources.GeminiRoot()}, sources.GeminiChatFiles(), sources.ParseGeminiFile},
@@ -675,6 +676,13 @@ func parseDoctorCodex(path string) ([]model.Session, error) {
 		return sources.ParseCodexHistory(path)
 	}
 	return sources.ParseCodexRollout(path)
+}
+
+func parseDoctorTrae(path string) ([]model.Session, error) {
+	if filepath.Base(path) == "history.jsonl" {
+		return sources.ParseTraeHistory(path)
+	}
+	return sources.ParseTraeRollout(path)
 }
 
 // parseDoctorOpenClaw reads whichever OpenClaw store the newest path is: the

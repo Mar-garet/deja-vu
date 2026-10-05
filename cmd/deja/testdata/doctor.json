@@ -21,6 +21,15 @@
       "indexed_sessions": 0
     },
     {
+      "name": "trae",
+      "state": "missing",
+      "paths": [
+        "<tmp>/trae"
+      ],
+      "files": 0,
+      "indexed_sessions": 0
+    },
+    {
       "name": "opencode",
       "state": "missing",
       "paths": [

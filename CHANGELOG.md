@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- TRAE CLI 2.0 sessions are read from `~/.trae/cli` (`TRAE_HOME`, `DEJA_TRAE_ROOT`) as harness `trae`, with their own doctor row and `traex resume`. Prompts come only from TRAE's user events, so the runtime context it writes under the user role is not indexed as something you said (#4680).
+
 ## [0.21.6] - 2026-10-04
 
 This release is mostly about what reaches the model, and when. After a

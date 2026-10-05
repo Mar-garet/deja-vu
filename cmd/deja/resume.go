@@ -270,6 +270,14 @@ func resumeCommand(s model.Session) (string, string, error) {
 			return "", "", fmt.Errorf("session %s is a one-off codex exec entry, nothing to resume", digest.Short(s.ID))
 		}
 		return "", "codex resume " + s.ID, nil
+	case "trae":
+		// TRAE CLI keeps codex's `resume <uuid>` subcommand, and traex is the
+		// shortest of its three names (agentsview's resume table, botmux's
+		// adapter).
+		if s.Project == "history" {
+			return "", "", fmt.Errorf("session %s is a history.jsonl entry with no rollout, nothing to resume", digest.Short(s.ID))
+		}
+		return "", "traex resume " + s.ID, nil
 	case "opencode":
 		// opencode sessions carry their project directory. opencode reopens a
 		// session from anywhere, so a deleted one is left out rather than
