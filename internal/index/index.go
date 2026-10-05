@@ -675,7 +675,11 @@ import (
 // 65: a CodeBuddy command carries the `→ exit N` its result text states, and
 // the instruction prompt /compact writes as a user record is not indexed as
 // the person's words (#4703, #4704).
-const version = 65
+//
+// 66 drops the `Stdout: `/`Stderr: `/`Output: ` label CodeBuddy and Qwen Code
+// put in front of a shell call's first line, so a fix learned there is keyed
+// on the error itself (#4717). Only a rebuild re-derives the stored pairs.
+const version = 66
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an
