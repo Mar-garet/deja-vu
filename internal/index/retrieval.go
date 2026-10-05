@@ -2088,6 +2088,35 @@ func RecentProjectsUnder(dir string, projects []string, root string, perName int
 	if err != nil {
 		return nil, err
 	}
+	return sessionsForMetas(dir, recentProjectMetas(m, projects, root, perName))
+}
+
+// RecentProjectMetasUnder is RecentProjectsUnder without the records, and
+// only for sessions updated since the given time: the manifest rows alone,
+// for a caller that picks one before it reads any text. The time cut comes
+// first, so the scope rules run over a handful of rows rather than the store.
+func RecentProjectMetasUnder(dir string, projects []string, root string, since time.Time, perName int) ([]SessionMeta, error) {
+	if dir == "" {
+		dir = DefaultDir()
+	}
+	m, err := readManifestCached(dir)
+	if err != nil {
+		return nil, err
+	}
+	fresh := make(map[string]SessionMeta)
+	for k, meta := range m.Sessions {
+		if !meta.Updated.Before(since) {
+			fresh[k] = meta
+		}
+	}
+	if len(fresh) == 0 {
+		return nil, nil
+	}
+	m.Sessions = fresh
+	return recentProjectMetas(m, projects, root, perName), nil
+}
+
+func recentProjectMetas(m Manifest, projects []string, root string, perName int) []SessionMeta {
 	seen := map[string]bool{}
 	var metas []SessionMeta
 	for _, project := range projects {
@@ -2126,7 +2155,7 @@ func RecentProjectsUnder(dir string, projects []string, root string, perName int
 		}
 		metas = append(metas, under...)
 	}
-	return sessionsForMetas(dir, metas)
+	return metas
 }
 
 // metasWorkingUnder is the sessions whose touched files sit under root and

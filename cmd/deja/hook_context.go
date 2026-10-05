@@ -572,7 +572,9 @@ func runHookContextMode(dir string, plain, once bool) error {
 		lead = shellRecallLead(lead)
 	}
 	digest = lead + digest
-	if tip := limitHandoffTip(dir); tip != "" {
+	if tip := limitHandoffTip(dir, hookCWD(hookProjectPath(input.CWD, input.WorkspaceRoots)), append(self, input.SessionID), func() string {
+		return startingHarness(dir, input.SessionID, input.TranscriptPath)
+	}); tip != "" {
 		digest += "\n" + tip
 	}
 	digest = frameRecall(digest)
@@ -1472,10 +1474,10 @@ func startDetachedWarmup(exe, sentinel string) error {
 }
 
 // limitMarkers are the strings harnesses print when a session dies on quota.
+// Matched only in a short message: a reply that discusses quotas is not one.
 var limitMarkers = []string{
 	"usage limit reached",
 	"rate limit reached",
-	"You've reached your usage limit",
 	"usage limit will reset",
 	"quota exceeded",
 	"out of free quota",
@@ -1484,37 +1486,115 @@ var limitMarkers = []string{
 	"weekly limit",
 }
 
-// limitHandoffTip checks whether the newest indexed session ended on a usage
-// limit and, if so, suggests continuing in a different agent via handoff —
-// the cross-agent escape hatch is exactly what limits are for.
-func limitHandoffTip(dir string) string {
-	recent, err := index.Recent(dir, 1)
-	if err != nil || len(recent) == 0 {
+// limitNotice reports whether a message is a harness's usage-limit or overload
+// notice. Claude Code prints "You've hit your session limit · resets 2:40am",
+// "You've hit your limit · resets 3pm", "You've reached your Fable limit" and
+// "API Error: 529 Overloaded" (#4758); the old list knew only the weekly form.
+func limitNotice(text string) bool {
+	t := strings.TrimSpace(text)
+	if t == "" || len(t) > 300 {
+		return false
+	}
+	if (strings.HasPrefix(t, "You've hit your ") || strings.HasPrefix(t, "You've reached your ")) && strings.Contains(t, "limit") {
+		return true
+	}
+	lower := strings.ToLower(t)
+	if strings.HasPrefix(lower, "api error: ") && (strings.Contains(lower, "529") || strings.Contains(lower, "overloaded")) {
+		return true
+	}
+	for _, marker := range limitMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// limitHandoffWindow is how long after a limit the note still applies.
+const limitHandoffWindow = 6 * time.Hour
+
+// limitHandoffTip checks whether the newest session of this project from
+// another harness ended on a usage limit and, if so, suggests continuing via
+// handoff. The newest session on the machine was the wrong one to read: any
+// parallel session, subagent or the starting session itself pushed the
+// limited one out (#4758). starting names the harness of the session that is
+// starting; it is asked only when there is a fresh candidate to rule on.
+func limitHandoffTip(dir, cwd string, self []string, starting func() string) string {
+	// Manifest rows inside the window first: loading every recent session of
+	// the project cost 265 ms of a session start on a real store, for a note
+	// that almost never applies.
+	since := time.Now().Add(-limitHandoffWindow)
+	metas, err := index.RecentProjectMetasUnder(dir, digest.ProjectNameCandidates(cwd), cwd, since, 12)
+	if err != nil || len(metas) == 0 {
 		return ""
 	}
-	s := recent[0]
-	// Only a fresh limit matters; an old one is stale advice.
-	if s.Updated.IsZero() || time.Since(s.Updated) > 6*time.Hour {
+	skip := make(map[string]bool, len(self))
+	for _, id := range self {
+		skip[id] = true
+	}
+	pol := policy.Load()
+	var fresh []index.SessionMeta
+	for _, m := range metas {
+		if skip[m.ID] || sources.HarnessExcluded(m.Harness) || !pol.Allows(policy.ActivationAuto, m.Project) {
+			continue
+		}
+		fresh = append(fresh, m)
+	}
+	if len(fresh) == 0 {
 		return ""
 	}
-	// Recent returns metadata only; the tail scan needs the transcript.
-	// Snapshot read ONLY: findByPrefix would run a full synchronous index
-	// (10s on a dirty multi-GB store) inside every agent's session start —
-	// a garnish line must never cost startup time.
-	if full, ok, err := index.FindByPrefix(dir, s.ID); err == nil && ok {
-		s = full
+	harness := ""
+	if starting != nil {
+		harness = starting()
+	}
+	var pick *index.SessionMeta
+	for i := range fresh {
+		if harness != "" && fresh[i].Harness == harness {
+			continue
+		}
+		if pick == nil || fresh[i].Updated.After(pick.Updated) {
+			pick = &fresh[i]
+		}
+	}
+	if pick == nil {
+		return ""
+	}
+	s, ok, err := index.FindByIdentity(dir, pick.Harness, pick.ID)
+	if err != nil || !ok {
+		return ""
 	}
 	tail := s.Messages
 	if len(tail) > 4 {
 		tail = tail[len(tail)-4:]
 	}
 	for _, m := range tail {
-		lower := strings.ToLower(m.Text)
-		for _, marker := range limitMarkers {
-			if strings.Contains(lower, strings.ToLower(marker)) {
-				return fmt.Sprintf("Note: the most recent %s session appears to have hit a usage limit. If that blocks the user again, suggest `deja handoff --to <agent>` — it packages the live context and continues the work in another agent.", s.Harness)
-			}
+		if m.Role != "user" && limitNotice(m.Text) {
+			return fmt.Sprintf("Note: the most recent %s session in this project appears to have hit a usage limit. If that blocks the user again, suggest `deja handoff --to <agent>` — it packages the live context and continues the work in another agent.", s.Harness)
 		}
+	}
+	return ""
+}
+
+// startingHarness is the harness of the session a hook fires for, or "" when
+// nothing says: its transcript's head, where that transcript lives, or the
+// index for a session that is resuming.
+func startingHarness(dir, id, transcript string) string {
+	if id == "" {
+		return ""
+	}
+	if h, ok := askerHead(id, transcript); ok && h.Harness != "" {
+		return h.Harness
+	}
+	if transcript != "" {
+		if sources.IsCodeBuddyTranscript(transcript) {
+			return "codebuddy"
+		}
+		if sources.UnderClaudeRoot(transcript) {
+			return "claude"
+		}
+	}
+	if s, ok, err := index.FindByPrefix(dir, id); err == nil && ok && s.ID == id {
+		return s.Harness
 	}
 	return ""
 }

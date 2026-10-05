@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The session-start note about a limit hit in another agent fires on Claude Code's real wording ("You've hit your session limit", "You've hit your limit", "API Error: 529 Overloaded"), and reads the newest session of this project from another harness; a parallel session anywhere on the machine used to hide it (#4758).
 - The per-prompt hook searches on the question even when an instruction comes before it on the same line ("without reading any files: what jitter constant…"); the instruction used to take all six search terms and the hook stayed silent (#4751).
 - Kilo CLI: a store where a few sessions went through Kilo's `/api/session` route indexes every session again; deja read only those few and dropped the rest, and a session continued from `kilo run` keeps both halves (#4694).
 - WorkBuddy AI desktop chats index with your prompts: the app wraps each one in a `<user_query>` envelope, and deja read the whole record as harness context (#4734).

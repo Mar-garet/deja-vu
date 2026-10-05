@@ -102,25 +102,115 @@ func TestPromptSearchTerms(t *testing.T) {
 	}
 }
 
-func TestLimitHandoffTip(t *testing.T) {
+// limitStore writes a Claude session in alpha that ended on last, ten minutes
+// ago, written the way Claude Code writes a harness notice.
+func limitStore(t *testing.T, last string) string {
+	t.Helper()
 	withStatsStores(t)
-	claudeRoot := os.Getenv("DEJA_CLAUDE_ROOT")
-	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-	writeClaudeFixture(t, filepath.Join(claudeRoot, "-tmp-alpha", "lim.jsonl"), "lim", []string{
-		`{"type":"user","sessionId":"lim","timestamp":"` + now + `","message":{"role":"user","content":"continue please"}}`,
-		`{"type":"assistant","sessionId":"lim","timestamp":"` + now + `","message":{"role":"assistant","content":"You have reached your usage limit reached for today"}}`,
+	at := time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339)
+	writeClaudeFixture(t, filepath.Join(os.Getenv("DEJA_CLAUDE_ROOT"), "-tmp-alpha", "lim.jsonl"), "lim", []string{
+		`{"type":"user","sessionId":"lim","cwd":"/tmp/alpha","timestamp":"` + at + `","message":{"role":"user","content":"continue the export rewrite"}}`,
+		`{"type":"assistant","sessionId":"lim","cwd":"/tmp/alpha","timestamp":"` + at + `","isApiErrorMessage":true,"message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":` + mustJSON(t, last) + `}]}}`,
 	})
+	cwd := filepath.Join(t.TempDir(), "tmp", "alpha")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return cwd
+}
+
+// limitSideSession writes a session updated a minute ago that ended normally.
+func limitSideSession(t *testing.T, harness, project, id string) {
+	t.Helper()
+	at := time.Now().Add(-time.Minute).UTC()
+	switch harness {
+	case "claude":
+		stamp := at.Format(time.RFC3339)
+		writeClaudeFixture(t, filepath.Join(os.Getenv("DEJA_CLAUDE_ROOT"), "-tmp-"+project, id+".jsonl"), id, []string{
+			`{"type":"user","sessionId":"` + id + `","cwd":"/tmp/` + project + `","timestamp":"` + stamp + `","message":{"role":"user","content":"look at the logs"}}`,
+			`{"type":"assistant","sessionId":"` + id + `","cwd":"/tmp/` + project + `","timestamp":"` + stamp + `","message":{"role":"assistant","content":"the logs are clean"}}`,
+		})
+	case "codex":
+		writeCodexRolloutIn(t, os.Getenv("DEJA_CODEX_ROOT"), id, "/tmp/"+project, at, "look at the logs", "the logs are clean")
+	}
+}
+
+func writeCodexRolloutIn(t *testing.T, root, id, cwd string, at time.Time, question, answer string) {
+	t.Helper()
+	stamp := at.Format(time.RFC3339)
+	path := filepath.Join(root, "sessions", at.Format("2006"), at.Format("01"), at.Format("02"),
+		"rollout-"+at.Format("2006-01-02T15-04-05")+"-"+id+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join([]string{
+		`{"type":"session_meta","timestamp":"` + stamp + `","payload":{"id":"` + id + `","session_id":"` + id + `","cwd":` + mustJSON(t, cwd) + `}}`,
+		`{"type":"message","timestamp":"` + stamp + `","payload":{"role":"user","content":` + mustJSON(t, question) + `}}`,
+		`{"type":"message","timestamp":"` + stamp + `","payload":{"role":"assistant","content":` + mustJSON(t, answer) + `}}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func limitTipAt(t *testing.T, cwd string, self []string, starting string) string {
+	t.Helper()
 	if err := index.Ensure(index.DefaultDir(), "", true, nil); err != nil {
 		t.Fatal(err)
 	}
-	recent, err := index.Recent(index.DefaultDir(), 1)
-	if err != nil || len(recent) == 0 {
-		t.Fatalf("recent: %v %v", recent, err)
+	return limitHandoffTip(index.DefaultDir(), cwd, self, func() string { return starting })
+}
+
+// The wordings Claude Code prints, not a phrase made up for the test: the
+// session form is the one the 5-hour window shows, and none of the first
+// three matched before #4758.
+func TestLimitHandoffTipRealWordings(t *testing.T) {
+	for _, last := range []string{
+		"You've hit your session limit · resets 2:40am (UTC)",
+		"You've hit your limit · resets 3pm",
+		"You've hit your weekly limit · resets 10am (UTC)",
+		"You've reached your Fable limit. Run /usage-credits to continue or switch models with /model.",
+		"API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment.",
+	} {
+		t.Run(last[:20], func(t *testing.T) {
+			cwd := limitStore(t, last)
+			tip := limitTipAt(t, cwd, nil, "codex")
+			if !strings.Contains(tip, "claude session") || !strings.Contains(tip, "deja handoff") {
+				t.Fatalf("%q: tip = %q", last, tip)
+			}
+		})
 	}
-	t.Logf("newest: id=%s updated=%v msgs=%d", recent[0].ID, recent[0].Updated, len(recent[0].Messages))
-	tip := limitHandoffTip(index.DefaultDir())
-	if !strings.Contains(tip, "usage limit") || !strings.Contains(tip, "deja handoff") {
+	// Control: the same session ending on an answer says nothing.
+	cwd := limitStore(t, "Fixed: the exporter releases the lock before the upload.")
+	if tip := limitTipAt(t, cwd, nil, "codex"); tip != "" {
+		t.Fatalf("a session that ended normally got %q", tip)
+	}
+}
+
+// A newer session in another project, or one from the harness that is
+// starting, used to be "the newest session" and hid the limited one.
+func TestLimitHandoffTipNotHiddenByParallelSessions(t *testing.T) {
+	cwd := limitStore(t, "You've hit your session limit · resets 2:40am (UTC)")
+	limitSideSession(t, "claude", "beta", "other-project")
+	limitSideSession(t, "codex", "alpha", "codex-parallel")
+	if tip := limitTipAt(t, cwd, []string{"codex-start"}, "codex"); !strings.Contains(tip, "claude session") {
 		t.Fatalf("tip = %q", tip)
+	}
+	// Control: started from Claude, the newest other-harness session is the
+	// codex one, which ended normally.
+	if tip := limitTipAt(t, cwd, []string{"claude-start"}, "claude"); tip != "" {
+		t.Fatalf("a Claude start was told about its own harness's limit: %q", tip)
+	}
+}
+
+// Resuming the limited session is not a reason to tell it about itself.
+func TestLimitHandoffTipSkipsTheStartingSession(t *testing.T) {
+	cwd := limitStore(t, "You've hit your session limit · resets 2:40am (UTC)")
+	if tip := limitTipAt(t, cwd, []string{"lim"}, ""); tip != "" {
+		t.Fatalf("the starting session was read as the limited one: %q", tip)
+	}
+	if tip := limitTipAt(t, cwd, nil, ""); tip == "" {
+		t.Fatal("control: with nothing excluded the limited session is read")
 	}
 }
 
@@ -600,5 +690,18 @@ func TestTheHeadlineNamesTermsTheBlockCarries(t *testing.T) {
 	// out — the line says what the question was about, not only what matched.
 	if len(got) != 3 {
 		t.Fatalf("via = %v, want three terms", got)
+	}
+}
+
+// A Claude session that is just starting has no indexed record and maybe no
+// transcript yet; where its transcript will live still names the harness.
+func TestStartingHarnessFromTranscriptPath(t *testing.T) {
+	withStatsStores(t)
+	p := filepath.Join(os.Getenv("DEJA_CLAUDE_ROOT"), "-tmp-alpha", "fresh.jsonl")
+	if got := startingHarness(index.DefaultDir(), "fresh", p); got != "claude" {
+		t.Fatalf("startingHarness = %q, want claude", got)
+	}
+	if got := startingHarness(index.DefaultDir(), "nowhere", ""); got != "" {
+		t.Fatalf("startingHarness with nothing to go on = %q", got)
 	}
 }
