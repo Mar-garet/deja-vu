@@ -91,13 +91,21 @@
 <p>wrote <code>events.jsonl</code> under <code>~/Library/Caches/coco/sessions/</code> on macOS and</p>
 <p><code>~/.cache/coco/sessions/</code> on Linux, a different format.</p>
 <ul>
-<li><strong>The IDE store is not read.</strong> TRAE, TRAE CN and TRAE SOLO keep chat in a</li>
+<li><strong>The IDE store is not read, but the IDE is wired.</strong> TRAE, TRAE CN and TRAE</li>
 </ul>
-<p>SQLCipher-encrypted <code>ModularData/ai-agent/database.db</code>.</p>
+<p>SOLO keep chat in a SQLCipher-encrypted <code>ModularData/ai-agent/database.db</code>.</p>
+<p><code>deja install trae-ide</code> adds the server to <code>&lt;user data&gt;/User/mcp.json</code></p>
+<p>(<code>~/Library/Application Support/Trae</code>, <code>%APPDATA%\Trae</code> or <code>~/.config/Trae</code>;</p>
+<p><code>Trae CN</code> for the CN build) with no <code>type</code> key, which its schema rejects, and</p>
+<p>the skill to <code>~/.trae/skills</code> (<code>~/.trae-cn/skills</code>); with both builds installed,</p>
+<p>each is wired in its own files.</p>
+<p><code>deja install trae-ide-auto</code> adds Claude-shaped hooks to <code>~/.trae/hooks.json</code>. The IDE ships</p>
+<p>with hooks off and keeps that switch in its own settings store, so deja cannot</p>
+<p>tell whether they run: turn them on in Settings &gt; Hooks and run them locally.</p>
 <ul>
-<li><strong>Nothing is wired.</strong> TRAE CLI has hooks (<code>~/.trae/cli/hooks.json</code>) and MCP</li>
+<li><strong><code>~/.trae/hooks.json</code> is the IDE&#39;s, not the CLI&#39;s.</strong> TRAE CLI 1.x read it;</li>
 </ul>
-<p>through its config; deja reads the store and writes nothing into TRAE yet.</p>
+<p>2.0 reads <code>cli/hooks.json</code> and says the old file is no longer read.</p>
 
 <hr>
 <p>deja reads this format and thirty-seven others, and turns what it finds into memory your

@@ -45,7 +45,9 @@ const (
 type toolAfterInput struct {
 	HookEventName string `json:"hook_event_name"`
 	ToolName      string `json:"tool_name"`
-	ToolInput     struct {
+	// TRAE IDE's name for the same field (#4731).
+	LLMToolName string `json:"llm_tool_name"`
+	ToolInput   struct {
 		Command string `json:"command"`
 	} `json:"tool_input"`
 	// Harnesses disagree about where a command's output lives, and about
@@ -80,7 +82,7 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 	var input toolAfterInput
 	raw := readHookPayload(stdin, hookStdinWait)
 	_ = json.NewDecoder(bytes.NewReader(raw)).Decode(&input)
-	input.ToolName = adoptGrok(input.ToolName, input.grokEnvelope.ToolName)
+	input.ToolName = adoptGrok(adoptGrok(input.ToolName, input.grokEnvelope.ToolName), input.LLMToolName)
 	input.SessionID = adoptGrok(input.SessionID, input.grokEnvelope.SessionID)
 	// The kill switch, before anything is read. It reached the session-start
 	// hook and nothing else, so a machine with recall off still had text drawn
@@ -109,6 +111,9 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 	truncated := name == "" && len(bytes.TrimSpace(raw)) > 0
 	if truncated {
 		name, _ = jsonStringAfter(after(string(raw), `"tool_name"`))
+		if name == "" {
+			name, _ = jsonStringAfter(after(string(raw), `"llm_tool_name"`))
+		}
 	}
 	if !isCommandTool(name) {
 		return nil

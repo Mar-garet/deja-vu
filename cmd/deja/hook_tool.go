@@ -66,7 +66,10 @@ const (
 type toolHookInput struct {
 	HookEventName string `json:"hook_event_name"`
 	ToolName      string `json:"tool_name"`
-	ToolInput     struct {
+	// TRAE IDE sends the tool's name here as well as under tool_name; read
+	// when tool_name is missing (#4731).
+	LLMToolName string `json:"llm_tool_name"`
+	ToolInput   struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
 		// Claude's NotebookEdit names its file here and not under file_path
@@ -96,7 +99,7 @@ func (i *toolHookInput) adopt() {
 	i.SessionID = adoptGrok(adoptGrok(i.SessionID, i.grokEnvelope.SessionID), i.ConversationID)
 	i.TranscriptPath = adoptGrok(i.TranscriptPath, i.grokEnvelope.TranscriptPath)
 	i.WorkspaceRoots = adoptGrokRoots(i.WorkspaceRoots, i.WorkspaceRoot)
-	i.ToolName = adoptGrok(i.ToolName, i.grokEnvelope.ToolName)
+	i.ToolName = adoptGrok(adoptGrok(i.ToolName, i.grokEnvelope.ToolName), i.LLMToolName)
 	i.ToolInput.Command = adoptGrok(i.ToolInput.Command, i.grokEnvelope.ToolInput.Command)
 	i.ToolInput.FilePath = adoptGrok(i.ToolInput.FilePath, i.grokEnvelope.ToolInput.FilePath)
 	if i.ToolInput.FilePath == "" {

@@ -545,6 +545,11 @@
       "name": "reasonix",
       "state": "config-missing",
       "path": "<tmp>/home/.reasonix/plugins/deja/reasonix-plugin.json"
+    },
+    {
+      "name": "trae-ide",
+      "state": "config-missing",
+      "path": "<tmp>/home/.config/Trae/User/mcp.json"
     }
   ],
   "auto_recall": [
@@ -712,6 +717,11 @@
       "name": "roo",
       "state": "missing",
       "path": "<tmp>/home/.agents/skills/deja-history/SKILL.md"
+    },
+    {
+      "name": "trae-ide",
+      "state": "missing",
+      "path": "<tmp>/home/.trae/hooks.json"
     }
   ],
   "commands": [
