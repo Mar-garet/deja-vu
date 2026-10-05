@@ -679,7 +679,11 @@ import (
 // 66 drops the `Stdout: `/`Stderr: `/`Output: ` label CodeBuddy and Qwen Code
 // put in front of a shell call's first line, so a fix learned there is keyed
 // on the error itself (#4717). Only a rebuild re-derives the stored pairs.
-const version = 66
+//
+// 67 files a session recorded in a WorkBuddy chat folder,
+// <root>/<yyyy-mm-dd-hh-mm-ss>, under the root rather than one project per
+// chat (#4735). Projects are set when a transcript is read, so a rebuild.
+const version = 67
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an

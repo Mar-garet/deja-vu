@@ -34,10 +34,23 @@ func installTrae(exe string, uninstall bool) (installResult, error) {
 	return installTOML(traeConfigPath(), block, uninstall)
 }
 
+// traeHookWiring is Codex's, with the pre-edit hook also on Edit and Write:
+// traecli 0.208 edits through Claude Code's tools, not apply_patch, and sends
+// PreToolUse with tool_name "Edit" and tool_input {"command": "Edit <path>"}.
+func traeHookWiring() []hookWire {
+	w := append([]hookWire(nil), codexHookWiring...)
+	for i := range w {
+		if w[i].Event == "PreToolUse" {
+			w[i].Matcher = "Bash|apply_patch|Edit|Write"
+		}
+	}
+	return w
+}
+
 // installTraeAuto writes the hooks first: a hooks.json deja refuses should
 // leave nothing half-wired (#2745).
 func installTraeAuto(exe string, uninstall bool) (installResult, error) {
-	hooks, err := installCodexHooksAt(exe, traeHooksPath(), traeConfigPath(), uninstall)
+	hooks, err := installCodexHooksAt(exe, traeHooksPath(), traeConfigPath(), traeHookWiring(), uninstall)
 	if err != nil {
 		return installResult{}, err
 	}

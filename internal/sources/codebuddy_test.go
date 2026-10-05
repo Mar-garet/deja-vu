@@ -188,3 +188,33 @@ func TestParseCodeBuddySubagent(t *testing.T) {
 		t.Fatalf("sub-agent = kind %q parent %q id %q", s.Kind, s.Parent, s.ID)
 	}
 }
+
+// WorkBuddy's desktop app records each prompt behind its context reminders, in
+// one item that ends with <user_query>. The turn is the query (#4734); a
+// reminder on its own is still plumbing, and a bare prompt is unchanged.
+func TestParseCodeBuddyUserQueryWrapper(t *testing.T) {
+	home := codeBuddyEnv(t)
+	path := filepath.Join(home, ".codebuddy", "projects", "repo", "s3.jsonl")
+	wrapped := `<system-reminder data-role=\"user-context\">\n<user_info>\nOS Version: darwin\n</user_info>\n</system-reminder>\n<system-reminder data-role=\"additional-data\">\n<current_time>\nMonday\n</current_time>\n</system-reminder>\n<user_query>What backoff did we pick for the payments retry?</user_query>`
+	writeCodeBuddyFile(t, path, strings.Join([]string{
+		`{"type":"message","role":"user","timestamp":1780000000000,"cwd":"/src/repo","content":[{"type":"input_text","text":"` + wrapped + `"}]}`,
+		`{"type":"message","role":"assistant","timestamp":1780000000001,"content":[{"type":"output_text","text":"Exponential, capped at 30s."}]}`,
+		`{"type":"message","role":"user","timestamp":1780000000002,"content":[{"type":"input_text","text":"<system-reminder>\nplan mode is on\n</system-reminder>"}]}`,
+		`{"type":"message","role":"user","timestamp":1780000000003,"content":"<system-reminder>x</system-reminder>\n<user_query>first</user_query>\n<user_query>and add jitter</user_query>"}`,
+		`{"type":"message","role":"user","timestamp":1780000000004,"content":"why does <user_query> show up in the log"}`,
+	}, "\n")+"\n")
+	sessions, err := ParseCodeBuddyFile(path)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("ParseCodeBuddyFile = %d sessions, %v", len(sessions), err)
+	}
+	var user []string
+	for _, m := range sessions[0].Messages {
+		if m.Role == "user" {
+			user = append(user, m.Text)
+		}
+	}
+	want := "What backoff did we pick for the payments retry?|and add jitter|why does <user_query> show up in the log"
+	if got := strings.Join(user, "|"); got != want {
+		t.Fatalf("user turns = %q, want %q", got, want)
+	}
+}

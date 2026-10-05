@@ -62,6 +62,10 @@ func compactionSource(input precompactHookInput, workspace string) (sources.Comp
 		transcript, err = sources.ReadCompactionMessages(input.Harness, input.SessionID, workspace, input.Messages)
 	case input.Harness != "":
 		transcript, err = sources.ReadCompactionStore(input.Harness, input.SessionID)
+	case sources.MuseSessionPath(input.SessionID) != "":
+		// Muse names neither a transcript nor itself; its log is found by
+		// the session id, and the reader holds it to the log's own stream.
+		transcript, err = sources.ReadCompactionStore("muse", input.SessionID)
 	default:
 		return transcript, "missing_transcript"
 	}
