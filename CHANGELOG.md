@@ -21,11 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Under `DEJA_INCLUDE_SUBAGENTS=1`, Muse Code's reminder and verification observers are no longer indexed as sessions, and a workflow subagent gets its project (#4711, #4712).
-- CodeBuddy: `deja resume` prints `codebuddy -r <id>` in the directory the session ran in, and `install codebuddy-auto` writes the `deja-history` skill and the `/deja` command where CodeBuddy reads them (#4707, #4708).
+- CodeBuddy: `deja resume` prints `codebuddy -c -r <id>` in the directory the session ran in, so the session-start recall reaches the reopened session (#4718), and `install codebuddy-auto` writes the `deja-history` skill and the `/deja` command where CodeBuddy reads them (#4707, #4708).
 
 ### Fixed
 
 - CodeBuddy: a failed command keeps its exit code, the `/compact` instruction prompt is no longer indexed as your words, and the recovery packet after a compaction arrives with the next prompt (#4703, #4704, #4705).
+- A fix learned from a CodeBuddy or Qwen Code shell call answers the same error anywhere: the `Stdout:`/`Output:` label in front of the first line is no longer part of the error (#4717).
 - The Claude Code and CodeBuddy plugins stand down when `deja install <h>-auto` already wired the same hooks, instead of running every hook twice (#4706).
 
 ## [0.21.6] - 2026-10-04

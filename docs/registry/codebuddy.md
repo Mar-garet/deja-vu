@@ -69,4 +69,7 @@ of them the way Claude Code does.
   `providerData.agent: "compact"`; it is skipped, as the summary after it is.
 - **Resume needs the session's directory.** `codebuddy -r <id>` finds a
   session only under the folder of the directory it is run from.
+- **`-r` alone drops the SessionStart context.** CodeBuddy hands it to the
+  model on a resume only with `-c` set, and the `-r` id still picks the
+  session, so `deja resume` prints `codebuddy -c -r <id>`.
 - **WorkBuddy shares the harness id.** Its sessions read as `codebuddy`.

@@ -13,6 +13,10 @@ import (
 // folder of the directory it is run from; anywhere else it answers "No
 // conversation found with session ID" (2.161.2). The transcript records that
 // directory, so resume goes there, and refuses when it is gone (#4707).
+//
+// With -c as well: CodeBuddy hands SessionStart context to the model on a
+// resume only when `continue` is set, and the -r id still picks the session,
+// so `-r` alone reopened it without the recall deja had logged (#4718).
 func TestResumeCodeBuddyGoesToItsDirectory(t *testing.T) {
 	hermeticEnv(t)
 	home, _ := os.UserHomeDir()
@@ -35,7 +39,7 @@ func TestResumeCodeBuddyGoesToItsDirectory(t *testing.T) {
 	}
 	s := model.Session{Harness: "codebuddy", ID: id, Path: path}
 	dir, cmd, err := resumeCommand(s)
-	if err != nil || dir != work || cmd != "codebuddy -r "+id {
+	if err != nil || dir != work || cmd != "codebuddy -c -r "+id {
 		t.Fatalf("got dir %q cmd %q err %v", dir, cmd, err)
 	}
 
