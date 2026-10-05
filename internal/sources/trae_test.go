@@ -309,3 +309,32 @@ func TestTraeClaudeStyleTools(t *testing.T) {
 		t.Fatalf("edits = %q, want the replaced span", got)
 	}
 }
+
+// traecli 0.208 writes no user_message and no item_completed UserMessage: the
+// prompt is only in history_mutation's display_completions, next to the
+// model-visible copy in items. Shaped from a 0.208.1-alpha.5 exec rollout.
+func TestTraeDisplayCompletionsCarryThePrompt(t *testing.T) {
+	lines := []string{
+		traeMeta,
+		`{"timestamp":"2026-10-01T09:00:00.500Z","type":"history_mutation","payload":{"version":1,"turn_id":"turn-1","operation":"append","items":[{"type":"message","id":"msg-env","role":"user","content":[{"type":"input_text","text":"<environment_context>runtime context</environment_context>"}],"internal_chat_message_metadata_passthrough":{"content_item_kinds":["environments.environment_context"]}}]}}`,
+		`{"timestamp":"2026-10-01T09:00:01.000Z","type":"history_mutation","payload":{"display_completions":[{"thread_id":"019fbcca-0000-7000-8000-000000000001","turn_id":"turn-1","item":{"type":"UserMessage","id":"msg-user","content":[{"type":"text","text":"why does the retry loop never back off","text_elements":[]}]},"started_at_ms":1790845201000,"completed_at_ms":1790845201000}],"version":1,"turn_id":"turn-1","item_metadata":[{"user_input_order":0,"item_index":0}],"operation":"append","items":[{"type":"message","id":"msg-user","role":"user","content":[{"type":"input_text","text":"why does the retry loop never back off"}]}]}}`,
+		`{"timestamp":"2026-10-01T09:00:02.000Z","type":"history_mutation","payload":{"display_completions":[{"turn_id":"turn-1","item":{"type":"AgentMessage","id":"msg-a","content":[{"type":"Text","text":"The delay is reset on every attempt."}],"phase":"final_answer"}}],"version":1,"turn_id":"turn-1","operation":"append","items":[{"type":"message","id":"msg-a","role":"assistant","content":[{"type":"output_text","text":"The delay is reset on every attempt."}],"phase":"final_answer"}]}}`,
+		`{"timestamp":"2026-10-01T09:00:03.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1","last_agent_message":"The delay is reset on every attempt."}}`,
+	}
+	s := parseTraeOne(t, writeTraeRollout(t, t.TempDir(), lines...))
+	if got, want := textsOf(s, "user"), []string{"why does the retry loop never back off"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("user turns = %q, want %q", got, want)
+	}
+	if got, want := textsOf(s, "assistant"), []string{"The delay is reset on every attempt."}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("assistant turns = %q, want %q", got, want)
+	}
+
+	// The same prompt again from item_completed, as 0.201.4 wrote it, is one
+	// prompt, not two.
+	both := append(lines[:3:3], `{"timestamp":"2026-10-01T09:00:01.001Z","type":"event_msg","payload":{"type":"item_completed","turn_id":"turn-1","item":{"type":"UserMessage","id":"msg-user","content":[{"type":"text","text":"why does the retry loop never back off"}]}}}`)
+	both = append(both, lines[3:]...)
+	s = parseTraeOne(t, writeTraeRollout(t, t.TempDir(), both...))
+	if got := textsOf(s, "user"); len(got) != 1 {
+		t.Fatalf("user turns with item_completed too = %q, want one", got)
+	}
+}

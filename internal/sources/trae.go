@@ -130,6 +130,7 @@ type traeTurns struct {
 
 type traeUser struct {
 	dialect, turn, text string
+	id                  string // the item id; the same id is the same prompt
 	at                  time.Time
 	matched             bool
 }
@@ -142,6 +143,18 @@ func (tr *traeTurns) record(s *model.Session, m, payload map[string]any, cwd str
 		// A replace re-sends history the file already holds.
 		if op, _ := payload["operation"].(string); op != "append" {
 			return
+		}
+		// From 0.208 the prompt is confirmed here and nowhere else: no
+		// user_message, no item_completed UserMessage.
+		dcs, _ := payload["display_completions"].([]any)
+		for _, d := range dcs {
+			dc, _ := d.(map[string]any)
+			item, _ := dc["item"].(map[string]any)
+			if it, _ := item["type"].(string); it == "UserMessage" {
+				turn, _ := dc["turn_id"].(string)
+				id, _ := item["id"].(string)
+				tr.userID(s, "item", turn, id, traeItemText(item, "text"), t)
+			}
 		}
 		items, _ := payload["items"].([]any)
 		for _, it := range items {
@@ -170,7 +183,8 @@ func (tr *traeTurns) record(s *model.Session, m, payload map[string]any, cwd str
 			item, _ := payload["item"].(map[string]any)
 			switch it, _ := item["type"].(string); it {
 			case "UserMessage":
-				tr.user(s, "item", turn, traeItemText(item, "text"), t)
+				id, _ := item["id"].(string)
+				tr.userID(s, "item", turn, id, traeItemText(item, "text"), t)
 			case "AgentMessage":
 				if txt := traeItemText(item, "Text", "text", "output_text"); txt != "" {
 					tr.items = append(tr.items, model.Message{Role: "assistant", Text: txt, Time: t})
@@ -209,8 +223,21 @@ func (tr *traeUser) mirrors(dialect, turn, text string, t time.Time) bool {
 
 // user records a prompt once, whichever of its two records arrives first.
 func (tr *traeTurns) user(s *model.Session, dialect, turn, text string, t time.Time) {
+	tr.userID(s, dialect, turn, "", text, t)
+}
+
+// userID is user for a record that carries its item id: display_completions
+// and item_completed can both hold one prompt, under the same id.
+func (tr *traeTurns) userID(s *model.Session, dialect, turn, id, text string, t time.Time) {
 	if text == "" {
 		return
+	}
+	if id != "" {
+		for _, u := range tr.users {
+			if u.id == id {
+				return
+			}
+		}
 	}
 	for i := len(tr.users) - 1; i >= 0; i-- {
 		if tr.users[i].mirrors(dialect, turn, text, t) {
@@ -218,7 +245,7 @@ func (tr *traeTurns) user(s *model.Session, dialect, turn, text string, t time.T
 			return
 		}
 	}
-	tr.users = append(tr.users, traeUser{dialect: dialect, turn: turn, text: text, at: t})
+	tr.users = append(tr.users, traeUser{dialect: dialect, turn: turn, text: text, id: id, at: t})
 	s.Messages = append(s.Messages, model.Message{Role: "user", Text: text, Time: t})
 }
 
@@ -444,6 +471,15 @@ func traeKeys(line []byte) []traeKey {
 	switch typ, _ := m["type"].(string); typ {
 	case "history_mutation":
 		var out []traeKey
+		dcs, _ := payload["display_completions"].([]any)
+		for _, d := range dcs {
+			dc, _ := d.(map[string]any)
+			item, _ := dc["item"].(map[string]any)
+			if it, _ := item["type"].(string); it == "UserMessage" {
+				dturn, _ := dc["turn_id"].(string)
+				out = append(out, traeKey{dialect: "display", turn: dturn, text: traeItemText(item, "text")})
+			}
+		}
 		items, _ := payload["items"].([]any)
 		for _, it := range items {
 			if item, _ := it.(map[string]any); item != nil {
