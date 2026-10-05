@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<script>document.documentElement.className=document.documentElement.className.replace("no-js","js")</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where CodeBuddy Code stores its history — session format</title>
+<meta name="description" content="Where CodeBuddy Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.">
+<link rel="canonical" href="https://vshulcz.github.io/deja-vu/registry/codebuddy.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Where CodeBuddy Code stores its history — session format">
+<meta property="og:description" content="Where CodeBuddy Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.">
+<meta property="og:url" content="https://vshulcz.github.io/deja-vu/registry/codebuddy.html">
+<meta property="og:image" content="https://vshulcz.github.io/deja-vu/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" sizes="16x16" href="../assets/favicon.svg">
+<link rel="icon" type="image/svg+xml" sizes="any" href="../assets/icon.svg">
+<link rel="stylesheet" href="../assets/site.css">
+<meta name="author" content="vshulcz">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<meta name="theme-color" content="#0d0b16">
+<meta name="color-scheme" content="dark light">
+<meta property="og:site_name" content="deja-vu">
+<meta name="twitter:title" content="Where CodeBuddy Code stores its history — session format">
+<meta name="twitter:description" content="Where CodeBuddy Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.">
+<meta name="twitter:image" content="https://vshulcz.github.io/deja-vu/assets/og.png">
+<link rel="apple-touch-icon" href="../assets/icon.svg">
+<link rel="sitemap" type="application/xml" href="https://vshulcz.github.io/deja-vu/sitemap.xml">
+<link rel="describedby" type="text/markdown" href="https://vshulcz.github.io/deja-vu/llms.txt">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","author":{"@type":"Person","name":"vshulcz"},"description":"Where CodeBuddy Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.","headline":"CodeBuddy Code","inLanguage":"en","isPartOf":{"@type":"WebSite","name":"deja-vu","url":"https://vshulcz.github.io/deja-vu/"},"publisher":{"@type":"Person","name":"vshulcz"},"url":"https://vshulcz.github.io/deja-vu/registry/codebuddy.html"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://vshulcz.github.io/deja-vu/","name":"deja-vu","position":1},{"@type":"ListItem","item":"https://vshulcz.github.io/deja-vu/guide/harnesses.html","name":"Harnesses","position":2},{"@type":"ListItem","item":"https://vshulcz.github.io/deja-vu/registry/codebuddy.html","name":"CodeBuddy Code","position":3}]}</script>
+</head>
+<body>
+<div class="glow"></div>
+<nav><a class="brand" href="../"><img src="../assets/icon.svg" alt="" width="22" height="22">deja-vu</a><span class="spacer"></span><a class="lnk" href="../">Home</a><a class="lnk" href="../guide/getting-started.html">Docs</a><a class="lnk" href="https://github.com/vshulcz/deja-vu">GitHub</a></nav>
+<div class="wrap"><div class="doc">
+<aside><a href="../">&larr; deja-vu</a><div class="grp">Guide</div><a href="../guide/getting-started.html">Getting started</a><a href="../guide/harnesses.html">Harnesses</a><div class="grp">Session formats</div><a href="README.html">All formats</a><a href="aider.html">aider</a><a href="amp.html">Amp</a><a href="antigravity.html">Antigravity</a><a href="cherrystudio.html">Cherry Studio</a><a href="claude-code.html">Claude Code</a><a href="cline.html">Cline</a><a href="codebuddy.html" aria-current="page">CodeBuddy Code</a><a href="codewhale.html">CodeWhale</a><a href="codex.html">Codex CLI</a><a href="commandcode.html">Command Code</a><a href="continue.html">Continue</a><a href="copilot.html">Copilot CLI</a><a href="crush.html">Crush</a><a href="cursor.html">Cursor</a><a href="deepseek.html">DeepSeek Harness</a><a href="gjc.html">gajae-code</a><a href="gemini.html">Gemini CLI</a><a href="goose.html">Goose</a><a href="grok.html">Grok Build</a><a href="hermes.html">Hermes</a><a href="kilocode.html">Kilo Code</a><a href="kimchi.html">Kimchi Coding</a><a href="kimi.html">Kimi Code</a><a href="kiro.html">Kiro</a><a href="omp.html">omp (Oh My Pi)</a><a href="openclaw.html">OpenClaw</a><a href="opencode.html">opencode</a><a href="pi.html">pi</a><a href="prime.html">prime-agent (PrimeIntellect)</a><a href="qwen.html">Qwen Code</a><a href="reasonix.html">Reasonix</a><a href="roo.html">Roo Code</a><a href="senpi.html">Senpi</a><a href="copilot-chat.html">VS Code Copilot Chat</a><a href="zcode.html">ZCode</a><a href="zed.html">Zed</a></aside>
+<article>
+<h1>CodeBuddy Code</h1>
+<ul>
+<li><strong>ID</strong>: <code>codebuddy</code></li>
+<li><strong>Store</strong>: <code>${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/&lt;mangled-cwd&gt;/&lt;session-id&gt;.jsonl</code> — one file per session</li>
+<li><strong>Sub-agents</strong>: <code>&lt;mangled-cwd&gt;/&lt;session-id&gt;/subagents/agent-&lt;id&gt;.jsonl</code>, read with <code>DEJA_INCLUDE_SUBAGENTS=1</code></li>
+<li><strong>WorkBuddy</strong>: <code>${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/...</code>, the same layout and records, read when it exists</li>
+<li><strong>Read overrides</strong>: <code>DEJA_CODEBUDDY_ROOTS</code>, a path list, replaces both stores</li>
+<li><strong>Format</strong>: JSONL — OpenAI Responses-style items</li>
+<li><strong>Needs</strong>: nothing</li>
+<li><strong>Wiring</strong>: <code>deja install codebuddy</code> adds the MCP server; <code>deja install codebuddy-auto</code> adds the hooks as well</li>
+</ul>
+<p>CodeBuddy Code is Tencent&#39;s terminal agent (<code>@tencent-ai/codebuddy-code</code>). Its</p>
+<p>store is laid out like Claude Code&#39;s — a directory per working directory, one</p>
+<p>JSONL per session — but the directory name is the cwd with <code>/</code>, <code>\</code> and <code>:</code></p>
+<p>turned into <code>-</code> and the leading dash dropped, and the records inside are not</p>
+<p>Claude Code&#39;s. Each line is one item:</p>
+<pre><code>{&#34;type&#34;:&#34;message&#34;,&#34;role&#34;:&#34;user&#34;,&#34;content&#34;:[{&#34;type&#34;:&#34;input_text&#34;,&#34;text&#34;:&#34;...&#34;}],&#34;timestamp&#34;:1780000000000,&#34;cwd&#34;:&#34;/repo&#34;,&#34;providerData&#34;:{...}}
+{&#34;type&#34;:&#34;message&#34;,&#34;role&#34;:&#34;assistant&#34;,&#34;status&#34;:&#34;completed&#34;,&#34;content&#34;:[{&#34;type&#34;:&#34;output_text&#34;,&#34;text&#34;:&#34;...&#34;}]}
+{&#34;type&#34;:&#34;function_call&#34;,&#34;callId&#34;:&#34;call_1&#34;,&#34;name&#34;:&#34;Bash&#34;,&#34;arguments&#34;:&#34;{\&#34;command\&#34;:\&#34;go test ./...\&#34;}&#34;}
+{&#34;type&#34;:&#34;function_call_result&#34;,&#34;callId&#34;:&#34;call_1&#34;,&#34;name&#34;:&#34;Bash&#34;,&#34;output&#34;:{&#34;type&#34;:&#34;text&#34;,&#34;text&#34;:&#34;...&#34;}}</code></pre>
+<p>plus <code>reasoning</code>, <code>summary</code> (the compaction digest), <code>ai-title</code>,</p>
+<p><code>custom-title</code>, <code>topic</code>, <code>turn-metrics</code>, <code>file-history-snapshot</code> and</p>
+<p><code>session-meta</code>. Timestamps are epoch milliseconds and <code>cwd</code> is on the record.</p>
+<p>The tools are Claude Code&#39;s by name and arguments (<code>Bash</code>, <code>Read</code>, <code>Edit</code>,</p>
+<p><code>Write</code>, <code>MultiEdit</code>, <code>file_path</code>, <code>old_string</code>), so a call becomes a command,</p>
+<p>file, edit or wrote record the way it does for Claude Code, and a</p>
+<p><code>function_call_result</code> becomes tool output.</p>
+<p>Role <code>user</code> is shared with the client&#39;s own plumbing. A record with</p>
+<p><code>providerData.skipRun</code> never reached the model as anyone&#39;s words (hook output,</p>
+<p>filter notices, local commands), and <code>isMeta</code>, <code>isCompactInternal</code>,</p>
+<p><code>isCompacted</code>, <code>isSummary</code>, <code>compactType</code> and <code>teammateMessage</code> mark</p>
+<p>continuation, compaction and teammate turns. All are dropped, which is what</p>
+<p>CodeBuddy&#39;s own <code>isRealUserMessageItem</code> does. A text item that opens with</p>
+<p><code>&lt;command-name&gt;</code>, <code>&lt;system-reminder&gt;</code>, <code>&lt;local-command-stdout&gt;</code>,</p>
+<p><code>&lt;teammate-message&gt;</code> or a task notification is dropped from the turn it rides in.</p>
+<p><code>reasoning</code> and <code>summary</code> are not indexed.</p>
+<p>The title follows CodeBuddy&#39;s own order: the newest <code>custom-title</code>, then the</p>
+<p>newest <code>ai-title</code>, then the newest <code>topic</code>, skipping the placeholders it skips.</p>
+<p>MCP servers go into the first of <code>&lt;config&gt;/.mcp.json</code>, <code>&lt;config&gt;/mcp.json</code> and</p>
+<p><code>~/.codebuddy.json</code> that exists, else <code>&lt;config&gt;/.mcp.json</code> — the one file</p>
+<p>CodeBuddy reads for user scope. Hooks go into <code>&lt;config&gt;/settings.json</code> in the</p>
+<p>Claude Code shape, <code>timeout</code> in seconds: <code>SessionStart</code>, <code>UserPromptSubmit</code>,</p>
+<p><code>PostToolUse</code> and <code>PostToolUseFailure</code> on <code>Bash|PowerShell</code>, <code>PreCompact</code> and</p>
+<p><code>SessionEnd</code>. CodeBuddy reads <code>hookSpecificOutput.additionalContext</code> from all</p>
+<p>of them the way Claude Code does.</p>
+<p><strong>Last verified:</strong> 2026-10-05</p>
+<h2 id="known-quirks-and-drift">Known quirks and drift</h2>
+<ul>
+<li><strong>Read from the bundle, not a live store.</strong> The record shapes, the store</li>
+</ul>
+<p>path, <code>CODEBUDDY_CONFIG_DIR</code>, the plumbing flags, the title order, the MCP</p>
+<p>file order and the hook events were read out of</p>
+<p><code>@tencent-ai/codebuddy-code</code> 2.161.2 (<code>dist/codebuddy.js</code>) and CodeBuddy&#39;s</p>
+<p>CLI docs; the fixture is synthetic.</p>
+<ul>
+<li><strong>The IDE store is separate.</strong> The IDE and the VS Code extension keep their</li>
+</ul>
+<p>history under <code>CodeBuddyExtension/Data/...</code> in the platform data directory,</p>
+<p>never in this tree. Not read yet (#4681).</p>
+<ul>
+<li><strong>No exit codes.</strong> The Bash result text carries no exit status line deja</li>
+</ul>
+<p>has checked, so a command is stored without <code>→ exit N</code>.</p>
+<ul>
+<li><strong>WorkBuddy shares the harness id.</strong> Its sessions read as <code>codebuddy</code>.</li>
+</ul>
+
+<hr>
+<p>deja reads this format and thirty-five others, and turns what it finds into memory your
+agents can search. See the <a href="../guide/harnesses.html">harness matrix</a> for what is
+wired where, or <a href="../guide/getting-started.html">install it</a> and search your own
+history.</p>
+<p class="star-cta">Found this useful? <a href="https://github.com/vshulcz/deja-vu">Star deja-vu on GitHub</a>.</p>
+</article>
+</div>
+</div>
+<footer>deja-vu is MIT-licensed and runs on your machine. <a href="https://github.com/vshulcz/deja-vu">Source on GitHub</a> · <a href="../">Home</a></footer>
+<script src="../assets/guide.js" defer></script>
+</body>
+</html>

@@ -698,6 +698,19 @@ func allHarnesses() []Harness {
 			}},
 		},
 		{
+			// CodeBuddy Code and WorkBuddy: Claude Code's project tree, OpenAI
+			// Responses-style items inside. Read whole: a title record can
+			// arrive after the turns it names.
+			Name: "codebuddy", Load: LoadCodeBuddy, Files: CodeBuddySessionFiles,
+			Kinds: []FileKind{{
+				Name: "codebuddy",
+				Match: func(p string) bool {
+					return isCodeBuddySession(p) || CodeBuddySubagentFile(p)
+				},
+				Parse: fullParse(ParseCodeBuddyFile),
+			}},
+		},
+		{
 			// Reasonix writes flat role/content lines, but its clock and
 			// workspace sit in sidecars beside the transcript, and a compaction
 			// rewrites the file, so it is read whole rather than from an offset.

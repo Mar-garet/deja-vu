@@ -1028,6 +1028,47 @@
       }
     },
     {
+      "id": "codebuddy",
+      "store_paths": [
+        "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
+        "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>/subagents/agent-<id>.jsonl",
+        "${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
+        "${DEJA_CODEBUDDY_ROOTS}/<mangled-cwd>/<session-id>.jsonl"
+      ],
+      "format_kind": "jsonl",
+      "fixture_paths": [
+        "fixtures/registry/codebuddy/projects/workspace-registry-demo/registry-codebuddy.jsonl"
+      ],
+      "parser_source": "internal/sources/codebuddy.go",
+      "last_verified": "2026-10-05",
+      "display_name": "CodeBuddy Code",
+      "capabilities": {
+        "mcp": true,
+        "auto": true,
+        "skill": false,
+        "command": false,
+        "resume": false,
+        "handoff": "paste",
+        "prereq": "none"
+      },
+      "gaps": {
+        "skill": {
+          "state": "todo",
+          "why": "CodeBuddy reads skills from ~/.codebuddy/skills/<name>/SKILL.md and from plugins; install does not write the shared skill there yet (#4681).",
+          "source": "https://www.codebuddy.ai/docs/cli/plugins-reference"
+        },
+        "command": {
+          "state": "todo",
+          "why": "Custom slash commands are Markdown files under ~/.codebuddy/commands/ or a plugin's commands/; install does not write one yet (#4681).",
+          "source": "https://www.codebuddy.ai/docs/cli/plugins-reference"
+        },
+        "resume": {
+          "state": "todo",
+          "why": "The CLI resumes a session by id the way Claude Code does, but the flag has not been checked against a live install, so resumeCommand does not build it yet (#4681)."
+        }
+      }
+    },
+    {
       "id": "reasonix",
       "store_paths": [
         "${REASONIX_STATE_HOME:-~/.reasonix}/sessions/<id>.jsonl",

@@ -125,6 +125,7 @@ https://vshulcz.github.io/deja-vu/zh/guide/privacy.html
 https://vshulcz.github.io/deja-vu/zh/guide/find-a-session.html
 https://vshulcz.github.io/deja-vu/zh/guide/recover-a-deleted-session.html
 https://vshulcz.github.io/deja-vu/zh/guide/lost-context.html
+https://vshulcz.github.io/deja-vu/registry/codebuddy.html
 https://vshulcz.github.io/deja-vu/registry/codewhale.html
 https://vshulcz.github.io/deja-vu/registry/reasonix.html
 https://vshulcz.github.io/deja-vu/registry/trae.html
