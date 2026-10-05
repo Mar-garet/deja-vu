@@ -15,6 +15,7 @@ func TestChatFolderNamesItsWorkspaceRoot(t *testing.T) {
 		"/Users/a/src/2026-10-05":                    "src/2026-10-05",
 		"/Users/a/src/app":                           "src/app",
 		"/2026-10-05-15-06-37":                       "2026-10-05-15-06-37",
+		`C:\2026-10-05-15-06-37`:                     "2026-10-05-15-06-37",
 	} {
 		if got := cwdProjectName(cwd); got != want {
 			t.Errorf("cwdProjectName(%q) = %q, want %q", cwd, got, want)
@@ -26,5 +27,11 @@ func TestChatFolderNamesItsWorkspaceRoot(t *testing.T) {
 	}
 	if _, ok := ChatWorkspaceRoot(filepath.Join("/home", "a", "app")); ok {
 		t.Fatal("a folder the user named was taken for a chat folder")
+	}
+	// A lone timestamp folder at a filesystem root has no root of its own.
+	for _, cwd := range []string{"/2026-10-05-15-06-37", `C:\2026-10-05-15-06-37`} {
+		if root, ok := ChatWorkspaceRoot(filepath.FromSlash(cwd)); ok {
+			t.Errorf("ChatWorkspaceRoot(%q) = %q, want none", cwd, root)
+		}
 	}
 }
