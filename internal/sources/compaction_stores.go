@@ -27,6 +27,8 @@ func ReadCompactionStore(harness, nativeSessionID string) (CompactionTranscript,
 		db = OpencodeDB()
 	case "kilocode":
 		db = KiloDB()
+	case "muse":
+		return readMuseCompaction(nativeSessionID)
 	default:
 		return CompactionTranscript{}, ErrUnsupportedCompactionTranscript
 	}
