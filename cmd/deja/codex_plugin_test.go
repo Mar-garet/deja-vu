@@ -97,6 +97,7 @@ func TestBundledSkillsMatchInstaller(t *testing.T) {
 	for _, p := range []string{
 		"codex-plugin/skills/deja-history/SKILL.md",
 		"claude-plugin/skills/deja-history/SKILL.md",
+		"codebuddy-plugin/skills/deja-history/SKILL.md",
 		"extensions/kimi/skills/deja-history/SKILL.md",
 		"extensions/grok/skills/deja-history/SKILL.md",
 	} {

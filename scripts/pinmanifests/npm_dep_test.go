@@ -74,7 +74,7 @@ func TestEveryHarnessPackageIsATarget(t *testing.T) {
 		}
 	}
 	// And the manifests that were already covered stay covered.
-	for _, path := range []string{scoopPath, installer, codexPlugin, kimiConst, agentPlugin} {
+	for _, path := range []string{scoopPath, installer, codexPlugin, codebuddyPlugin, kimiConst, agentPlugin} {
 		if _, ok := got[path]; !ok {
 			t.Fatalf("%s dropped out of the pinned set", path)
 		}

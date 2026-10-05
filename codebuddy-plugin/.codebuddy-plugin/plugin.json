@@ -1,0 +1,103 @@
+{
+  "name": "deja-vu",
+  "version": "0.21.6",
+  "description": "deja-vu memory for CodeBuddy Code: your own past sessions, from every coding agent on the machine, recalled before you ask.",
+  "author": {
+    "name": "vshulcz",
+    "url": "https://github.com/vshulcz"
+  },
+  "homepage": "https://vshulcz.github.io/deja-vu/",
+  "repository": "https://github.com/vshulcz/deja-vu",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "session-history",
+    "recall",
+    "context",
+    "mcp",
+    "codebuddy"
+  ],
+  "skills": "./skills/",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-context",
+            "timeout": 10,
+            "statusMessage": "Recalling past sessions…"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-prompt",
+            "timeout": 10,
+            "statusMessage": "Searching past sessions…"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-tool-after",
+            "timeout": 10,
+            "statusMessage": "Checking what fixed this before…"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-tool-after",
+            "timeout": 10,
+            "statusMessage": "Checking what fixed this before…"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-precompact",
+            "timeout": 10,
+            "statusMessage": "Saving this session to memory…"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-session-end",
+            "timeout": 10,
+            "statusMessage": "Marking this session as ended…"
+          }
+        ]
+      }
+    ]
+  },
+  "mcpServers": {
+    "deja": {
+      "command": "${CODEBUDDY_PLUGIN_ROOT}/mcp/deja-mcp.sh",
+      "args": []
+    }
+  }
+}
