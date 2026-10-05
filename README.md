@@ -295,7 +295,7 @@ aider &middot; Amp &middot; Antigravity &middot; Claude Code &middot; Cline &mid
 | CodeBuddy Code | ✅ | ✅ | — | — | — | paste | none |
 | Reasonix | ✅ | ✅ | ✅ | ✅ | ✅ | paste | zstd for 1.x sessions |
 | TRAE CLI | ✅ | ✅ | ✅ | ? | ✅ | paste | none |
-| Muse Code | ? | ⚠ | ? | ? | — | paste | none |
+| Muse Code | ✅ | ✅ | ✅ | ? | ✅ | paste | none |
 
 ✅ works &middot; — possible, not built yet &middot; ✕ the harness has no such mechanism &middot; ⚠ waiting on the harness itself &middot; ? not investigated
 
