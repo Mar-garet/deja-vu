@@ -289,16 +289,39 @@ func codeBuddyText(v any) string {
 // codeBuddyOutput is a function_call_result's output: {type:"text", text}, a
 // list of such items, or a bare string.
 func codeBuddyOutput(v any) string {
+	var s string
 	switch o := v.(type) {
 	case string:
-		return o
+		s = o
 	case map[string]any:
-		s, _ := o["text"].(string)
-		return s
+		s, _ = o["text"].(string)
 	case []any:
-		return contentText(o)
+		s = contentText(o)
 	}
-	return ""
+	if codeBuddyImageRefs(s) {
+		return ""
+	}
+	return s
+}
+
+// codeBuddyImageRefs reports the text a Read of an image leaves as its result:
+// a JSON list of {type:"image_blob_ref", blob_id, mime, size, blob_path}. It is
+// an image, not output, and every other reader drops image content.
+func codeBuddyImageRefs(s string) bool {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "[") || !strings.Contains(s, `"image_blob_ref"`) {
+		return false
+	}
+	var items []map[string]any
+	if json.Unmarshal([]byte(s), &items) != nil || len(items) == 0 {
+		return false
+	}
+	for _, it := range items {
+		if t, _ := it["type"].(string); t != "image_blob_ref" {
+			return false
+		}
+	}
+	return true
 }
 
 // codeBuddyExitCode reads how a shell call ended off its result text. The
@@ -342,6 +365,46 @@ func codeBuddyExitCode(out string) (int, bool) {
 		}
 	}
 	return 0, true
+}
+
+// codeBuddyRawExit reads the code off the structured result,
+// providerData.toolResult.rawResponse. It is the only place the code survives
+// when the output was too large for the transcript: the result then keeps a
+// <persisted-output> preview of its first 2 KB, cut before the Exit Code line.
+// known is false when the record has no such field; a run that was
+// interrupted, killed by a signal or is still in the background is known and
+// has no code.
+func codeBuddyRawExit(m map[string]any) (code int, ok, known bool) {
+	pd, _ := m["providerData"].(map[string]any)
+	tr, _ := pd["toolResult"].(map[string]any)
+	raw, _ := tr["rawResponse"].(map[string]any)
+	v, has := raw["exitCode"]
+	if !has {
+		return 0, false, false
+	}
+	var n int
+	switch x := v.(type) {
+	case json.Number:
+		i, err := x.Int64()
+		if err != nil {
+			return 0, false, true
+		}
+		n = int(i)
+	case float64:
+		if x != float64(int(x)) {
+			return 0, false, true
+		}
+		n = int(x)
+	default:
+		return 0, false, true
+	}
+	if b, _ := raw["interrupted"].(bool); b {
+		return 0, false, true
+	}
+	if sig, _ := raw["signal"].(string); sig != "" {
+		return 0, false, true
+	}
+	return n, true, true
 }
 
 // ParseCodeBuddyFile reads one CodeBuddy or WorkBuddy transcript.
@@ -431,7 +494,11 @@ func parseCodeBuddy(path string, scan func(func(map[string]any)) error) ([]model
 		case "function_call_result":
 			if id, _ := m["callId"].(string); id != "" {
 				if _, ok := exits[id]; ok {
-					if code, ok := codeBuddyExitCode(codeBuddyOutput(m["output"])); ok {
+					code, ok, known := codeBuddyRawExit(m)
+					if !known {
+						code, ok = codeBuddyExitCode(codeBuddyOutput(m["output"]))
+					}
+					if ok {
 						exits.stamp(s.Messages, id, "", code)
 					}
 					delete(exits, id)

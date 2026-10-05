@@ -6,9 +6,10 @@ import (
 	"testing"
 )
 
-// CodeBuddy 2.161.2 writes how a command ended only into the result's text,
-// as an `Exit Code: N` line, and keeps status "completed" either way. Read
-// without it, a failed make was stored as a bare `$ make …` (#4703).
+// CodeBuddy 2.161.2 writes how a command ended into the result's text, as an
+// `Exit Code: N` line, and keeps status "completed" either way. Read without
+// it, a failed make was stored as a bare `$ make …` (#4703). These records
+// carry no structured rawResponse, so the text is all there is.
 func TestCodeBuddyCommandCarriesExitCode(t *testing.T) {
 	home := codeBuddyEnv(t)
 	path := filepath.Join(home, ".codebuddy", "projects", "-work-app", "s1.jsonl")
@@ -124,5 +125,71 @@ func TestCodeBuddyTranscriptKnownOutsideItsRoots(t *testing.T) {
 	writeCodeBuddyFile(t, claude, `{"type":"user","sessionId":"c","message":{"role":"user","content":"hi"}}`+"\n")
 	if IsCodeBuddyTranscript(claude) || IsCodeBuddyTranscript("") {
 		t.Fatal("a Claude transcript was taken for CodeBuddy's")
+	}
+}
+
+// An output too large for the transcript is moved to tool-results/<callId>.txt
+// and the result keeps a <persisted-output> preview of its first 2 KB, with no
+// Exit Code line. The structured result still records the code.
+func TestCodeBuddyPersistedOutputKeepsExitCode(t *testing.T) {
+	home := codeBuddyEnv(t)
+	path := filepath.Join(home, ".codebuddy", "projects", "-work-app", "s2.jsonl")
+	preview := `<persisted-output>\nOutput too large (67.4KB). Full output saved to: /home/u/.codebuddy/projects/-work-app/s2/tool-results/call_1.txt\n\nPreview (first 2048 bytes):\nCommand: go test -v ./...\nStdout: === RUN TestA\n...\n</persisted-output>`
+	raw := func(code string, interrupted bool) string {
+		i := "false"
+		if interrupted {
+			i = "true"
+		}
+		return `"providerData":{"toolResult":{"content":"x","rawResponse":{"exitCode":` + code + `,"signal":null,"interrupted":` + i + `}}}`
+	}
+	writeCodeBuddyFile(t, path, strings.Join([]string{
+		`{"id":"u1","timestamp":1791187200000,"type":"message","role":"user","content":[{"type":"input_text","text":"run the tests"}],"sessionId":"s2","cwd":"/work/app"}`,
+		`{"id":"a1","timestamp":1791187201000,"type":"function_call","name":"Bash","callId":"call_1","arguments":"{\"command\":\"go test -v ./...\"}","sessionId":"s2","cwd":"/work/app"}`,
+		`{"id":"r1","timestamp":1791187202000,"type":"function_call_result","name":"Bash","callId":"call_1","status":"completed","output":{"type":"text","text":"` + preview + `"},` + raw("1", false) + `,"sessionId":"s2","cwd":"/work/app"}`,
+		`{"id":"a2","timestamp":1791187203000,"type":"function_call","name":"Bash","callId":"call_2","arguments":"{\"command\":\"go build ./...\"}","sessionId":"s2","cwd":"/work/app"}`,
+		`{"id":"r2","timestamp":1791187204000,"type":"function_call_result","name":"Bash","callId":"call_2","status":"completed","output":{"type":"text","text":"` + preview + `"},` + raw("0", false) + `,"sessionId":"s2","cwd":"/work/app"}`,
+		// Interrupted, or backgrounded with no code yet: nothing to state.
+		`{"id":"a3","timestamp":1791187205000,"type":"function_call","name":"Bash","callId":"call_3","arguments":"{\"command\":\"go test ./slow/...\"}","sessionId":"s2","cwd":"/work/app"}`,
+		`{"id":"r3","timestamp":1791187206000,"type":"function_call_result","name":"Bash","callId":"call_3","status":"completed","output":{"type":"text","text":"` + preview + `"},` + raw("130", true) + `,"sessionId":"s2","cwd":"/work/app"}`,
+		`{"id":"a4","timestamp":1791187207000,"type":"function_call","name":"Bash","callId":"call_4","arguments":"{\"command\":\"go test ./bg/...\"}","sessionId":"s2","cwd":"/work/app"}`,
+		`{"id":"r4","timestamp":1791187208000,"type":"function_call_result","name":"Bash","callId":"call_4","status":"completed","output":{"type":"text","text":"Command: go test ./bg/...\nStatus: Running in background with task_id: t1"},` + raw("null", false) + `,"sessionId":"s2","cwd":"/work/app"}`,
+	}, "\n")+"\n")
+	ss, err := ParseCodeBuddyFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v %d", err, len(ss))
+	}
+	var cmds []string
+	for _, m := range ss[0].Messages {
+		if m.Role == RoleCommand {
+			cmds = append(cmds, m.Text)
+		}
+	}
+	want := []string{"$ go test -v ./...  → exit 1", "$ go build ./...  → exit 0", "$ go test ./slow/...", "$ go test ./bg/..."}
+	if strings.Join(cmds, "|") != strings.Join(want, "|") {
+		t.Fatalf("commands:\n got %q\nwant %q", cmds, want)
+	}
+}
+
+// Reading an image leaves a result whose text is a JSON list of blob
+// references. Every other reader drops image content, and indexed as text it
+// put a 64-hex blob id and the blob store's path into search.
+func TestCodeBuddyImageReadIsNotText(t *testing.T) {
+	home := codeBuddyEnv(t)
+	path := filepath.Join(home, ".codebuddy", "projects", "-work-app", "s3.jsonl")
+	ref := `[{\"type\":\"image_blob_ref\",\"blob_id\":\"a17ecf5531cb5cb103791f883dec00ca7f8247d6722729ec0959953c36e85be8\",\"mime\":\"image/png\",\"size\":8558,\"blob_path\":\"/home/u/.codebuddy/blobs/a1/a17ecf55.png\"}]`
+	writeCodeBuddyFile(t, path, strings.Join([]string{
+		`{"id":"u1","timestamp":1791187200000,"type":"message","role":"user","content":[{"type":"input_text","text":"look at the screenshot"}],"sessionId":"s3","cwd":"/work/app"}`,
+		`{"id":"a1","timestamp":1791187201000,"type":"function_call","name":"Read","callId":"call_1","arguments":"{\"file_path\":\"/work/app/shot.png\"}","sessionId":"s3","cwd":"/work/app"}`,
+		`{"id":"r1","timestamp":1791187202000,"type":"function_call_result","name":"Read","callId":"call_1","status":"completed","output":{"type":"text","text":"` + ref + `"},"sessionId":"s3","cwd":"/work/app"}`,
+		`{"id":"m1","timestamp":1791187203000,"type":"message","role":"assistant","content":[{"type":"output_text","text":"the button is cut off"}],"sessionId":"s3","cwd":"/work/app"}`,
+	}, "\n")+"\n")
+	ss, err := ParseCodeBuddyFile(path)
+	if err != nil || len(ss) != 1 {
+		t.Fatalf("parse: %v %d", err, len(ss))
+	}
+	for _, m := range ss[0].Messages {
+		if strings.Contains(m.Text, "blob_id") || strings.Contains(m.Text, "image_blob_ref") {
+			t.Fatalf("%s record carries the blob reference: %q", m.Role, m.Text)
+		}
 	}
 }
