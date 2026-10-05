@@ -33,7 +33,7 @@ type autoWiring struct {
 // -auto install target and no entry is a hole in the only report a user has
 // when memory goes quiet.
 func autoWirings() []autoWiring {
-	return []autoWiring{
+	ws := []autoWiring{
 		{"opencode", func() string {
 			return filepath.Join(opencodeConfigHome(), "opencode", "plugins", "deja.js")
 		}, "hook-context", ""},
@@ -109,13 +109,17 @@ func autoWirings() []autoWiring {
 		{"roo", func() string { return guidancePath("roo") }, "",
 			"guidance — the agent is told to call recall, not handed it"},
 	}
+	for _, e := range traeIDEPresent() {
+		ws = append(ws, autoWiring{"trae-ide", e.hooksPath, "hook-context", ""})
+	}
+	return ws
 }
 
 // autoInClientConfig names the rows whose file is the client's own config
 // rather than one deja writes whole. Those exist whether deja ever wrote to
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
-	"cursor": true, "qwen": true, "codebuddy": true, "workbuddy": true, "trae": true, "muse": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+	"cursor": true, "qwen": true, "codebuddy": true, "workbuddy": true, "trae": true, "trae-ide": true, "muse": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
 	"copilot": true,
 }
 
@@ -423,6 +427,11 @@ func doctorAutoRecall(w io.Writer) {
 			// row says where to look rather than guessing either way.
 			if a.name == "trae" {
 				fmt.Fprintf(w, "  %-12s %s\n", "", "traex runs these only once trusted — it asks at start-up, and /hooks shows which")
+			}
+			// TRAE IDE keeps its hooks switch with the agent's settings, off
+			// by default and not in a file deja can read.
+			if a.name == "trae-ide" {
+				fmt.Fprintf(w, "  %-12s %s\n", "", traeIDEHooksOffNote)
 			}
 		}
 		// Under the row whatever the row said. A machine that upgraded is most

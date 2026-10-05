@@ -41,6 +41,10 @@ hooks stay silent and say once, at session start, how to get it.
 the server alone). If both are present the plugin's hooks stand down, so
 nothing runs twice.
 
+On Windows the plugin's hooks and server are shell scripts, so they need Git
+for Windows. Without it, use `deja install codebuddy-auto`, which writes hooks
+that run through PowerShell.
+
 deja reads CodeBuddy's own sessions from `~/.codebuddy/projects`
 (`CODEBUDDY_CONFIG_DIR` is honoured) and WorkBuddy's from `~/.workbuddy/projects`.
 

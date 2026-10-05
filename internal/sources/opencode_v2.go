@@ -46,6 +46,13 @@ type opencodeSchema struct {
 	// legacy is a 2.0 store that still holds 1.x sessions in session,
 	// message and part, read beside the 2.0 ones.
 	legacy bool
+	// mixed is a store with no session_v2 whose turns are in both layouts
+	// under one session table: Kilo's CLI writes a prompt sent through its
+	// /api/session route to session_message and one from the TUI or `kilo run`
+	// to message and part, and a session continued from the other side has
+	// turns in both. Nothing copies one into the other, so both are read
+	// whole (#4694).
+	mixed bool
 	// rowsStamped says message and part carry time_updated and part names its
 	// session, turnsStamped that session_message carries time_updated: the
 	// since clause asks those where they are there (#4207).
@@ -109,6 +116,7 @@ func readOpencodeSchema(db string) opencodeSchema {
 		out.sessionTable = "session_v2"
 		out.legacy = true
 	}
+	out.mixed = out.v2 && !have["session_v2"] && have["session"] && have["message"] && have["part"]
 	return out
 }
 
@@ -220,8 +228,7 @@ func opencodeV2Query(sessionTable, where string, limit int) string {
 // column is asked for the turn's own stamps, under `$.time.start` for a tool
 // and `$.time.created` for a turn.
 func opencodeV2SinceWhere(db string, t time.Time) string {
-	touched := fmt.Sprintf("select session_id from session_message where %s or %s",
-		newerThanEpoch("time_created", t), newerThanEpoch("time_updated", t))
+	touched := opencodeV2Touched(db, t)
 	if !opencodeSchemaOf(db).turnsStamped {
 		rfc := sqlEscape(t.UTC().Format(time.RFC3339Nano))
 		at := "coalesce(json_extract(x.data,'$.time.start'),json_extract(x.data,'$.time.created'))"
@@ -229,6 +236,16 @@ func opencodeV2SinceWhere(db string, t time.Time) string {
 			newerThanEpoch("x.mc", t), rfc, newerThanEpoch(at, t), at, rfc)
 	}
 	return opencodeSessionTouched(opencodeSessionTable(db), t, touched)
+}
+
+// opencodeV2Touched names the sessions with a session_message row stamped
+// after t, from the row's own columns, so it stands outside the 2.x query too.
+func opencodeV2Touched(db string, t time.Time) string {
+	newer := newerThanEpoch("time_created", t)
+	if opencodeSchemaOf(db).turnsStamped {
+		newer += " or " + newerThanEpoch("time_updated", t)
+	}
+	return "select session_id from session_message where " + newer
 }
 
 // opencodeSessionTable is the table sessions live in, for the reads beside the

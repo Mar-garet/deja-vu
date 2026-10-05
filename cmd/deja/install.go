@@ -888,6 +888,10 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 			return installResult{}, err
 		}
 		return installTraeAuto(exe, uninstall)
+	case "trae-ide":
+		return installTraeIDE(exe, uninstall)
+	case "trae-ide-auto":
+		return installTraeIDEAuto(exe, uninstall)
 	case "codebuddy":
 		return installCodeBuddyMCP(exe, uninstall)
 	case "codebuddy-auto":
@@ -2183,6 +2187,15 @@ func hookCommandKindOf(existing any, cmd string) hookCommandKind {
 	if s == cmd {
 		return hookDejas
 	}
+	// A quoted path is one token whatever is in it, so the line is deja's
+	// own when the path names deja and nothing follows but the subcommand.
+	// Read as a wrapper, an install from a new path left the old line and
+	// its dead path in place, and CodeBuddy's PowerShell form on Windows
+	// stacked beside the quoted line it replaces (#4728).
+	if bin, rest, ok := quotedHookLine(s); ok && rest == hookLineRest(cmd) && hookTokenIsDejas(bin) {
+		return hookDejas
+	}
+	s, cmd = unwrapPowerShellHook(s), unwrapPowerShellHook(cmd)
 	sub := cmd[strings.LastIndex(cmd, " ")+1:]
 	for i := 0; i < len(s); {
 		j := strings.Index(s[i:], " "+sub)
@@ -2243,6 +2256,12 @@ func hookBinariesBefore(prefix string) []string {
 // Deliberately narrow: the token must be named like a deja build *and* be
 // running one of deja's hook subcommands. A line that merely contains deja's
 // hook inside something bigger is still hookWrapsDejas and is left alone.
+//
+// A build is `deja` or `deja-<name>`, bare or .exe, and `deja.test` is the
+// test binary. A script is not: `deja-wrapper.cmd`, `deja-run.sh` and
+// `dejavu-notify` are somebody's own programs that happen to take deja's
+// subcommand, and reading them as ours rewrote them on install and deleted
+// them on uninstall (#4728 review).
 func hookTokenIsDejas(tok string) bool {
 	if isDejaBinaryToken(tok) {
 		return true
@@ -2251,8 +2270,11 @@ func hookTokenIsDejas(tok string) bool {
 	if i := strings.LastIndexAny(tok, `/\`); i >= 0 {
 		tok = tok[i+1:]
 	}
-	tok = strings.ToLower(strings.TrimSuffix(strings.ToLower(tok), ".exe"))
-	return strings.HasPrefix(tok, "deja")
+	tok = strings.TrimSuffix(strings.TrimSuffix(strings.ToLower(tok), ".exe"), ".test")
+	if strings.Contains(tok, ".") {
+		return false
+	}
+	return tok == "deja" || strings.HasPrefix(tok, "deja-")
 }
 
 // isDejaHookCommand reports whether deja's hook runs in this command at all,
@@ -2260,6 +2282,64 @@ func hookTokenIsDejas(tok string) bool {
 // on to rewrite the command ask for hookDejas instead.
 func isDejaHookCommand(existing any, cmd string) bool {
 	return hookCommandKindOf(existing, cmd) != hookNotDejas
+}
+
+// powerShellHookHead and powerShellHookTail are how codeBuddyHookRun's Windows
+// line opens and closes.
+const (
+	powerShellHookHead = `powershell -NoProfile -Command "`
+	powerShellHookTail = `; exit (Get-Variable LASTEXITCODE -ValueOnly)"`
+)
+
+// unwrapPowerShellHook is the command inside codeBuddyHookRun's Windows line,
+// and the line itself when it is not one.
+func unwrapPowerShellHook(s string) string {
+	if len(s) > len(powerShellHookHead)+len(powerShellHookTail) && strings.HasPrefix(s, powerShellHookHead) && strings.HasSuffix(s, powerShellHookTail) {
+		return s[len(powerShellHookHead) : len(s)-len(powerShellHookTail)]
+	}
+	return s
+}
+
+// quotedHookLine splits a hook line whose binary is quoted — `"<path>" rest`,
+// `'<path>' rest`, PowerShell's `& '<path>' rest`, or that inside
+// codeBuddyHookRun's Windows line — into the path and what follows it.
+func quotedHookLine(s string) (bin, rest string, ok bool) {
+	s = strings.TrimSpace(unwrapPowerShellHook(strings.TrimSpace(s)))
+	s = strings.TrimPrefix(s, "& ")
+	if len(s) < 2 || (s[0] != '"' && s[0] != '\'') {
+		return "", "", false
+	}
+	q := s[0]
+	var b strings.Builder
+	for i := 1; i < len(s); i++ {
+		if s[i] != q {
+			b.WriteByte(s[i])
+			continue
+		}
+		// PowerShell writes a single quote inside single quotes twice.
+		if q == '\'' && i+1 < len(s) && s[i+1] == '\'' {
+			b.WriteByte('\'')
+			i++
+			continue
+		}
+		if i+1 >= len(s) || s[i+1] != ' ' {
+			return "", "", false
+		}
+		return b.String(), strings.TrimSpace(s[i+1:]), true
+	}
+	return "", "", false
+}
+
+// hookLineRest is what a hook line deja writes runs after the binary: the
+// subcommand and its flags.
+func hookLineRest(cmd string) string {
+	if _, rest, ok := quotedHookLine(cmd); ok {
+		return rest
+	}
+	if i := strings.IndexByte(cmd, ' '); i >= 0 {
+		return strings.TrimSpace(cmd[i+1:])
+	}
+	return ""
 }
 
 // lastShellToken is the word a command name would occupy: the last run of
@@ -4909,6 +4989,7 @@ func installTargetNames() []string {
 		"codebuddy", "codebuddy-auto",
 		"workbuddy", "workbuddy-auto",
 		"trae", "trae-auto",
+		"trae-ide", "trae-ide-auto",
 		"muse", "muse-auto",
 		"kimi", "kimi-auto",
 		"hermes", "hermes-auto",
@@ -5081,6 +5162,8 @@ func existingTargetChecks() map[string]string {
 		"workbuddy":    filepath.Join(sources.WorkBuddyConfigDir(), "projects"),
 		"trae":         filepath.Join(sources.TraeRoot(), "sessions"), // the same: deja creates traecli.toml
 		"muse":         sources.MuseRoot(),                            // the same: deja creates ~/.config/muse
+		// The IDE's own globalStorage, not User/: deja writes User/mcp.json.
+		"trae-ide": filepath.Join(traeIDEUserDir(), "globalStorage"),
 		// Reasonix's own config.toml, which it writes on first run. deja
 		// writes beside it — plugins/ and plugin-packages.json — and never
 		// into it, so keying on the home itself would make every machine a

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/sources"
@@ -92,7 +93,7 @@ func installCodeBuddyHooksIn(path, exe string, uninstall bool) (installResult, e
 	exe = hookExeFor(exe, uninstall)
 	var res installResult
 	for i, h := range codeBuddyHookWiring {
-		r, err := installSettingsHookCmd(path, h.Event, h.Matcher, codeBuddyHookTimeout, hookRun(exe, h.Sub), uninstall)
+		r, err := installSettingsHookCmd(path, h.Event, h.Matcher, codeBuddyHookTimeout, codeBuddyHookRun(runtime.GOOS, exe, h.Sub), uninstall)
 		if err != nil {
 			return installResult{}, err
 		}
@@ -101,6 +102,30 @@ func installCodeBuddyHooksIn(path, exe string, uninstall bool) (installResult, e
 		}
 	}
 	return res, nil
+}
+
+// codeBuddyHookRun is the hook line for CodeBuddy. On Windows CodeBuddy hands
+// a hook to Git Bash when it finds one and to PowerShell -Command otherwise,
+// and PowerShell reads `"C:/First Last/deja.exe" hook-prompt` as a string with
+// a stray token after it, so every hook failed (#4728). A line whose first
+// word is powershell is spawned directly instead, whichever shell is there
+// (tryBuildDirectPowerShellHookCommand, 2.161), and the inner command runs the
+// quoted path behind `&`. Older builds hand the same line to bash or to
+// PowerShell, and both run it as well.
+//
+// Only for a path that needs quoting: a plain one already runs in both shells
+// and costs no extra process. A `$` or backtick would be expanded inside the
+// double quotes by bash or PowerShell, so such a path keeps the old line.
+//
+// PowerShell exits 1 for any failed native command, so the line passes deja's
+// own exit code on. It is read with Get-Variable because `$LASTEXITCODE`
+// would be expanded by bash or an outer PowerShell before the inner one ran.
+func codeBuddyHookRun(goos, exe, sub string) string {
+	p := strings.ReplaceAll(exe, `\`, "/")
+	if goos != "windows" || !strings.ContainsAny(p, " \t") || strings.ContainsAny(p, "$`") {
+		return hookCommandQuoteFor(goos, exe) + " " + sub
+	}
+	return powerShellHookHead + "& '" + strings.ReplaceAll(p, "'", "''") + "' " + sub + powerShellHookTail
 }
 
 // installCodeBuddyAuto writes the hooks first: a settings file deja refuses

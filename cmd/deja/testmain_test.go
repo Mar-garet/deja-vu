@@ -9,6 +9,11 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// A copy of this binary stands in for deja where a test runs a hook line
+	// through a real shell (codebuddy_windows_hook_test.go).
+	if os.Getenv(hookEchoEnv) == "1" {
+		hookEcho()
+	}
 	root, err := os.MkdirTemp("", "deja-command-test-")
 	if err != nil {
 		panic(err)
