@@ -33,7 +33,7 @@ type autoWiring struct {
 // -auto install target and no entry is a hole in the only report a user has
 // when memory goes quiet.
 func autoWirings() []autoWiring {
-	return []autoWiring{
+	ws := []autoWiring{
 		{"opencode", func() string {
 			return filepath.Join(opencodeConfigHome(), "opencode", "plugins", "deja.js")
 		}, "hook-context", ""},
@@ -47,7 +47,6 @@ func autoWirings() []autoWiring {
 		{"codebuddy", codeBuddySettingsPath, "hook-context", ""},
 		{"workbuddy", workBuddySettingsPath, "hook-context", ""},
 		{"trae", traeHooksPath, "hook-context", ""},
-		{"trae-ide", traeIDEHooksPath, "hook-context", ""},
 		{"muse", museSettingsPath, "hook-context", ""},
 		// The digest hook, not the prompt one: a config written before kimi had
 		// all three blocks still carries hook-prompt, and reading that as wired
@@ -110,6 +109,10 @@ func autoWirings() []autoWiring {
 		{"roo", func() string { return guidancePath("roo") }, "",
 			"guidance — the agent is told to call recall, not handed it"},
 	}
+	for _, e := range traeIDEPresent() {
+		ws = append(ws, autoWiring{"trae-ide", e.hooksPath, "hook-context", ""})
+	}
+	return ws
 }
 
 // autoInClientConfig names the rows whose file is the client's own config

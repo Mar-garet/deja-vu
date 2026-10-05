@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -141,7 +142,7 @@ func TestInstallTraeIDEAuto(t *testing.T) {
 }
 
 // The CN build is "Trae CN" with ~/.trae-cn. Where only it has user data,
-// every file goes there.
+// every file goes there and none to the international build's.
 func TestTraeIDECNEdition(t *testing.T) {
 	home := filepath.Join(hermeticEnv(t), "home")
 	cn := filepath.Join(traeIDEAppDir("Trae CN"), "User")
@@ -157,12 +158,95 @@ func TestTraeIDECNEdition(t *testing.T) {
 	if got := guidancePath("trae-ide"); got != filepath.Join(home, ".trae-cn", "skills", "deja-history", "SKILL.md") {
 		t.Errorf("skill path %q", got)
 	}
-	// Both present: the international build wins.
-	if err := os.MkdirAll(filepath.Join(traeIDEAppDir("Trae"), "User"), 0o755); err != nil {
+	if _, err := captureRun(t, "install", "trae-ide-auto", "--no-index"); err != nil {
 		t.Fatal(err)
 	}
-	if got := traeIDEHooksPath(); got != filepath.Join(home, ".trae", "hooks.json") {
-		t.Errorf("hooks path with both builds %q", got)
+	for _, p := range []string{traeIDEAppDir("Trae"), filepath.Join(home, ".trae")} {
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("a CN-only install wrote %s", p)
+		}
+	}
+}
+
+// With both builds on the machine, each gets its own server, skill and hooks,
+// and doctor has a row for each. Uninstall gives both sets of files back as
+// they were.
+func TestInstallTraeIDEBothEditions(t *testing.T) {
+	home := filepath.Join(hermeticEnv(t), "home")
+	type files struct{ mcp, hooks, skill string }
+	var eds []files
+	for _, e := range traeIDEEditions {
+		f := files{
+			filepath.Join(traeIDEAppDir(e.app), "User", "mcp.json"),
+			filepath.Join(home, e.dataFolder, "hooks.json"),
+			filepath.Join(home, e.dataFolder, "skills", "deja-history", "SKILL.md"),
+		}
+		eds = append(eds, f)
+		for _, p := range []string{f.mcp, f.hooks} {
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	ownMCP := `{"mcpServers":{"other":{"command":"x"}}}` + "\n"
+	ownHooks := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}` + "\n"
+	for _, f := range eds {
+		if err := os.WriteFile(f.mcp, []byte(ownMCP), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f.hooks, []byte(ownHooks), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out, err := captureRun(t, "install", "trae-ide-auto", "--no-index")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range eds {
+		if !strings.Contains(readString(t, f.mcp), `"deja"`) {
+			t.Errorf("%s has no deja server", f.mcp)
+		}
+		if !strings.Contains(readString(t, f.hooks), "hook-prompt") {
+			t.Errorf("%s has no deja hooks", f.hooks)
+		}
+		if !strings.Contains(readString(t, f.skill), "name: deja-history") {
+			t.Errorf("no skill at %s", f.skill)
+		}
+		if !reportNames(out, f.mcp) || !reportNames(out, f.hooks) {
+			t.Errorf("install did not name %s and %s:\n%s", f.mcp, f.hooks, out)
+		}
+	}
+	var mcpRows, hookRows int
+	for _, c := range doctorMCPConfigs() {
+		if c.name == "trae-ide" && c.wired(c.path) {
+			mcpRows++
+		}
+	}
+	for _, a := range autoWirings() {
+		if a.name == "trae-ide" {
+			if st, _ := autoWiringState(a); st == "wired" {
+				hookRows++
+			}
+		}
+	}
+	if mcpRows != 2 || hookRows != 2 {
+		t.Errorf("doctor wired rows: %d MCP, %d hooks; want 2 and 2", mcpRows, hookRows)
+	}
+
+	if _, err := captureRun(t, "uninstall", "trae-ide-auto"); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range eds {
+		if got := readString(t, f.mcp); got != ownMCP {
+			t.Errorf("%s after uninstall:\n%q\nwant\n%q", f.mcp, got, ownMCP)
+		}
+		if got := readString(t, f.hooks); got != ownHooks {
+			t.Errorf("%s after uninstall:\n%q\nwant\n%q", f.hooks, got, ownHooks)
+		}
+		if _, err := os.Stat(f.skill); !os.IsNotExist(err) {
+			t.Errorf("skill left at %s", f.skill)
+		}
 	}
 }
 
@@ -194,27 +278,36 @@ func TestDoctorTraeIDERows(t *testing.T) {
 	}
 }
 
-// TRAE IDE's hook payload names the tool llm_tool_name; until a live capture
-// says whether tool_name is sent too, either is read.
-func TestHookToolReadsLLMToolName(t *testing.T) {
+// The PreToolUse payload a live TRAE IDE run sent before a Write, trimmed of
+// the file's content. Claude's tool name and file_path, so the file line
+// reads it unchanged; llm_tool_name stands in when tool_name is absent.
+const traeIDEPreToolUse = `{"session_id":"6ac38f703c8318180a8cd414","cwd":"/p","hook_event_name":"PreToolUse","workspace_roots":["/p"],"agent_id":"solo_agent","agent_type":"solo_agent","tool_use_id":"call_1","tool_name":"Write","llm_tool_name":"Write","tool_input":{"file_path":"/p/client.go","content":"package p"}}`
+
+func TestHookToolReadsTraeIDEPayload(t *testing.T) {
 	for _, payload := range []string{
-		`{"llm_tool_name":"write_to_file","tool_input":{"file_path":"/p/a.go"}}`,
-		`{"tool_name":"write_to_file","llm_tool_name":"ignored","tool_input":{"file_path":"/p/a.go"}}`,
+		traeIDEPreToolUse,
+		strings.Replace(traeIDEPreToolUse, `"tool_name":"Write",`, "", 1),
 	} {
 		var in toolHookInput
 		if err := json.Unmarshal([]byte(payload), &in); err != nil {
 			t.Fatal(err)
 		}
 		in.adopt()
-		if in.ToolName != "write_to_file" || in.ToolInput.FilePath != "/p/a.go" {
-			t.Errorf("%s: tool %q path %q", payload, in.ToolName, in.ToolInput.FilePath)
+		if in.ToolName != "Write" || in.ToolInput.FilePath != "/p/client.go" || hookProjectPath(in.CWD, in.WorkspaceRoots) != "/p" {
+			t.Errorf("tool %q path %q cwd %q from %s", in.ToolName, in.ToolInput.FilePath, in.CWD, payload)
 		}
 	}
 	var after toolAfterInput
-	if err := json.Unmarshal([]byte(`{"llm_tool_name":"run_command"}`), &after); err != nil {
+	if err := json.Unmarshal([]byte(`{"hook_event_name":"PostToolUse","llm_tool_name":"Bash","tool_input":{"command":"go test"}}`), &after); err != nil {
 		t.Fatal(err)
 	}
-	if after.LLMToolName != "run_command" || !isCommandTool(after.LLMToolName) {
+	if after.LLMToolName != "Bash" {
 		t.Errorf("hook-tool-after does not read llm_tool_name: %+v", after)
+	}
+	// The matchers are tested against Claude's names, as the live run sent them.
+	for _, w := range traeIDEHookWiring {
+		if w.Event == "PreToolUse" && !regexp.MustCompile("^("+w.Matcher+")$").MatchString("Write") {
+			t.Errorf("PreToolUse matcher %q misses Write", w.Matcher)
+		}
 	}
 }

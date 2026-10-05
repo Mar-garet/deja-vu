@@ -1961,7 +1961,7 @@ type doctorMCPConfig struct {
 }
 
 func doctorMCPConfigs() []doctorMCPConfig {
-	return []doctorMCPConfig{
+	configs := []doctorMCPConfig{
 		{"claude-code", sources.ClaudeJSONPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"codex", filepath.Join(sources.CodexHome(), "config.toml"), doctorTOMLWired, doctorTOMLDejaKeys},
 		{"opencode", doctorOpencodeConfigPath(), doctorJSONWiredIn(doctorOpencodeServers), doctorJSONDejaKeysIn(doctorOpencodeServers)},
@@ -1973,7 +1973,6 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"codebuddy", codeBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"workbuddy", workBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"trae", traeConfigPath(), doctorTOMLWired, doctorTOMLDejaKeys},
-		{"trae-ide", traeIDEMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"muse", museSettingsPath(), doctorJSONWiredIn(doctorMuseServers), doctorJSONDejaKeysIn(doctorMuseServers)},
 		{"kimi", filepath.Join(sources.KimiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"cline", sources.ClineMCPSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
@@ -2008,6 +2007,11 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		// loaded it from is the file that says so.
 		{"reasonix", reasonixInstalledManifest(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 	}
+	// One row per TRAE IDE build on this machine; each reads its own file.
+	for _, e := range traeIDEPresent() {
+		configs = append(configs, doctorMCPConfig{"trae-ide", e.mcpPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")})
+	}
+	return configs
 }
 
 // dshPatchPath is the home-level patch layer installDeepSeek writes.

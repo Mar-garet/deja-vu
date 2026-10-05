@@ -57,7 +57,8 @@ format. A call seen both there and as a `response_item` is read once, by
   `deja install trae-ide` adds the server to `<user data>/User/mcp.json`
   (`~/Library/Application Support/Trae`, `%APPDATA%\Trae` or `~/.config/Trae`;
   `Trae CN` for the CN build) with no `type` key, which its schema rejects, and
-  the skill to `~/.trae/skills` (`~/.trae-cn/skills`).
+  the skill to `~/.trae/skills` (`~/.trae-cn/skills`); with both builds installed,
+  each is wired in its own files.
   `deja install trae-ide-auto` adds Claude-shaped hooks to `~/.trae/hooks.json`. The IDE ships
   with hooks off and keeps that switch in its own settings store, so deja cannot
   tell whether they run: turn them on in Settings > Hooks and run them locally.

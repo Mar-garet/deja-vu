@@ -66,8 +66,8 @@ const (
 type toolHookInput struct {
 	HookEventName string `json:"hook_event_name"`
 	ToolName      string `json:"tool_name"`
-	// TRAE IDE's hook payload names the tool here; whether it also sends
-	// tool_name is not measured (#4731).
+	// TRAE IDE sends the tool's name here as well as under tool_name; read
+	// when tool_name is missing (#4731).
 	LLMToolName string `json:"llm_tool_name"`
 	ToolInput   struct {
 		Command  string `json:"command"`
@@ -313,8 +313,6 @@ func toolHookLineSkipping(dir, cwd string, input toolHookInput, used func(string
 		// Command Code sends its internal names; EDIT and WRITE are only what
 		// its matcher sees (#4371).
 		"edit_file", "write_file",
-		// TRAE IDE's file tools, as its agent library names them (#4731).
-		"write_to_file", "update_file", "edit_file_fast_apply",
 		// pi and omp have no pre-tool seam: the only handler whose return the
 		// model reads is the one holding a finished tool result. An edit there
 		// is already made, so the file's history goes out on their lowercase
