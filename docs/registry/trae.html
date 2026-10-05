@@ -44,7 +44,7 @@
 <li><strong>Format</strong>: JSONL — Codex rollouts: <code>session_meta</code>, <code>turn_context</code>, <code>response_item</code>, <code>event_msg</code>, plus TRAE&#39;s own <code>history_mutation</code></li>
 <li><strong>Needs</strong>: nothing (<code>zstd</code> only for a compressed rollout)</li>
 <li><strong>Resume</strong>: <code>traex resume &lt;id&gt;</code></li>
-<li><strong>Wiring</strong>: <code>deja install trae</code> adds the MCP server to <code>${TRAE_HOME:-~/.trae}/traecli.toml</code>; <code>deja install trae-auto</code> adds Codex&#39;s hooks to <code>${TRAECLI_HOME:-~/.trae/cli}/hooks.json</code> as well, which TRAE runs once they are trusted at start-up</li>
+<li><strong>Wiring</strong>: <code>deja install trae</code> adds the MCP server to <code>${TRAE_HOME:-~/.trae}/traecli.toml</code>; <code>deja install trae-auto</code> adds Codex&#39;s hooks to <code>${TRAECLI_HOME:-${TRAE_HOME:-~/.trae}/cli}/hooks.json</code> as well, which TRAE runs once they are trusted at start-up</li>
 </ul>
 <p>TRAE CLI 2.0 ships as <code>traex</code> and reports itself as <code>traecli 0.200.x</code>. It is a</p>
 <p>closed-source fork of codex-rs and writes the same rollout files Codex does,</p>

@@ -12,7 +12,8 @@ import (
 //
 // MCP: `traex mcp add deja -- <deja> mcp` appends [mcp_servers.deja] with
 // command and args, no type, to ${TRAE_HOME:-~/.trae}/traecli.toml, and
-// `traex mcp list` shows it enabled.
+// `traex mcp list` shows it enabled. TRAECLI_HOME does not move this file:
+// with it set, `traex mcp add` still wrote to $TRAE_HOME/traecli.toml.
 //
 // Hooks: ${TRAECLI_HOME:-$TRAE_HOME/cli}/hooks.json, the file `traex migrate
 // hooks --user` copies a legacy ~/.trae/hooks.json to. The binary carries
