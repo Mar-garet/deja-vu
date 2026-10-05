@@ -317,7 +317,7 @@ func stripPlanCheckbox(s string) string {
 func planSearchSteps(plan string) [][]string {
 	var out [][]string
 	for _, step := range extractPlanSteps(plan) {
-		terms := prompt.Terms(step)
+		terms := prompt.CommandTerms(step)
 		if len(terms) > planTermLimit {
 			terms = terms[:planTermLimit]
 		}

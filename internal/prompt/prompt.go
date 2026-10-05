@@ -19,10 +19,17 @@ import (
 // carry no ASCII identifier to find.
 func relevanceTerms(q string) []string { return query.RelevanceTerms(q) }
 
-// promptSearchTerms extracts the informative tokens from a natural-language
-// prompt: stop words and short fragments dropped, capped so the query stays
-// specific.
-func Terms(prompt string) []string {
+// Terms extracts the informative tokens from a natural-language prompt: stop
+// words and short fragments dropped, capped so the query stays specific.
+func Terms(prompt string) []string { return termsAsked(splitAsk(prompt)) }
+
+// CommandTerms is Terms for a shell command or a plan step. Lines still split —
+// the last one is what runs — but a line is not cut into clauses: "cd repo; go
+// test ./..." would lead with the test and drop the directory, and a full stop
+// inside a quoted commit message is not a boundary at all.
+func CommandTerms(text string) []string { return termsAsked(splitAskLine(text)) }
+
+func termsAsked(ask, rest string) []string {
 	var out []string
 	seen := map[string]bool{}
 	add := func(f string) bool {
@@ -40,7 +47,6 @@ func Terms(prompt string) []string {
 	// question on the same line does the same (#4751). The ask is read first,
 	// the rest of the prompt fills what is left — the term rules themselves are
 	// untouched.
-	ask, rest := splitAsk(prompt)
 	if ask != "" {
 		if termsFrom(ask, seen, add) {
 			return out
@@ -129,12 +135,24 @@ func termsFrom(prompt string, seen map[string]bool, add func(string) bool) bool 
 // clauses as well, and the clause holding the question leads. A one-line
 // prompt of a single clause has no split at all.
 func splitAsk(prompt string) (ask, rest string) {
+	return split(prompt, true)
+}
+
+// splitAskLine is splitAsk without the clause cut, for command text.
+func splitAskLine(text string) (ask, rest string) {
+	return split(text, false)
+}
+
+func split(prompt string, byClause bool) (ask, rest string) {
 	lines := strings.Split(prompt, "\n")
 	q := askLine(lines)
 	if q < 0 {
 		return "", prompt
 	}
-	clause, left := askClause(lines[q])
+	clause, left := "", ""
+	if byClause {
+		clause, left = askClause(lines[q])
+	}
 	if clause == "" {
 		if len(lines) == 1 {
 			return "", prompt
@@ -192,7 +210,9 @@ func askClause(line string) (clause, rest string) {
 }
 
 // clauses splits a line at its clause boundaries. A dot or colon with no space
-// after it is part of a word — main.go, 1.5, http://, 10:30 — and stays.
+// after it is part of a word — main.go, 1.5, http://, 10:30 — and stays. So does
+// anything inside backticks or double quotes: `git commit -m "fix: x. y"` is
+// one thing being asked about, not three clauses.
 func clauses(line string) []string {
 	var out []string
 	rs := []rune(line)
@@ -203,7 +223,18 @@ func clauses(line string) []string {
 		}
 		start = next
 	}
+	var quote rune
 	for i, r := range rs {
+		if quote != 0 {
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+		if r == '`' || r == '"' {
+			quote = r
+			continue
+		}
 		spaceAfter := i+1 == len(rs) || unicode.IsSpace(rs[i+1])
 		switch {
 		case (r == '?' || r == '!' || r == '.' || r == ':' || r == ';') && spaceAfter:

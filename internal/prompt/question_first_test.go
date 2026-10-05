@@ -181,3 +181,16 @@ func TestWhichClauseCountsAsTheAsk(t *testing.T) {
 		t.Errorf("splitAsk on a pasted prompt = (%q, %q)", ask, rest)
 	}
 }
+
+// A command quoted in a question is one thing being asked about: a colon or a
+// full stop inside backticks or double quotes is not a clause boundary.
+func TestAQuotedCommandInAQuestionIsNotCut(t *testing.T) {
+	p := "why does `git commit -m \"fix: x. y\"` fail on the zebraquux hook?"
+	if ask, rest := splitAsk(p); ask != "" || rest != p {
+		t.Errorf("splitAsk(%q) = (%q, %q), want no split", p, ask, rest)
+	}
+	got, want := Terms(p), []string{"git", "commit", "fail", "zebraquux", "hook"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("Terms = %q, want %q", got, want)
+	}
+}

@@ -107,7 +107,7 @@ func main() {
 // held everything back, with a number for the step it got to.
 func walk(dir string, use index.CommandUse, project string, pol policy.Policy, states map[string]sources.Lifecycle, tail int) (string, string) {
 	cmd := use.Command
-	terms := prompt.Terms(normalized(cmd))
+	terms := prompt.CommandTerms(normalized(cmd))
 	if len(terms) == 0 {
 		return "terms", "the command reduces to no searchable word"
 	}
