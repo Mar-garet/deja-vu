@@ -407,6 +407,11 @@
       "path": "<tmp>/home/.codebuddy/.mcp.json"
     },
     {
+      "name": "trae",
+      "state": "config-missing",
+      "path": "<tmp>/home/.trae/traecli.toml"
+    },
+    {
       "name": "kimi",
       "state": "config-missing",
       "path": "<tmp>/home/.kimi-code/mcp.json"
@@ -572,6 +577,11 @@
       "name": "codebuddy",
       "state": "missing",
       "path": "<tmp>/home/.codebuddy/settings.json"
+    },
+    {
+      "name": "trae",
+      "state": "missing",
+      "path": "<tmp>/home/.trae/cli/hooks.json"
     },
     {
       "name": "kimi",

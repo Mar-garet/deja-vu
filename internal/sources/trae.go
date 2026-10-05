@@ -31,7 +31,13 @@ func TraeHome() string {
 // sessions and hooks.json with it (traecli 0.207.1: `TRAECLI_HOME=x traex
 // archive <id>` writes x/archived_sessions). DEJA_TRAE_ROOT overrides both.
 func TraeRoot() string {
-	return EnvPath("DEJA_TRAE_ROOT", EnvPath("TRAECLI_HOME", filepath.Join(TraeHome(), "cli")))
+	return EnvPath("DEJA_TRAE_ROOT", TraeCLIHome())
+}
+
+// TraeCLIHome is the directory TRAE itself keeps its state and hooks.json in,
+// whatever deja is told to read.
+func TraeCLIHome() string {
+	return EnvPath("TRAECLI_HOME", filepath.Join(TraeHome(), "cli"))
 }
 
 // TraeSessionDirs are the directories TRAE's rollouts live in.

@@ -94,6 +94,9 @@ var sharedSkillHarnesses = map[string]bool{
 	// Crush's own config source lists ~/.agents/skills among the directories it
 	// scans by default, alongside ~/.claude/skills and its own.
 	"crush": true,
+	// TRAE CLI 0.207.1: `traex debug prompt-input` lists a skill placed only
+	// in ~/.agents/skills among the skills it offers the model.
+	"trae": true,
 }
 
 // sharedSkillPath is the one file all of them read. Claude Code is deliberately

@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - TRAE CLI 2.0 sessions are read from `~/.trae/cli` (`TRAE_HOME`, `DEJA_TRAE_ROOT`) as harness `trae`, with their own doctor row and `traex resume`. Prompts come only from TRAE's user events, so the runtime context it writes under the user role is not indexed as something you said (#4680).
 - CodeBuddy Code sessions are read from `~/.codebuddy/projects`, WorkBuddy's from `~/.workbuddy/projects`, and Muse Code's from `~/.local/share/muse/sessions`; `deja install codebuddy` and `codebuddy-auto` wire recall into CodeBuddy (#4681, #4679).
+- `deja install trae` adds the MCP server to TRAE CLI's `traecli.toml`, and `trae-auto` adds the session-start, per-prompt, tool and compaction hooks to its `hooks.json`; TRAE runs them once you trust them at start-up (#4702).
+
+### Fixed
+
+- TRAE CLI sessions under `TRAECLI_HOME` are indexed; deja only followed `TRAE_HOME` (#4701).
 
 ## [0.21.6] - 2026-10-04
 
