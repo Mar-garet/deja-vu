@@ -309,6 +309,15 @@
       "indexed_sessions": 0
     },
     {
+      "name": "muse",
+      "state": "missing",
+      "paths": [
+        "<tmp>/home/.local/share/muse/sessions"
+      ],
+      "files": 0,
+      "indexed_sessions": 0
+    },
+    {
       "name": "deepseek",
       "state": "missing",
       "paths": [

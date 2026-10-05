@@ -712,6 +712,16 @@ func allHarnesses() []Harness {
 			}},
 		},
 		{
+			// Muse Code: one event-sourced log per session directory. The title
+			// can arrive late (session.name.changed), so the log is read whole.
+			Name: "muse", Load: LoadMuse, Files: MuseSessionFiles,
+			Kinds: []FileKind{{
+				Name:  "muse",
+				Match: isMuseSession,
+				Parse: fullParse(ParseMuseFile),
+			}},
+		},
+		{
 			// DeepSeek Harness writes one log per session, zstd-framed by
 			// default, so a machine without the zstd CLI sees the files and
 			// reads nothing out of them (SkipReason says so).

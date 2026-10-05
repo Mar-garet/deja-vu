@@ -45,6 +45,7 @@ func hermeticEnv(t *testing.T) string {
 	t.Setenv("COPILOT_HOME", "")
 	t.Setenv("REASONIX_STATE_HOME", "")
 	t.Setenv("DEJA_REASONIX_ROOT", "")
+	t.Setenv("DEJA_MUSE_ROOTS", "")
 	// Windows resolvers read APPDATA rather than the home directory — goose's
 	// config is one — so leaving it alone lets one test's install show up in
 	// another's report.

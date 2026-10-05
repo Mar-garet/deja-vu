@@ -1102,6 +1102,53 @@
           "why": "No custom-command directory for TRAE CLI was found in the sources read (#4680)."
         }
       }
+    },
+    {
+      "id": "muse",
+      "store_paths": [
+        "${XDG_DATA_HOME:-~/.local/share}/muse/sessions/YYYY/MM/DD/<id>/session.jsonl",
+        "${XDG_DATA_HOME:-~/.local/share}/muse/sessions/YYYY/MM/DD/<id>/subagent/<child>/session.jsonl",
+        "${DEJA_MUSE_ROOTS}/YYYY/MM/DD/<id>/session.jsonl"
+      ],
+      "format_kind": "jsonl",
+      "fixture_paths": [
+        "fixtures/registry/muse/sessions/2026/09/18/01a0b7d1-0000-7000-8000-00000000d3a0/session.jsonl"
+      ],
+      "parser_source": "internal/sources/muse.go",
+      "last_verified": "2026-10-05",
+      "display_name": "Muse Code",
+      "capabilities": {
+        "mcp": false,
+        "auto": false,
+        "skill": false,
+        "command": false,
+        "resume": false,
+        "handoff": "paste",
+        "prereq": "none"
+      },
+      "gaps": {
+        "mcp": {
+          "state": "unknown",
+          "why": "Muse reads an mcp_servers block from ~/.config/muse/settings.json, but nothing read so far documents the entry's shape, so deja does not write one yet (#4679)."
+        },
+        "auto": {
+          "state": "blocked",
+          "why": "Muse has user hooks in ~/.config/muse/settings.json and project hooks in .muse/hooks.json, but openharness measured them not firing, in `muse exec` or in the TUI, and discovers sessions by scanning instead. A hook deja wrote would run nowhere (#4679).",
+          "source": "https://github.com/autonomous-ai/openharness/blob/main/cli/src/engines/muse/normalizer.ts"
+        },
+        "skill": {
+          "state": "unknown",
+          "why": "Muse has a read_skill tool and ships skills of its own, but no source read here names a user-level skill directory deja could write to (#4679)."
+        },
+        "command": {
+          "state": "unknown",
+          "why": "No source read here documents a directory Muse loads custom slash commands from, so there is no file for deja to write (#4679)."
+        },
+        "resume": {
+          "state": "todo",
+          "why": "`muse resume <session-id>` reopens a session (agent-session-kit's resume builder and specstory's provider both use it); deja reads the store but does not print the command yet (#4679)."
+        }
+      }
     }
   ]
 }
