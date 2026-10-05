@@ -55,7 +55,7 @@ func TestCodeBuddyPluginMatchesTheInstaller(t *testing.T) {
 			t.Fatalf("%s: plugin entry %+v, installer matcher %q", w.Event, entries, w.Matcher)
 		}
 		h := entries[0].Hooks[0]
-		if h.Type != "command" || h.Command != bridge+w.Sub || h.Timeout <= 0 {
+		if h.Type != "command" || h.Command != bridge+w.Sub || h.Timeout != codeBuddyHookTimeout {
 			t.Fatalf("%s: plugin hook %+v, want %q", w.Event, h, bridge+w.Sub)
 		}
 	}

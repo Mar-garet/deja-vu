@@ -25,7 +25,7 @@
           {
             "type": "command",
             "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-context",
-            "timeout": 10,
+            "timeout": 60,
             "statusMessage": "Recalling past sessions…"
           }
         ]
@@ -37,7 +37,7 @@
           {
             "type": "command",
             "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-prompt",
-            "timeout": 10,
+            "timeout": 60,
             "statusMessage": "Searching past sessions…"
           }
         ]
@@ -50,7 +50,7 @@
           {
             "type": "command",
             "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-tool-after",
-            "timeout": 10,
+            "timeout": 60,
             "statusMessage": "Checking what fixed this before…"
           }
         ]
@@ -63,7 +63,7 @@
           {
             "type": "command",
             "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-tool-after",
-            "timeout": 10,
+            "timeout": 60,
             "statusMessage": "Checking what fixed this before…"
           }
         ]
@@ -75,7 +75,7 @@
           {
             "type": "command",
             "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-precompact",
-            "timeout": 10,
+            "timeout": 60,
             "statusMessage": "Saving this session to memory…"
           }
         ]
@@ -87,7 +87,7 @@
           {
             "type": "command",
             "command": "\"${CODEBUDDY_PLUGIN_ROOT}/hooks/deja.sh\" hook-session-end",
-            "timeout": 10,
+            "timeout": 60,
             "statusMessage": "Marking this session as ended…"
           }
         ]
