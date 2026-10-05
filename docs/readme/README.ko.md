@@ -14,7 +14,7 @@ deja는 몇 달 전 기록까지 전부 색인하고, 지금 일하는 에이전
 
 <p align="center"><sub><em>아무도 검색하지 않았습니다. 에이전트가 스스로 deja를 호출했습니다. 실제 모델과 실제 도구 호출로 진행한 두 번의 실제 실행이며, 합성 코퍼스 위에서 돌렸기 때문에 누구의 기록도 공개되지 않습니다.</em></sub></p>
 
-<p align="center"><b>deja는 처음부터 가득 차 있습니다. 35개 에이전트가 이미 남긴 기록, 몇 초 만에 끝나는 색인, 모델도 별도의 수집 단계도 없습니다.</b></p>
+<p align="center"><b>deja는 처음부터 가득 차 있습니다. 38개 에이전트가 이미 남긴 기록, 몇 초 만에 끝나는 색인, 모델도 별도의 수집 단계도 없습니다.</b></p>
 
 <p align="center"><b>우리가 측정할 수 있었던 코딩 에이전트 메모리 중 가장 정확하고, 가장 저렴하고, 가장 빠릅니다.</b></p>
 
@@ -99,7 +99,7 @@ skill은 이미 설치된 `deja` 바이너리를 호출하며, 자체 바이너�
 
 ## 무엇을 얻나
 
-**Codex에서 해결하면 Claude가 기억합니다.** 서른다섯 개의 코딩 에이전트가 모든 대화를 로컬 파일에 쓰고,
+**Codex에서 해결하면 Claude가 기억합니다.** 서른여덟 개의 코딩 에이전트가 모든 대화를 로컬 파일에 쓰고,
 deja는 그 파일들을 모두가 읽을 수 있는 하나의 기억 계층으로 바꿉니다.
 
 | | |
@@ -193,7 +193,8 @@ Claude Code · Cline · Codex CLI · opencode · aider · Gemini CLI · Cursor �
 Grok Build · Hermes · Goose · Qwen Code · Kimi Code · pi · omp (Oh My Pi) · OpenClaw ·
 Copilot CLI · VS Code Copilot Chat · Amp · prime-agent (PrimeIntellect) · Roo Code ·
 Continue · Crush · DeepSeek Harness · Cherry Studio · Senpi · gajae-code · Kimchi Coding ·
-Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · Zed.
+Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · CodeBuddy Code ·
+TRAE CLI · Muse Code · Zed.
 
 각 도구가 MCP 회상, 자동 회상, skill, 명령, resume, handoff 중 무엇을 지원하는지는
 [영문 README의 기능 표](../../README.md#supported-harnesses)에 있습니다. 저장 위치를 바꿨다면 `DEJA_*_ROOT`
