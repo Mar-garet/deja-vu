@@ -3805,8 +3805,38 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	arrivedDirs := sessionDirsUnder(changed)
 	superseded := supersededLogs(removed, files)
 	kept := map[string]bool{}
+	// Kept while still on disk: a store this run cannot see, so not deleted.
+	unseen := map[string]bool{}
+	var view *listedView
 	for p := range removed {
-		if superseded[p] || !deletedFromLiveStore(p) {
+		if superseded[p] {
+			continue
+		}
+		// A file still on disk that the listing left out was not deleted. When
+		// this pass read the session it hangs off — a file of the same store
+		// one or two directories up — the store was in view and a setting left
+		// the file out: DEJA_INCLUDE_SUBAGENTS turned off. It goes, as a
+		// rebuild would drop it; the incremental pass kept 32 children and
+		// called them "no longer on disk" (#4739). Otherwise its store is
+		// outside this run's view — a hook started with a stripped environment
+		// (#4738), a root no longer set — and that is no reason to drop the
+		// store's sessions, so they stay.
+		if _, err := os.Lstat(p); err == nil {
+			if view == nil {
+				view = newListedView(files, old.Sessions)
+			}
+			if view.leftOutBySetting(p) {
+				continue
+			}
+			if of, ok := old.Files[p]; ok {
+				files[p] = of
+				delete(removed, p)
+				kept[p] = true
+				unseen[p] = true
+			}
+			continue
+		}
+		if !deletedFromLiveStore(p) {
 			continue
 		}
 		if d := goneSessionDir(p); d != "" && arrivedDirs[filepath.Base(d)] {
@@ -3822,8 +3852,20 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	// say — except when nothing else changed, in which case there is no
 	// rename to filter and the pass returns early.
 	sayKept := func() {
-		if len(kept) > 0 && progress != nil {
-			fmt.Fprintf(progress, "deja: %d transcript%s no longer on disk — still searchable; `deja forget <id>` drops one for good\n", len(kept), pluralS(len(kept)))
+		if progress == nil {
+			return
+		}
+		out := 0
+		for p := range kept {
+			if unseen[p] {
+				out++
+			}
+		}
+		if n := len(kept) - out; n > 0 {
+			fmt.Fprintf(progress, "deja: %d transcript%s no longer on disk — still searchable; `deja forget <id>` drops one for good\n", n, pluralS(n))
+		}
+		if out > 0 {
+			fmt.Fprintf(progress, "deja: %d transcript%s outside the stores this run reads — still searchable\n", out, pluralS(out))
 		}
 	}
 	// Counted after the keep-backs above: records that came off an unmounted
