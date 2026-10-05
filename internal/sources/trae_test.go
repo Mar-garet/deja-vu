@@ -286,3 +286,26 @@ func TestTraeRootFollowsTraecliHome(t *testing.T) {
 		t.Fatalf("TraeRoot with DEJA_TRAE_ROOT = %q, want %q", got, want)
 	}
 }
+
+// TRAE's binary ships Claude Code's tool set (Bash, Edit, Write, Read) next to
+// Codex's, so a call can arrive under either name. Both must leave the
+// command, the edited span and the file in the index.
+func TestTraeClaudeStyleTools(t *testing.T) {
+	p := writeTraeRollout(t, t.TempDir(),
+		traeMeta,
+		`{"timestamp":"2026-10-01T09:00:01.000Z","type":"event_msg","payload":{"type":"user_message","turn_id":"turn-1","message":"fix the retry"}}`,
+		`{"timestamp":"2026-10-01T09:00:02.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_1","name":"Bash","arguments":"{\"command\":\"go test ./retry\"}"}}`,
+		`{"timestamp":"2026-10-01T09:00:03.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_2","name":"Edit","arguments":"{\"file_path\":\"/repo/retry/backoff.go\",\"old_string\":\"delay = base\",\"new_string\":\"delay *= 2\"}"}}`,
+		`{"timestamp":"2026-10-01T09:00:04.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_2","output":"The file was edited."}}`,
+	)
+	s := parseTraeOne(t, p)
+	if got, want := textsOf(s, RoleCommand), []string{"$ go test ./retry"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("commands = %q, want %q", got, want)
+	}
+	if got := strings.Join(textsOf(s, RoleFiles), "\n"); !strings.Contains(got, "retry/backoff.go") {
+		t.Fatalf("files = %q, want the edited file", got)
+	}
+	if got := strings.Join(textsOf(s, RoleEdit), "\n"); !strings.Contains(got, "delay = base") {
+		t.Fatalf("edits = %q, want the replaced span", got)
+	}
+}

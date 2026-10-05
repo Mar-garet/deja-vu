@@ -234,6 +234,9 @@ func (tr *traeTurns) tool(s *model.Session, item map[string]any, cwd string, t t
 	}
 	switch pt {
 	case "function_call":
+		if traeClaudeTool(s, item, t) {
+			return
+		}
 		codexCall(s, traeShellCall(item), calls, t)
 	case "function_call_output", "custom_tool_call_output":
 		codexCallOutput(s, traeOutput(item), calls, t)
@@ -283,6 +286,26 @@ func traeItemText(item map[string]any, types ...string) string {
 		}
 	}
 	return b.String()
+}
+
+// traeClaudeTool reads a call made with Claude Code's tool set, which TRAE's
+// binary carries next to Codex's (Bash, Edit, Write, Read and the rest), through
+// the Claude dialect. Codex's names are lowercase and left to codexCall.
+func traeClaudeTool(s *model.Session, item map[string]any, t time.Time) bool {
+	name, _ := item["name"].(string)
+	if name == "" || name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	in := map[string]any{}
+	switch a := item["arguments"].(type) {
+	case string:
+		_ = json.Unmarshal([]byte(a), &in)
+	case map[string]any:
+		in = a
+	}
+	id, _ := item["call_id"].(string)
+	s.Messages = append(s.Messages, codeBuddyWorkRecords([]any{map[string]any{"type": "tool_use", "id": id, "name": name, "input": in}}, t)...)
+	return true
 }
 
 // traeShellCall turns TRAE's shell call into the shape codexCall reads. In
