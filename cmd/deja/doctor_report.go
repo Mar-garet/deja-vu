@@ -1006,6 +1006,11 @@ func collectDoctorMCP() []doctorMCPStatus {
 		if state == "wired" && (dejaEntrySwitchedOff(config.path) || doctorMCPSwitchedOff(config.name) != "") {
 			row.SwitchedOff = true
 		}
+		if state == "wired" && config.name == "workbuddy" {
+			if note := workBuddyUntrustedNote(); note != "" {
+				row.State, row.Note = "untrusted", note
+			}
+		}
 		if state == "wired" && config.name == "deepseek" && len(dshPluginsMissing(config.path)) > 0 {
 			row.PluginMissing = true
 		}

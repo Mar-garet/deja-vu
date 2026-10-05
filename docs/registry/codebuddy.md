@@ -57,7 +57,9 @@ set to its own home, so `~/.codebuddy` wiring never reaches it.
 `$WORKBUDDY_CONFIG_DIR`, else whichever of `~/.workbuddy` and
 `~/.workbuddy-ai` exists. A new MCP file there is `mcp.json`, the one the
 app's own server settings write, since the agent reads only the first of
-`.mcp.json` and `mcp.json`.
+`.mcp.json` and `mcp.json`. WorkBuddy AI keeps a server from that file off
+until you click Trust for it in Settings > MCP and restart the app; install
+says so, and `deja doctor` reads the row as `untrusted` until then.
 
 **Last verified:** 2026-10-05
 
