@@ -46,6 +46,7 @@ func autoWirings() []autoWiring {
 		{"qwen", func() string { return filepath.Join(sources.QwenConfigDir(), "settings.json") }, "hook-prompt", ""},
 		{"codebuddy", codeBuddySettingsPath, "hook-context", ""},
 		{"trae", traeHooksPath, "hook-context", ""},
+		{"muse", museSettingsPath, "hook-context", ""},
 		// The digest hook, not the prompt one: a config written before kimi had
 		// all three blocks still carries hook-prompt, and reading that as wired
 		// hides a machine that is missing the session digest and the forget on
@@ -113,7 +114,7 @@ func autoWirings() []autoWiring {
 // rather than one deja writes whole. Those exist whether deja ever wrote to
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
-	"cursor": true, "qwen": true, "codebuddy": true, "trae": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
+	"cursor": true, "qwen": true, "codebuddy": true, "trae": true, "muse": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
 	"copilot": true,
 }
 

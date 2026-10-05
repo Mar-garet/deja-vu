@@ -36,6 +36,7 @@ var readmeGuidanceNames = map[string]string{
 	"zed":         "Zed",
 	"continue":    "Continue",
 	"crush":       "Crush",
+	"muse":        "Muse Code",
 	"vscode":      "VS Code Copilot Chat",
 	"trae":        "TRAE CLI",
 	// Grok is named in its own sentence in the same paragraph, because the

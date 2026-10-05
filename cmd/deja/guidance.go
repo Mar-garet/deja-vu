@@ -97,6 +97,11 @@ var sharedSkillHarnesses = map[string]bool{
 	// TRAE CLI 0.207.1: `traex debug prompt-input` lists a skill placed only
 	// in ~/.agents/skills among the skills it offers the model.
 	"trae": true,
+	// Muse Code 1.4.2: `muse skills list --source user` lists a skill placed
+	// only here, beside ~/.claude/skills and its own config directory (#4709).
+	// With Claude's copy there too it loads one and starts without a word;
+	// only `muse skills list` notes the other as shadowed.
+	"muse": true,
 }
 
 // sharedSkillPath is the one file all of them read. Claude Code is deliberately

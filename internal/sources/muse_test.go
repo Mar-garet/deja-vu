@@ -283,3 +283,68 @@ func TestParseMuseSubagent(t *testing.T) {
 		t.Errorf("kind/parent/id = %q/%q/%q", s.Kind, s.Parent, s.ID)
 	}
 }
+
+// museChildLog is a child's log as Muse 1.4.2 writes one: the permission
+// records, then the run. A workflow child also records its task kind and the
+// workspace it runs in; a reminder or verification observer records neither.
+func museChildLog(t *testing.T, childID string, workflow bool, prompt string) []map[string]any {
+	lines := []map[string]any{
+		museFrame(t, museRec(childID, "runtime.session.permission_format_declared", map[string]any{"format": "profile_v1"}, 1)),
+		museRec(childID, "runtime.session.metadata", map[string]any{"kind": "metadata", "record": map[string]any{"provider_id": "meta", "model_id": "muse-spark-1.3"}}, 2),
+	}
+	if workflow {
+		lines = append(lines,
+			museRec(childID, "runtime.session", map[string]any{"kind": "task", "task_id": "t1", "event": map[string]any{"kind": "proposed", "task_id": "t1", "task_kind": "workflow.agent.native"}}, 3),
+			museRec(childID, "session.workspace_branch.observed", map[string]any{"kind": "workspace_branch", "record": map[string]any{
+				"workspace_root": "/w/poollab", "reference": map[string]any{"kind": "branch", "name": "main"}, "vcs": "git", "dirty": false,
+			}}, 4))
+	}
+	return append(lines,
+		museRun(childID, map[string]any{"kind": "started", "prompt": prompt}, 10),
+		museRun(childID, map[string]any{"kind": "assistant_message_committed", "text": "done"}, 11))
+}
+
+// Muse runs a reminder observer beside every session, and a verification one
+// after tool use, as children of it. Their prompt is Muse's own instruction
+// text, not something anyone asked for, so they are not sessions (#4711).
+func TestParseMuseSkipsObserverChild(t *testing.T) {
+	childID := "16c7cc3b-bcf0-4882-b9cc-53230679a4f3"
+	dir := filepath.Join(t.TempDir(), "2026", "10", "05", museTestID, "subagent", childID)
+	p := writeMuseLog(t, dir, museChildLog(t, childID, false, "You are a reminder observer for the main agent.\nDo not answer the user.")...)
+	ss, err := ParseMuseFile(p)
+	if err != nil || len(ss) != 0 {
+		t.Fatalf("observer child parsed as %d sessions (err %v), want none", len(ss), err)
+	}
+}
+
+// A workflow child names its workspace only in a workspace_branch record, and
+// it is the child's project (#4712). It is delegated work, so it is kept.
+func TestParseMuseWorkflowChildProject(t *testing.T) {
+	childID := "4c579dbf-4e3a-796d-8bcb-de78af441dd5"
+	dir := filepath.Join(t.TempDir(), "2026", "10", "05", museTestID, "subagent", childID)
+	s := parseMuseOne(t, writeMuseLog(t, dir, museChildLog(t, childID, true, "Run make lint and report.")...))
+	if s.Kind != "subagent" || s.Parent != museTestID || s.ID != childID {
+		t.Errorf("kind/parent/id = %q/%q/%q", s.Kind, s.Parent, s.ID)
+	}
+	if s.Project != "w/poollab" {
+		t.Errorf("project = %q, want the workspace_branch root", s.Project)
+	}
+}
+
+// The workspace resume runs in is the session's own: a child's
+// workspace_branch record logged in the parent under the child's stream is
+// not it.
+func TestMuseWorkspaceIgnoresOtherStreams(t *testing.T) {
+	lines := museConversation(t)[1:]
+	lines = append(lines, museRec("018f0000-0000-0000-0000-000000000001", "session.workspace_branch.observed",
+		map[string]any{"kind": "workspace_branch", "record": map[string]any{"workspace_root": "/w/child-tree"}}, 21))
+	dir := filepath.Join(t.TempDir(), "2026", "09", "18", museTestID)
+	p := writeMuseLog(t, dir, lines...)
+	if ws := MuseWorkspace(p); ws != "" {
+		t.Errorf("workspace = %q, want none: the only one named is another stream's", ws)
+	}
+	full := writeMuseLog(t, filepath.Join(t.TempDir(), museTestID), museConversation(t)...)
+	if ws := MuseWorkspace(full); ws != "/w/poollab" {
+		t.Errorf("workspace = %q, want the metadata's", ws)
+	}
+}

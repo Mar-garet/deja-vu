@@ -254,7 +254,9 @@ func resumeCommand(s model.Session) (string, string, error) {
 	// A Kimi or Qwen sub-agent log is a session in deja under
 	// DEJA_INCLUDE_SUBAGENTS=1, but neither client opens one on its own; the
 	// id deja gives it is one they have never seen (#4483).
-	if s.Kind == "subagent" && (s.Harness == "kimi" || s.Harness == "qwen") && s.Parent != "" {
+	// Muse's child logs are the same: `muse resume <child>` answers "has no
+	// saved log" (#4710).
+	if s.Kind == "subagent" && (s.Harness == "kimi" || s.Harness == "qwen" || s.Harness == "muse") && s.Parent != "" {
 		return "", "", fmt.Errorf("session %s is a sub-agent run, which %s does not reopen on its own — `deja resume %s` reopens the session that spawned it", digest.Short(s.ID), s.Harness, s.Parent)
 	}
 	// Nor a Kimi /btw side question, which runs in a fork of the session it
@@ -278,6 +280,13 @@ func resumeCommand(s model.Session) (string, string, error) {
 			return "", "", fmt.Errorf("session %s is a history.jsonl entry with no rollout, nothing to resume", digest.Short(s.ID))
 		}
 		return "", "traex resume " + s.ID, nil
+	case "muse":
+		// `muse resume <uuid>` finds the session from any directory, then
+		// takes the directory it was run from as the workspace, so the cd is
+		// what puts its tools back in the right tree. With the workspace gone
+		// the conversation still reopens, so the bare command is printed
+		// (#4710).
+		return existingDir(sources.MuseWorkspace(s.Path)), "muse resume " + s.ID, nil
 	case "opencode":
 		// opencode sessions carry their project directory. opencode reopens a
 		// session from anywhere, so a deleted one is left out rather than

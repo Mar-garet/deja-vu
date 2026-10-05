@@ -1146,35 +1146,18 @@
       "last_verified": "2026-10-05",
       "display_name": "Muse Code",
       "capabilities": {
-        "mcp": false,
-        "auto": false,
-        "skill": false,
+        "mcp": true,
+        "auto": true,
+        "skill": true,
         "command": false,
-        "resume": false,
+        "resume": true,
         "handoff": "paste",
         "prereq": "none"
       },
       "gaps": {
-        "mcp": {
-          "state": "unknown",
-          "why": "Muse reads an mcp_servers block from ~/.config/muse/settings.json, but nothing read so far documents the entry's shape, so deja does not write one yet (#4679)."
-        },
-        "auto": {
-          "state": "blocked",
-          "why": "Muse has user hooks in ~/.config/muse/settings.json and project hooks in .muse/hooks.json, but openharness measured them not firing, in `muse exec` or in the TUI, and discovers sessions by scanning instead. A hook deja wrote would run nowhere (#4679).",
-          "source": "https://github.com/autonomous-ai/openharness/blob/main/cli/src/engines/muse/normalizer.ts"
-        },
-        "skill": {
-          "state": "unknown",
-          "why": "Muse has a read_skill tool and ships skills of its own, but no source read here names a user-level skill directory deja could write to (#4679)."
-        },
         "command": {
           "state": "unknown",
-          "why": "No source read here documents a directory Muse loads custom slash commands from, so there is no file for deja to write (#4679)."
-        },
-        "resume": {
-          "state": "todo",
-          "why": "`muse resume <session-id>` reopens a session (agent-session-kit's resume builder and specstory's provider both use it); deja reads the store but does not print the command yet (#4679)."
+          "why": "Muse loads slash commands only from plugins (a .muse-plugin manifest with a commands capability), and no user-level commands directory is documented, so install writes no command file. The deja-history skill is what it reads instead (#4709)."
         }
       }
     }

@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - TRAE CLI sessions under `TRAECLI_HOME` are indexed; deja only followed `TRAE_HOME` (#4701).
+- `deja install muse` and `muse-auto` wire recall into Muse Code: the MCP server and Claude-shaped hooks in `~/.config/muse/settings.json`, and the skill in `~/.agents/skills`. `deja resume` prints `muse resume <id>` in the session's workspace (#4709, #4710).
+
+### Fixed
+
+- Under `DEJA_INCLUDE_SUBAGENTS=1`, Muse Code's reminder and verification observers are no longer indexed as sessions, and a workflow subagent gets its project (#4711, #4712).
 
 ## [0.21.6] - 2026-10-04
 
