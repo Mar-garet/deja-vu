@@ -1033,6 +1033,7 @@
         "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
         "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>/subagents/agent-<id>.jsonl",
         "${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
+  "~/.workbuddy-ai/projects/<mangled-cwd>/<session-id>.jsonl",
         "${DEJA_CODEBUDDY_ROOTS}/<mangled-cwd>/<session-id>.jsonl"
       ],
       "format_kind": "jsonl",

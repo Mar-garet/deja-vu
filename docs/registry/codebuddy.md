@@ -3,11 +3,11 @@
 - **ID**: `codebuddy`
 - **Store**: `${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>.jsonl` — one file per session
 - **Sub-agents**: `<mangled-cwd>/<session-id>/subagents/agent-<id>.jsonl`, read with `DEJA_INCLUDE_SUBAGENTS=1`
-- **WorkBuddy**: `${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/...`, the same layout and records, read when it exists
+- **WorkBuddy**: `~/.workbuddy/projects/...` (workbuddy.cn) and `~/.workbuddy-ai/projects/...` (WorkBuddy AI, workbuddy.ai), or `$WORKBUDDY_CONFIG_DIR/projects`; the same layout and records, read when they exist
 - **Read overrides**: `DEJA_CODEBUDDY_ROOTS`, a path list, replaces both stores
 - **Format**: JSONL — OpenAI Responses-style items
 - **Needs**: nothing
-- **Wiring**: `deja install codebuddy` adds the MCP server; `deja install codebuddy-auto` adds the hooks as well
+- **Wiring**: `deja install codebuddy` adds the MCP server; `deja install codebuddy-auto` adds the hooks as well. `workbuddy` and `workbuddy-auto` do the same in the WorkBuddy home
 
 CodeBuddy Code is Tencent's terminal agent (`@tencent-ai/codebuddy-code`). Its
 store is laid out like Claude Code's — a directory per working directory, one
@@ -51,6 +51,14 @@ Claude Code shape, `timeout` in seconds: `SessionStart`, `UserPromptSubmit`,
 `SessionEnd`. CodeBuddy reads `hookSpecificOutput.additionalContext` from all
 of them the way Claude Code does.
 
+WorkBuddy is a desktop app that runs this agent with `CODEBUDDY_CONFIG_DIR`
+set to its own home, so `~/.codebuddy` wiring never reaches it.
+`deja install workbuddy-auto` writes the same hooks into that home:
+`$WORKBUDDY_CONFIG_DIR`, else whichever of `~/.workbuddy` and
+`~/.workbuddy-ai` exists. A new MCP file there is `mcp.json`, the one the
+app's own server settings write, since the agent reads only the first of
+`.mcp.json` and `mcp.json`.
+
 **Last verified:** 2026-10-05
 
 ## Known quirks and drift
@@ -70,3 +78,8 @@ of them the way Claude Code does.
 - **Resume needs the session's directory.** `codebuddy -r <id>` finds a
   session only under the folder of the directory it is run from.
 - **WorkBuddy shares the harness id.** Its sessions read as `codebuddy`.
+- **WorkBuddy checked against 5.6.2.** The agent bundled in WorkBuddy AI,
+  run headless with the env the app spawns it with, writes the store above
+  and runs the `settings.json` hooks and the `mcp.json` server. The
+  workbuddy.cn build names its home `.workbuddy` in the same `product.json`.
+  `deja resume` has no command for WorkBuddy yet.

@@ -136,6 +136,8 @@ func guidancePath(harness string) string {
 		// <config>/skills, the user root of CodeBuddy's loadSkills; it does
 		// not read ~/.agents/skills (#4708).
 		return filepath.Join(sources.CodeBuddyConfigDir(), "skills", "deja-history", "SKILL.md")
+	case "workbuddy":
+		return filepath.Join(sources.WorkBuddyConfigDir(), "skills", "deja-history", "SKILL.md")
 	case "pi":
 		return filepath.Join(sources.PiConfigDir(), "skills", "deja-history", "SKILL.md")
 	case "hermes":
@@ -646,7 +648,7 @@ func guidanceOwnsWholeFile(harness string) bool {
 		return true
 	}
 	switch harness {
-	case "claude-code", "claude", "antigravity", "copilot", "pi", "opencode", "hermes", "vscode", "continue", "codebuddy":
+	case "claude-code", "claude", "antigravity", "copilot", "pi", "opencode", "hermes", "vscode", "continue", "codebuddy", "workbuddy":
 		return true
 	}
 	return false

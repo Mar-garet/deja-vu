@@ -102,6 +102,8 @@ func commandFilePath(harness string) string {
 	case "codebuddy":
 		// getHomeCommandsDir: <config>/commands/*.md, invoked by file name.
 		return filepath.Join(sources.CodeBuddyConfigDir(), "commands", "deja.md")
+	case "workbuddy":
+		return filepath.Join(sources.WorkBuddyConfigDir(), "commands", "deja.md")
 	case "omp":
 		// The default profile's agent directory, ~/.omp/agent. A named
 		// profile reads its own and does not get the command.
