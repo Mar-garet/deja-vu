@@ -88,10 +88,6 @@ func installCodeBuddyMCP(exe string, uninstall bool) (installResult, error) {
 	return installMCPJSON(codeBuddyMCPPath(), exe, uninstall)
 }
 
-func installCodeBuddyHooks(exe string, uninstall bool) (installResult, error) {
-	return installCodeBuddyHooksIn(codeBuddySettingsPath(), exe, uninstall)
-}
-
 func installCodeBuddyHooksIn(path, exe string, uninstall bool) (installResult, error) {
 	exe = hookExeFor(exe, uninstall)
 	var res installResult
