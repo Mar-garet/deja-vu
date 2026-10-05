@@ -671,7 +671,11 @@ import (
 // 64 masks the tail of a key-value secret that ends in punctuation:
 // `--password=Sup3rS3cretValue!!xyz` was stored with `!!xyz` after the marker
 // (#4682). Redaction runs at ingest, so only a rebuild drops the tails.
-const version = 64
+//
+// 65: a CodeBuddy command carries the `→ exit N` its result text states, and
+// the instruction prompt /compact writes as a user record is not indexed as
+// the person's words (#4703, #4704).
+const version = 65
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an

@@ -751,6 +751,11 @@
       "path": "<tmp>/home/.commandcode/commands/deja.md"
     },
     {
+      "name": "codebuddy",
+      "state": "missing",
+      "path": "<tmp>/home/.codebuddy/commands/deja.md"
+    },
+    {
       "name": "copilot-chat",
       "state": "missing",
       "path": "<tmp>/home/.config/Code/User/prompts/deja.prompt.md"

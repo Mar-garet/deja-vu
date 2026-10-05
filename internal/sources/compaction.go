@@ -254,6 +254,14 @@ func compactionHarness(header, tail []byte) (string, error) {
 			if json.Unmarshal(line, &record) != nil {
 				continue
 			}
+			// CodeBuddy keeps Claude's sessionId beside OpenAI-style items,
+			// which no Claude record is typed as (#4705).
+			switch record.Type {
+			case "message", "function_call", "function_call_result":
+				if record.SessionID != "" {
+					return "codebuddy", nil
+				}
+			}
 			// Codex writes session_meta first. Recognize it before generic
 			// session-shaped records, while Claude's file-history/progress
 			// preamble is still reliable evidence of a Claude transcript.
@@ -278,6 +286,8 @@ func parseCompactionSession(originalPath, harness, workspace string, data []byte
 		sessions, err = parseCodexRolloutWithScanner(model.Session{
 			Harness: "codex", Project: filepath.Base(filepath.Dir(originalPath)), Path: originalPath,
 		}, false, "", compactionMapScanner(originalPath, data))
+	case "codebuddy":
+		sessions, err = parseCodeBuddy(originalPath, compactionMapScanner(originalPath, data))
 	default:
 		return model.Session{}, ErrUnsupportedCompactionTranscript
 	}
@@ -400,6 +410,8 @@ func scanCompactionToolLines(harness string, data []byte, base int64, nativeSess
 			got, declaredWorkspace, err = claudeCompactionToolCalls(line, start, end, nativeSessionID)
 		case "codex":
 			got, declaredWorkspace, err = codexCompactionToolCalls(line, start, end, nativeSessionID)
+		case "codebuddy":
+			got, declaredWorkspace, err = codeBuddyCompactionToolCalls(line, start, end, nativeSessionID)
 		}
 		if err != nil {
 			return nil, "", false, err
@@ -465,6 +477,31 @@ func claudeCompactionToolCalls(line []byte, start, end int64, nativeSessionID st
 		out = append(out, TranscriptToolCall{ID: item.ID, Name: item.Name, At: claudeTime(record.Timestamp), StartOffset: start, EndOffset: end})
 	}
 	return out, record.CWD, nil
+}
+
+func codeBuddyCompactionToolCalls(line []byte, start, end int64, nativeSessionID string) ([]TranscriptToolCall, string, error) {
+	var record struct {
+		Type      string          `json:"type"`
+		SessionID string          `json:"sessionId"`
+		CWD       string          `json:"cwd"`
+		Timestamp json.RawMessage `json:"timestamp"`
+		Name      string          `json:"name"`
+		CallID    string          `json:"callId"`
+	}
+	if json.Unmarshal(line, &record) != nil {
+		return nil, "", nil
+	}
+	if record.SessionID != "" && record.SessionID != nativeSessionID {
+		return nil, "", ErrTranscriptIdentity
+	}
+	if record.Type != "function_call" || record.Name == "" {
+		return nil, record.CWD, nil
+	}
+	id := record.CallID
+	if id == "" {
+		id = fmt.Sprintf("@%d", start)
+	}
+	return []TranscriptToolCall{{ID: id, Name: record.Name, At: parseTimeAny(rawJSONTime(record.Timestamp)), StartOffset: start, EndOffset: end}}, record.CWD, nil
 }
 
 func codexCompactionToolCalls(line []byte, start, end int64, nativeSessionID string) ([]TranscriptToolCall, string, error) {

@@ -2,6 +2,7 @@ package sources
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +101,40 @@ func codeBuddySubagentParts(parts []string) bool {
 // isCodeBuddySession reports a main transcript under a store root.
 func isCodeBuddySession(p string) bool { return codeBuddyMainParts(codeBuddyRel(p)) }
 
+// CodeBuddySessionDir is the directory a CodeBuddy session ran in, as its
+// records state it: `codebuddy -r` finds a session only from there (#4707).
+func CodeBuddySessionDir(path string) string {
+	return transcriptCWD(path, func(string) bool { return true })
+}
+
+// IsWorkBuddyTranscript reports a transcript from WorkBuddy's store rather
+// than CodeBuddy's.
+func IsWorkBuddyTranscript(p string) bool {
+	return codeBuddyRelTo(filepath.Join(WorkBuddyConfigDir(), "projects"), p) != nil
+}
+
+// IsCodeBuddyTranscript reports a CodeBuddy or WorkBuddy transcript, main or
+// sub-agent, the way a hook payload's transcript_path names one.
+// A transcript outside the configured roots (another DEJA_CODEBUDDY_ROOTS, a
+// path through a symlink) is recognised by its first records instead.
+func IsCodeBuddyTranscript(p string) bool {
+	if p == "" {
+		return false
+	}
+	if isCodeBuddySession(p) || CodeBuddySubagentFile(p) {
+		return true
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	head := make([]byte, compactionHeaderBytes)
+	n, _ := io.ReadFull(f, head)
+	h, err := compactionHarness(nil, head[:n])
+	return err == nil && h == "codebuddy"
+}
+
 // CodeBuddySubagentFile reports a sub-agent's transcript. Read only with
 // DEJA_INCLUDE_SUBAGENTS=1, the way the Claude and Qwen readers do.
 func CodeBuddySubagentFile(p string) bool { return codeBuddySubagentParts(codeBuddyRel(p)) }
@@ -182,6 +217,11 @@ func codeBuddyPlumbing(m map[string]any) bool {
 	if _, ok := pd["compactType"].(string); ok {
 		return true
 	}
+	// The instruction prompt /compact sends is a user record marked only by
+	// the agent that wrote it (#4704).
+	if agent, _ := pd["agent"].(string); agent == "compact" {
+		return true
+	}
 	if tm, ok := pd["teammateMessage"].(map[string]any); ok {
 		if from, _ := tm["from"].(string); from != "" {
 			return true
@@ -233,8 +273,57 @@ func codeBuddyOutput(v any) string {
 	return ""
 }
 
+// codeBuddyExitCode reads how a shell call ended off its result text. The
+// Bash builder always ends with an `Exit Code: N` line, `(none)` when a signal
+// ended it; the other builder writes the line only for a non-zero code, so a
+// `Command:` report with no such line and no signal, timeout or abort note
+// after the output ran clean. Anything else is left unknown.
+func codeBuddyExitCode(out string) (int, bool) {
+	if !strings.HasPrefix(out, "Command: ") {
+		return 0, false
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	// From the end: the status lines follow the output, which may itself print
+	// a line that looks like one.
+	for i := len(lines) - 1; i >= 0; i-- {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(lines[i]), "Exit Code: ")
+		if !ok {
+			continue
+		}
+		// "Exit Code: 1 (no matches)" is a code the client took for no error;
+		// it is still what the command returned.
+		if j := strings.IndexByte(rest, ' '); j > 0 {
+			rest = rest[:j]
+		}
+		return statusCode(rest, "", "")
+	}
+	// No line means clean only in a foreground report, which goes on with
+	// Stdout. A backgrounded run (`Status: Running in background`) or one that
+	// never launched (`Error: ...`) also opens with Command: and has no code.
+	if len(lines) < 2 || !strings.HasPrefix(lines[1], "Stdout: ") {
+		return 0, false
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		switch {
+		case line == "" || line == "Signal: (none)":
+		case strings.HasPrefix(line, "Signal: "), strings.HasPrefix(line, "(command "):
+			return 0, false
+		default:
+			return 0, true
+		}
+	}
+	return 0, true
+}
+
 // ParseCodeBuddyFile reads one CodeBuddy or WorkBuddy transcript.
 func ParseCodeBuddyFile(path string) ([]model.Session, error) {
+	return parseCodeBuddy(path, func(fn func(map[string]any)) error { return scanJSONL(path, fn) })
+}
+
+// parseCodeBuddy is the reader over any source of records: the file, or the
+// bounded copy a compaction hook reads.
+func parseCodeBuddy(path string, scan func(func(map[string]any)) error) ([]model.Session, error) {
 	s := model.Session{
 		Harness: "codebuddy",
 		ID:      strings.TrimSuffix(filepath.Base(path), ".jsonl"),
@@ -250,7 +339,9 @@ func ParseCodeBuddyFile(path string) ([]model.Session, error) {
 	// CodeBuddy's own title order: the newest custom title, then the newest
 	// generated one, then the newest topic (getEffectiveSessionTitleItem).
 	var custom, generated, topic string
-	err := scanJSONL(path, func(m map[string]any) {
+	// The command's outcome is in the result that names its callId (#4703).
+	exits := commandExits{}
+	err := scan(func(m map[string]any) {
 		t := parseTimeAny(m["timestamp"])
 		if c, _ := m["cwd"].(string); c != "" && cwd == "" {
 			cwd = c
@@ -299,12 +390,25 @@ func ParseCodeBuddyFile(path string) ([]model.Session, error) {
 			case map[string]any:
 				in = a
 			}
-			recs := codeBuddyWorkRecords([]any{map[string]any{"type": "tool_use", "id": id, "name": name, "input": in}}, t)
+			blocks := []any{map[string]any{"type": "tool_use", "id": id, "name": name, "input": in}}
+			recs := codeBuddyWorkRecords(blocks, t)
 			if len(recs) > 0 {
+				from := len(s.Messages)
 				s.Touch(t)
 				s.Messages = append(s.Messages, recs...)
+				if IndexCommands() && id != "" {
+					exits.note(s.Messages, from, commandCallsIn(blocks, claudeDialect))
+				}
 			}
 		case "function_call_result":
+			if id, _ := m["callId"].(string); id != "" {
+				if _, ok := exits[id]; ok {
+					if code, ok := codeBuddyExitCode(codeBuddyOutput(m["output"])); ok {
+						exits.stamp(s.Messages, id, "", code)
+					}
+					delete(exits, id)
+				}
+			}
 			if !IndexToolOutput() {
 				return
 			}
