@@ -168,7 +168,7 @@
 <pre>deja show 8f31c0a9      # read the session
 deja ctx  8f31c0a9      # a Markdown digest to paste into whatever you are doing now
 deja resume 8f31c0a9    # reopen it in the agent that ran it</pre>
-<p><code>resume</code> hands the id back to the harness that owns the session, with the project directory where that harness scopes its list to one. It works for thirty-two of the thirty-eight harnesses deja reads. The remaining six — aider, Cherry Studio, CodeBuddy Code, DeepSeek Harness, VS Code Copilot Chat and Zed — have no resume path deja prints, and deja says so rather than pretending. Roo Code is half of each: tasks its CLI created take <code>roo --session-id</code>, and tasks from the editor reopen in the editor. Reasonix resumes what its CLI started in a workspace; sessions from its desktop app reopen from the app.</p>
+<p><code>resume</code> hands the id back to the harness that owns the session, with the project directory where that harness scopes its list to one. It works for thirty-three of the thirty-eight harnesses deja reads. The remaining five — aider, Cherry Studio, DeepSeek Harness, VS Code Copilot Chat and Zed — have no resume path deja prints, and deja says so rather than pretending. Roo Code is half of each: tasks its CLI created take <code>roo --session-id</code>, and tasks from the editor reopen in the editor. Reasonix resumes what its CLI started in a workspace; sessions from its desktop app reopen from the app.</p>
 <p>Ids are matched by prefix, so the eight characters a result prints are enough to type.</p>
 
 <h2>When the answer is a command rather than a session</h2>

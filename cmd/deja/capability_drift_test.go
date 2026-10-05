@@ -354,6 +354,22 @@ func plausibleSession(t *testing.T, harness string) model.Session {
 		t.Setenv("DEJA_QWEN_ROOT", filepath.Join(tmp, "qwen"))
 		s.Path = qwenTranscriptIn(t, filepath.Join(tmp, "qwen"), cwd, s.ID, true)
 	}
+	if harness == "codebuddy" {
+		// Like qwen, `codebuddy -r` finds a session only from the directory
+		// it ran in, which the transcript records (#4707).
+		tmp := t.TempDir()
+		cwd := filepath.Join(tmp, "app")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		s.Path = filepath.Join(tmp, "projects", "app", s.ID+".jsonl")
+		if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(s.Path, []byte(`{"type":"message","role":"user","cwd":`+jsonString(cwd)+"}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if harness == "kilocode" {
 		// Only the CLI half of Kilo's store resumes, and the reader tells the
 		// two apart by the path: the database is the CLI's, a task file under

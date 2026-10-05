@@ -1045,28 +1045,13 @@
       "capabilities": {
         "mcp": true,
         "auto": true,
-        "skill": false,
-        "command": false,
-        "resume": false,
+        "skill": true,
+        "command": true,
+        "resume": true,
         "handoff": "paste",
         "prereq": "none"
       },
-      "gaps": {
-        "skill": {
-          "state": "todo",
-          "why": "CodeBuddy reads skills from ~/.codebuddy/skills/<name>/SKILL.md and from plugins; install does not write the shared skill there yet (#4681).",
-          "source": "https://www.codebuddy.ai/docs/cli/plugins-reference"
-        },
-        "command": {
-          "state": "todo",
-          "why": "Custom slash commands are Markdown files under ~/.codebuddy/commands/ or a plugin's commands/; install does not write one yet (#4681).",
-          "source": "https://www.codebuddy.ai/docs/cli/plugins-reference"
-        },
-        "resume": {
-          "state": "todo",
-          "why": "The CLI resumes a session by id the way Claude Code does, but the flag has not been checked against a live install, so resumeCommand does not build it yet (#4681)."
-        }
-      }
+      "gaps": {}
     },
     {
       "id": "reasonix",

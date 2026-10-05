@@ -84,21 +84,29 @@
 <p><strong>Last verified:</strong> 2026-10-05</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
-<li><strong>Read from the bundle, not a live store.</strong> The record shapes, the store</li>
+<li><strong>Checked against a live 2.161.2.</strong> Sessions written by the CLI itself</li>
 </ul>
-<p>path, <code>CODEBUDDY_CONFIG_DIR</code>, the plumbing flags, the title order, the MCP</p>
-<p>file order and the hook events were read out of</p>
-<p><code>@tencent-ai/codebuddy-code</code> 2.161.2 (<code>dist/codebuddy.js</code>) and CodeBuddy&#39;s</p>
-<p>CLI docs; the fixture is synthetic.</p>
+<p>(pointed at a local model through <code>models.json</code>) match the record shapes,</p>
+<p>the store path and the hook payloads read out of <code>dist/codebuddy.js</code>; the</p>
+<p>fixture is synthetic.</p>
 <ul>
 <li><strong>The IDE store is separate.</strong> The IDE and the VS Code extension keep their</li>
 </ul>
 <p>history under <code>CodeBuddyExtension/Data/...</code> in the platform data directory,</p>
 <p>never in this tree. Not read yet (#4681).</p>
 <ul>
-<li><strong>No exit codes.</strong> The Bash result text carries no exit status line deja</li>
+<li><strong>Exit codes from the result text.</strong> A shell result ends with</li>
 </ul>
-<p>has checked, so a command is stored without <code>→ exit N</code>.</p>
+<p><code>Exit Code: N</code> (<code>(none)</code> when a signal ended it), and <code>status</code> stays</p>
+<p><code>completed</code> either way, so the code is read off that line.</p>
+<ul>
+<li><strong><code>/compact</code> writes its instruction prompt as a user record</strong> marked only</li>
+</ul>
+<p><code>providerData.agent: &#34;compact&#34;</code>; it is skipped, as the summary after it is.</p>
+<ul>
+<li><strong>Resume needs the session&#39;s directory.</strong> <code>codebuddy -r &lt;id&gt;</code> finds a</li>
+</ul>
+<p>session only under the folder of the directory it is run from.</p>
 <ul>
 <li><strong>WorkBuddy shares the harness id.</strong> Its sessions read as <code>codebuddy</code>.</li>
 </ul>
