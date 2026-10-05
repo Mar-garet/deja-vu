@@ -561,7 +561,10 @@ func resumeCommand(s model.Session) (string, string, error) {
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 			return "", "", fmt.Errorf("codebuddy session %s ran in %s, which is gone, and `codebuddy -r` finds a session only from there — `deja show %s` has the conversation", short, dir, short)
 		}
-		return dir, "codebuddy -r " + s.ID, nil
+		// -c too: CodeBuddy gives SessionStart context to the model on a
+		// resume only with `continue` set, and the -r id still picks the
+		// session. Without it the recall was logged and never arrived (#4718).
+		return dir, "codebuddy -c -r " + s.ID, nil
 	case "qwen":
 		// qwen keys its sessions by the directory they ran in: run anywhere
 		// else, `qwen -r <id>` answers "No saved session found". Unlike

@@ -41,11 +41,11 @@
 <li><strong>ID</strong>: <code>codebuddy</code></li>
 <li><strong>Store</strong>: <code>${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/&lt;mangled-cwd&gt;/&lt;session-id&gt;.jsonl</code> — one file per session</li>
 <li><strong>Sub-agents</strong>: <code>&lt;mangled-cwd&gt;/&lt;session-id&gt;/subagents/agent-&lt;id&gt;.jsonl</code>, read with <code>DEJA_INCLUDE_SUBAGENTS=1</code></li>
-<li><strong>WorkBuddy</strong>: <code>${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/...</code>, the same layout and records, read when it exists</li>
+<li><strong>WorkBuddy</strong>: <code>~/.workbuddy/projects/...</code> (workbuddy.cn) and <code>~/.workbuddy-ai/projects/...</code> (WorkBuddy AI, workbuddy.ai), or <code>$WORKBUDDY_CONFIG_DIR/projects</code>; the same layout and records, read when they exist</li>
 <li><strong>Read overrides</strong>: <code>DEJA_CODEBUDDY_ROOTS</code>, a path list, replaces both stores</li>
 <li><strong>Format</strong>: JSONL — OpenAI Responses-style items</li>
 <li><strong>Needs</strong>: nothing</li>
-<li><strong>Wiring</strong>: <code>deja install codebuddy</code> adds the MCP server; <code>deja install codebuddy-auto</code> adds the hooks as well</li>
+<li><strong>Wiring</strong>: <code>deja install codebuddy</code> adds the MCP server; <code>deja install codebuddy-auto</code> adds the hooks as well. <code>workbuddy</code> and <code>workbuddy-auto</code> do the same in the WorkBuddy home</li>
 </ul>
 <p>CodeBuddy Code is Tencent&#39;s terminal agent (<code>@tencent-ai/codebuddy-code</code>). Its</p>
 <p>store is laid out like Claude Code&#39;s — a directory per working directory, one</p>
@@ -81,6 +81,13 @@
 <p><code>PostToolUse</code> and <code>PostToolUseFailure</code> on <code>Bash|PowerShell</code>, <code>PreCompact</code> and</p>
 <p><code>SessionEnd</code>. CodeBuddy reads <code>hookSpecificOutput.additionalContext</code> from all</p>
 <p>of them the way Claude Code does.</p>
+<p>WorkBuddy is a desktop app that runs this agent with <code>CODEBUDDY_CONFIG_DIR</code></p>
+<p>set to its own home, so <code>~/.codebuddy</code> wiring never reaches it.</p>
+<p><code>deja install workbuddy-auto</code> writes the same hooks into that home:</p>
+<p><code>$WORKBUDDY_CONFIG_DIR</code>, else whichever of <code>~/.workbuddy</code> and</p>
+<p><code>~/.workbuddy-ai</code> exists. A new MCP file there is <code>mcp.json</code>, the one the</p>
+<p>app&#39;s own server settings write, since the agent reads only the first of</p>
+<p><code>.mcp.json</code> and <code>mcp.json</code>.</p>
 <p><strong>Last verified:</strong> 2026-10-05</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
@@ -108,8 +115,18 @@
 </ul>
 <p>session only under the folder of the directory it is run from.</p>
 <ul>
-<li><strong>WorkBuddy shares the harness id.</strong> Its sessions read as <code>codebuddy</code>.</li>
+<li><strong><code>-r</code> alone drops the SessionStart context.</strong> CodeBuddy hands it to the</li>
 </ul>
+<p>model on a resume only with <code>-c</code> set, and the <code>-r</code> id still picks the</p>
+<p>session, so <code>deja resume</code> prints <code>codebuddy -c -r &lt;id&gt;</code>.</p>
+<ul>
+<li><strong>WorkBuddy shares the harness id.</strong> Its sessions read as <code>codebuddy</code>.</li>
+<li><strong>WorkBuddy checked against 5.6.2.</strong> The agent bundled in WorkBuddy AI,</li>
+</ul>
+<p>run headless with the env the app spawns it with, writes the store above</p>
+<p>and runs the <code>settings.json</code> hooks and the <code>mcp.json</code> server. The</p>
+<p>workbuddy.cn build names its home <code>.workbuddy</code> in the same <code>product.json</code>.</p>
+<p><code>deja resume</code> has no command for WorkBuddy yet.</p>
 
 <hr>
 <p>deja reads this format and thirty-seven others, and turns what it finds into memory your

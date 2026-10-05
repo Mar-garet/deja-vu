@@ -68,6 +68,7 @@ func FrictionSignature(l string) (string, uint64, bool) {
 // FrictionLine reports whether a line of tool output names something specific
 // that went wrong, and returns it in the form two sessions can be compared on.
 func FrictionLine(l string) (string, bool) {
+	l = trimEnvelopeLabel(strings.TrimSpace(l))
 	shell := shellErrorPrefix(l)
 	l = normalizeFriction(l)
 	// A shell only prints its position marker in front of something it could
@@ -258,12 +259,25 @@ func maskVolatileNumbers(l string) string {
 // shell's position prefix above (#1637).
 func trimLogPrefix(l string) string {
 	for {
-		trimmed := trimPytestMarker(trimTimestamp(l))
+		trimmed := trimPytestMarker(trimTimestamp(trimEnvelopeLabel(l)))
 		if trimmed == l {
 			return l
 		}
 		l = trimmed
 	}
+}
+
+// trimEnvelopeLabel removes the label a harness writes in front of the first
+// line a shell call printed: CodeBuddy's `Stdout: ` and `Stderr: `, Qwen Code's
+// `Output: `. The label shares a line with the error, so a fix learned there
+// was keyed on `Stdout: fatal: …` and matched nothing printed anywhere else.
+func trimEnvelopeLabel(l string) string {
+	for _, label := range []string{"Stdout: ", "Stderr: ", "Output: "} {
+		if rest, ok := strings.CutPrefix(l, label); ok {
+			return strings.TrimLeft(rest, " ")
+		}
+	}
+	return l
 }
 
 // trimPytestMarker removes the `E` column pytest prints beside the failing

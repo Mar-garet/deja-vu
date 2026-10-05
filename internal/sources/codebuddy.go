@@ -26,7 +26,9 @@ import (
 // so the Claude dialect reads the calls once they are put in its block shape.
 //
 // WorkBuddy is the same agent under another product name and writes the same
-// store under ~/.workbuddy, so both are read here.
+// store in its own home, so both are read here. Its two editions keep separate
+// homes: ~/.workbuddy (workbuddy.cn) and ~/.workbuddy-ai (WorkBuddy AI, from
+// workbuddy.ai) — dataFolderName in the app's cli/product.json.
 
 // CodeBuddyConfigDir is $CODEBUDDY_CONFIG_DIR, else ~/.codebuddy — the
 // resolver CodeBuddy uses for its own home (resolveCliHomeDir).
@@ -37,19 +39,31 @@ func CodeBuddyConfigDir() string {
 	return filepath.Join(Home(), ".codebuddy")
 }
 
-// WorkBuddyConfigDir is $WORKBUDDY_CONFIG_DIR, else ~/.workbuddy.
-func WorkBuddyConfigDir() string {
+// WorkBuddyConfigDirs is $WORKBUDDY_CONFIG_DIR, else both editions' homes.
+func WorkBuddyConfigDirs() []string {
 	if v := strings.TrimSpace(os.Getenv("WORKBUDDY_CONFIG_DIR")); v != "" {
-		return v
+		return []string{v}
 	}
-	return filepath.Join(Home(), ".workbuddy")
+	return []string{filepath.Join(Home(), ".workbuddy"), filepath.Join(Home(), ".workbuddy-ai")}
+}
+
+// WorkBuddyConfigDir is the home deja wires: $WORKBUDDY_CONFIG_DIR, else the
+// first edition's home on disk, else ~/.workbuddy.
+func WorkBuddyConfigDir() string {
+	dirs := WorkBuddyConfigDirs()
+	for _, d := range dirs {
+		if st, err := os.Stat(d); err == nil && st.IsDir() {
+			return d
+		}
+	}
+	return dirs[0]
 }
 
 // CodeBuddyRoot is the main session store, <config>/projects.
 func CodeBuddyRoot() string { return filepath.Join(CodeBuddyConfigDir(), "projects") }
 
-// CodeBuddyRoots is every store to walk: CodeBuddy's, and WorkBuddy's once it
-// exists. DEJA_CODEBUDDY_ROOTS, a path list, replaces both.
+// CodeBuddyRoots is every store to walk: CodeBuddy's, and each WorkBuddy one
+// that exists. DEJA_CODEBUDDY_ROOTS, a path list, replaces both.
 func CodeBuddyRoots() []string {
 	if list := os.Getenv("DEJA_CODEBUDDY_ROOTS"); list != "" {
 		var out []string
@@ -61,9 +75,11 @@ func CodeBuddyRoots() []string {
 		return out
 	}
 	out := []string{CodeBuddyRoot()}
-	wb := filepath.Join(WorkBuddyConfigDir(), "projects")
-	if st, err := os.Stat(wb); err == nil && st.IsDir() && filepath.Clean(wb) != filepath.Clean(out[0]) {
-		out = append(out, wb)
+	for _, d := range WorkBuddyConfigDirs() {
+		wb := filepath.Join(d, "projects")
+		if st, err := os.Stat(wb); err == nil && st.IsDir() && filepath.Clean(wb) != filepath.Clean(out[0]) {
+			out = append(out, wb)
+		}
 	}
 	return out
 }
@@ -110,7 +126,12 @@ func CodeBuddySessionDir(path string) string {
 // IsWorkBuddyTranscript reports a transcript from WorkBuddy's store rather
 // than CodeBuddy's.
 func IsWorkBuddyTranscript(p string) bool {
-	return codeBuddyRelTo(filepath.Join(WorkBuddyConfigDir(), "projects"), p) != nil
+	for _, d := range WorkBuddyConfigDirs() {
+		if codeBuddyRelTo(filepath.Join(d, "projects"), p) != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // IsCodeBuddyTranscript reports a CodeBuddy or WorkBuddy transcript, main or

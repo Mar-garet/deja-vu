@@ -1960,6 +1960,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"grok", filepath.Join(sources.GrokHome(), "config.toml"), doctorTOMLWired, doctorTOMLDejaKeys},
 		{"qwen", filepath.Join(sources.QwenConfigDir(), "settings.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"codebuddy", codeBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
+		{"workbuddy", workBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"trae", traeConfigPath(), doctorTOMLWired, doctorTOMLDejaKeys},
 		{"muse", museSettingsPath(), doctorJSONWiredIn(doctorMuseServers), doctorJSONDejaKeysIn(doctorMuseServers)},
 		{"kimi", filepath.Join(sources.KimiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
