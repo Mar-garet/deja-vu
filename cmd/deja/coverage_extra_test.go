@@ -101,6 +101,10 @@ func hermeticEnv(t *testing.T) string {
 	// it would put their real store in a golden.
 	t.Setenv("HERMES_HOME", "")
 	t.Setenv("DEJA_HERMES_HOME", "")
+	// CodeBuddy and WorkBuddy move their homes with these, and deja follows.
+	t.Setenv("CODEBUDDY_CONFIG_DIR", "")
+	t.Setenv("WORKBUDDY_CONFIG_DIR", "")
+	t.Setenv("DEJA_CODEBUDDY_ROOTS", "")
 	t.Setenv("NO_COLOR", "1")
 	return tmp
 }
