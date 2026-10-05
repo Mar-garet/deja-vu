@@ -29,7 +29,8 @@ import (
 //     [{tool_call_id, text}]; bash's text is itself a JSON object.
 //
 // The workspace is runtime.session.metadata's record.workspace_root, or
-// record.cwd in runtime.session.route_facts; the title, session.name.changed.
+// record.cwd in runtime.session.route_facts, or record.workspace_root in
+// session.workspace_branch.observed; the title, session.name.changed.
 // Shapes from AstroQore/agent-session-kit's MuseSessionAdapter (#21, read off
 // muse 1.3.0) and specstory's musecode provider; tokscale reads the same path
 // (#1349).
@@ -38,7 +39,8 @@ import (
 // The parent's file also holds the child's task-stream records under another
 // stream id; those are left out, so a child's objective is not read as
 // something the person typed. Child logs are read only with
-// DEJA_INCLUDE_SUBAGENTS=1, as Qwen's are (#4483).
+// DEJA_INCLUDE_SUBAGENTS=1, as Qwen's are (#4483), and of those only the
+// children that name a workspace: the rest are Muse's observers (#4711).
 
 // MuseRoots is every session directory: DEJA_MUSE_ROOTS (a path list) when
 // set, else $XDG_DATA_HOME/muse/sessions where XDG_DATA_HOME is absolute, else
@@ -160,7 +162,7 @@ func ParseMuseFile(path string) ([]model.Session, error) {
 		s.Parent = filepath.Base(filepath.Dir(filepath.Dir(dir)))
 	}
 	streamID := ""
-	workspace, cwd := "", ""
+	workspace, cwd, branchRoot := "", "", ""
 	exits := commandExits{}
 	err := scanJSONL(path, func(line map[string]any) {
 		for _, rec := range museRecords(line) {
@@ -187,6 +189,11 @@ func ParseMuseFile(path string) ([]model.Session, error) {
 			case "runtime.session.route_facts":
 				if v, _ := inner["cwd"].(string); v != "" && cwd == "" {
 					cwd = v
+				}
+				continue
+			case "session.workspace_branch.observed":
+				if v, _ := inner["workspace_root"].(string); v != "" && branchRoot == "" {
+					branchRoot = v
 				}
 				continue
 			case "session.name.changed":
@@ -248,6 +255,18 @@ func ParseMuseFile(path string) ([]model.Session, error) {
 	}
 	if workspace == "" {
 		workspace = cwd
+	}
+	// A workflow child records its workspace only here (#4712).
+	if workspace == "" {
+		workspace = branchRoot
+	}
+	// Muse runs a reminder observer beside every session, and a verification
+	// one after tool use, as children logged like a delegated agent. Their
+	// prompt is Muse's own instruction text. They are the children that name
+	// no workspace: a workflow child records the one it works in, an observer
+	// only reads the parent's conversation (#4711).
+	if child && workspace == "" {
+		return nil, err
 	}
 	s.Project = projectName(workspace)
 	if len(s.Messages) == 0 {
@@ -342,4 +361,39 @@ func museWorkRecords(calls []any, t time.Time) []model.Message {
 		}
 	}
 	return out
+}
+
+// MuseWorkspace is the directory a session ran in, read from its log the way
+// ParseMuseFile reads it, or "" when the log names none. `muse resume` adopts
+// the directory it is run from as the workspace, so this is where deja resume
+// runs it (#4710).
+func MuseWorkspace(path string) string {
+	var workspace, cwd, branchRoot string
+	_ = scanJSONL(path, func(line map[string]any) {
+		for _, rec := range museRecords(line) {
+			payload, _ := rec["payload"].(map[string]any)
+			inner, _ := payload["record"].(map[string]any)
+			var key string
+			var dst *string
+			switch rec["payload_type"] {
+			case "runtime.session.metadata":
+				key, dst = "workspace_root", &workspace
+			case "runtime.session.route_facts":
+				key, dst = "cwd", &cwd
+			case "session.workspace_branch.observed":
+				key, dst = "workspace_root", &branchRoot
+			default:
+				continue
+			}
+			if v, _ := inner[key].(string); v != "" && *dst == "" {
+				*dst = v
+			}
+		}
+	})
+	for _, w := range []string{workspace, cwd, branchRoot} {
+		if w != "" {
+			return w
+		}
+	}
+	return ""
 }
