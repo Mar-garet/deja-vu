@@ -48,9 +48,16 @@ func WorkBuddyConfigDirs() []string {
 }
 
 // WorkBuddyConfigDir is the home deja wires: $WORKBUDDY_CONFIG_DIR, else the
-// first edition's home on disk, else ~/.workbuddy.
+// first edition's home holding the app's database, else the first on disk,
+// else ~/.workbuddy. Existence alone is not enough: WorkBuddy AI creates
+// ~/.workbuddy/device-id on its first launch and never reads that home.
 func WorkBuddyConfigDir() string {
 	dirs := WorkBuddyConfigDirs()
+	for _, d := range dirs {
+		if _, err := os.Stat(filepath.Join(d, "workbuddy.db")); err == nil {
+			return d
+		}
+	}
 	for _, d := range dirs {
 		if st, err := os.Stat(d); err == nil && st.IsDir() {
 			return d

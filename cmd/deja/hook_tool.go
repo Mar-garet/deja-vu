@@ -317,7 +317,15 @@ func toolHookLineSkipping(dir, cwd string, input toolHookInput, used func(string
 		// sends "Read", which stays excluded: its hook fires before the action,
 		// so it has the edit itself to speak at.
 		"read":
-		if path := strings.TrimSpace(input.ToolInput.FilePath); path != "" {
+		path := strings.TrimSpace(input.ToolInput.FilePath)
+		if path == "" {
+			// TRAE CLI sends no file_path, only {"command": "Edit <path>"}.
+			path = strings.TrimSpace(strings.TrimPrefix(input.ToolInput.Command, input.ToolName+" "))
+			if path == strings.TrimSpace(input.ToolInput.Command) {
+				path = ""
+			}
+		}
+		if path != "" {
 			return fileHookLineOutside(dir, cwd, path, input.SessionID)
 		}
 	case "apply_patch":

@@ -40,3 +40,21 @@ func TestWorkBuddyAIStoreIsRead(t *testing.T) {
 		t.Fatalf("WORKBUDDY_CONFIG_DIR roots = %v", got)
 	}
 }
+
+// WorkBuddy AI creates ~/.workbuddy/device-id and logs on its first launch,
+// next to its real home ~/.workbuddy-ai. The home deja wires is the one
+// holding the app's database, not the first directory that exists (#4724).
+func TestWorkBuddyConfigDirSkipsTheOtherEditionsStrayDir(t *testing.T) {
+	home := codeBuddyEnv(t)
+	writeCodeBuddyFile(t, filepath.Join(home, ".workbuddy", "device-id"), "0f00\n")
+	writeCodeBuddyFile(t, filepath.Join(home, ".workbuddy-ai", "workbuddy.db"), "")
+	if got, want := WorkBuddyConfigDir(), filepath.Join(home, ".workbuddy-ai"); got != want {
+		t.Fatalf("WorkBuddyConfigDir = %q, want %q", got, want)
+	}
+
+	// Both editions in use: the first one, as before.
+	writeCodeBuddyFile(t, filepath.Join(home, ".workbuddy", "workbuddy.db"), "")
+	if got, want := WorkBuddyConfigDir(), filepath.Join(home, ".workbuddy"); got != want {
+		t.Fatalf("both editions: WorkBuddyConfigDir = %q, want %q", got, want)
+	}
+}

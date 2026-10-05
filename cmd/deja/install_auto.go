@@ -25,7 +25,10 @@ import (
 // deja — SessionStart alone, where there are now four — was reported as wired
 // on the strength of the trust entry, and the events added since reached
 // nobody.
-var codexHookWiring = []struct{ Event, Sub, Matcher string }{
+// hookWire is one event deja installs: the hook subcommand and its matcher.
+type hookWire = struct{ Event, Sub, Matcher string }
+
+var codexHookWiring = []hookWire{
 	// SessionStart carries the project digest. No matcher, as in Claude: codex
 	// fires this again with source "compact" after each compaction, and that is
 	// the moment the digest is worth most — measured on codex 0.149.0, one
@@ -59,13 +62,13 @@ func installCodexHooks(exe string, uninstall bool) (installResult, error) {
 	// ~/.codex join, so a sandboxed install stays sandboxed and a non-default
 	// codex home gets its hooks written where codex actually reads them. Every
 	// other codex path already goes through it (e.g. doctor.go). See #850.
-	return installCodexHooksAt(exe, filepath.Join(sources.CodexHome(), "hooks.json"), filepath.Join(sources.CodexHome(), "config.toml"), uninstall)
+	return installCodexHooksAt(exe, filepath.Join(sources.CodexHome(), "hooks.json"), filepath.Join(sources.CodexHome(), "config.toml"), codexHookWiring, uninstall)
 }
 
-// installCodexHooksAt writes codexHookWiring into the hooks file at path and
-// moves the trust pins kept in cfgPath with it. TRAE CLI, a codex-rs fork,
-// reads the same file in its own home.
-func installCodexHooksAt(exe, path, cfgPath string, uninstall bool) (installResult, error) {
+// installCodexHooksAt writes wiring into the hooks file at path and moves the
+// trust pins kept in cfgPath with it. TRAE CLI, a codex-rs fork, reads the
+// same file in its own home.
+func installCodexHooksAt(exe, path, cfgPath string, wiring []hookWire, uninstall bool) (installResult, error) {
 	exe = hookExeFor(exe, uninstall)
 	old, err := readConfig(path)
 	if err != nil {
@@ -81,7 +84,7 @@ func installCodexHooksAt(exe, path, cfgPath string, uninstall bool) (installResu
 	// rather than a copy, since the update edits the maps in place.
 	var before map[string]any
 	_ = json.Unmarshal(old, &before)
-	for _, h := range codexHookWiring {
+	for _, h := range wiring {
 		updateCodexHook(root, h.Event, hookRun(exe, h.Sub), h.Matcher, uninstall)
 	}
 	if hooks, _ := root["hooks"].(map[string]any); len(hooks) == 0 {
