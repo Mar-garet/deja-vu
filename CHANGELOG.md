@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CodeBuddy: a failed command keeps its exit code, the `/compact` instruction prompt is no longer indexed as your words, and the recovery packet after a compaction arrives with the next prompt (#4703, #4704, #4705).
 - A fix learned from a CodeBuddy or Qwen Code shell call answers the same error anywhere: the `Stdout:`/`Output:` label in front of the first line is no longer part of the error (#4717).
 - The Claude Code and CodeBuddy plugins stand down when `deja install <h>-auto` already wired the same hooks, instead of running every hook twice (#4706).
+- CodeBuddy on Windows: when the deja path has a space, `install codebuddy-auto` writes hooks that run through `powershell -NoProfile -Command "& '…'"`, so they work without Git Bash; the quoted line written before is replaced, not left beside it (#4728).
 
 ## [0.21.6] - 2026-10-04
 

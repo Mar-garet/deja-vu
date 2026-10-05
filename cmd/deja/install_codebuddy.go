@@ -118,7 +118,7 @@ func installCodeBuddyHooksIn(path, exe string, uninstall bool) (installResult, e
 // double quotes by bash or PowerShell, so such a path keeps the old line.
 func codeBuddyHookRun(goos, exe, sub string) string {
 	p := strings.ReplaceAll(exe, `\`, "/")
-	if true || goos != "windows" || !strings.ContainsAny(p, " \t") || strings.ContainsAny(p, "$`") {
+	if goos != "windows" || !strings.ContainsAny(p, " \t") || strings.ContainsAny(p, "$`") {
 		return hookCommandQuoteFor(goos, exe) + " " + sub
 	}
 	return `powershell -NoProfile -Command "& '` + strings.ReplaceAll(p, "'", "''") + `' ` + sub + `"`
