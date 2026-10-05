@@ -892,6 +892,10 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return installCodeBuddyMCP(exe, uninstall)
 	case "codebuddy-auto":
 		return installCodeBuddyAuto(exe, uninstall)
+	case "muse":
+		return installMuseMCP(exe, uninstall)
+	case "muse-auto":
+		return installMuseAuto(exe, uninstall)
 	case "kimi":
 		return installMCPJSON(filepath.Join(sources.KimiConfigDir(), "mcp.json"), exe, uninstall)
 	case "kimi-auto":
@@ -3747,6 +3751,14 @@ func mcpEntryWritable(path, blockKey string) error {
 }
 
 func installMCPJSON(path, exe string, uninstall bool) (installResult, error) {
+	command, args := mcpCommandArgs(exe)
+	return installMCPJSONEntry(path, "mcpServers", map[string]any{"command": command, "args": args}, uninstall)
+}
+
+// installMCPJSONEntry is installMCPJSON for a client whose block has another
+// name or whose entry carries more than the command: Muse reads the legacy
+// mcp_servers as well as mcpServers, and wants a type and a mode (#4709).
+func installMCPJSONEntry(path, blockKey string, entry map[string]any, uninstall bool) (installResult, error) {
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -3759,12 +3771,11 @@ func installMCPJSON(path, exe string, uninstall bool) (installResult, error) {
 		// A comment is not a broken file, and refusing the target over one is
 		// how somebody who annotated their config could not install deja at
 		// all (#1664).
-		command, args := mcpCommandArgs(exe)
-		return writeJSONCEntry(path, old, "mcpServers", map[string]any{"command": command, "args": args}, uninstall)
+		return writeJSONCEntry(path, old, blockKey, entry, uninstall)
 	} else if err := json.Unmarshal(old, &root); err != nil {
 		return installResult{}, configParseError(path, err)
 	}
-	m, _, err := mcpBlock(root, "mcpServers", path)
+	m, _, err := mcpBlock(root, blockKey, path)
 	if err != nil {
 		// On the way out there is nothing of deja's in a block it never wrote,
 		// and refusing here would leave the rest of the target wired (#2399).
@@ -3780,25 +3791,24 @@ func installMCPJSON(path, exe string, uninstall bool) (installResult, error) {
 			return installResult{Path: path, Action: "unchanged"}, nil
 		}
 		m = map[string]any{}
-		root["mcpServers"] = m
-		noteBlockAdded(path, "mcpServers")
+		root[blockKey] = m
+		noteBlockAdded(path, blockKey)
 	}
 	if uninstall {
 		delete(m, "deja")
-		removeAdoptedDejaEntries(path, "mcpServers", m)
+		removeAdoptedDejaEntries(path, blockKey, m)
 		note = leftDejaEntriesNote(m)
 		// And the block, when deja is what put it there (#2604).
-		if len(m) == 0 && blockWasAdded(path, "mcpServers") {
-			delete(root, "mcpServers")
-			forgetBlockAdded(path, "mcpServers")
+		if len(m) == 0 && blockWasAdded(path, blockKey) {
+			delete(root, blockKey)
+			forgetBlockAdded(path, blockKey)
 		}
 	} else {
-		command, args := mcpCommandArgs(exe)
 		key := dejaEntryKey(m)
 		if key != "deja" {
-			noteBlockAdded(path, "mcpServers."+key)
+			noteBlockAdded(path, blockKey+"."+key)
 		}
-		m[key], note = mergeDejaEntry(m[key], map[string]any{"command": command, "args": args})
+		m[key], note = mergeDejaEntry(m[key], entry)
 		note = withOtherDejaEntries(note, m, key)
 	}
 	next, err := marshalConfigLike(old, root)
@@ -4887,6 +4897,7 @@ func installTargetNames() []string {
 		"qwen", "qwen-auto",
 		"codebuddy", "codebuddy-auto",
 		"trae", "trae-auto",
+		"muse", "muse-auto",
 		"kimi", "kimi-auto",
 		"hermes", "hermes-auto",
 		"pi", "pi-auto",
@@ -5056,6 +5067,8 @@ func existingTargetChecks() map[string]string {
 		"commandcode":  commandCodeFirstRoot(),
 		"codebuddy":    sources.CodeBuddyRoot(),                       // its session store; deja creates the config dir
 		"trae":         filepath.Join(sources.TraeRoot(), "sessions"), // the same: deja creates traecli.toml
+		"codebuddy":    sources.CodeBuddyRoot(),                       // its session store; deja creates the config dir
+		"muse":         sources.MuseRoot(),                            // the same: deja creates ~/.config/muse
 		// Reasonix's own config.toml, which it writes on first run. deja
 		// writes beside it — plugins/ and plugin-packages.json — and never
 		// into it, so keying on the home itself would make every machine a

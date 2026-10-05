@@ -1961,6 +1961,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"qwen", filepath.Join(sources.QwenConfigDir(), "settings.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"codebuddy", codeBuddyMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"trae", traeConfigPath(), doctorTOMLWired, doctorTOMLDejaKeys},
+		{"muse", museSettingsPath(), doctorJSONWiredIn(doctorMuseServers), doctorJSONDejaKeysIn(doctorMuseServers)},
 		{"kimi", filepath.Join(sources.KimiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"cline", sources.ClineMCPSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"pi", filepath.Join(sources.PiConfigDir(), "mcp.json"), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
@@ -2336,6 +2337,20 @@ func doctorOpencodeServers(root map[string]any) map[string]any {
 		return nested
 	}
 	return m
+}
+
+// doctorMuseServers is the block Muse loads: either key on its own, and
+// neither when both are present, since Muse then drops every server (#4709).
+func doctorMuseServers(root map[string]any) map[string]any {
+	legacy, hasLegacy := root["mcp_servers"].(map[string]any)
+	current, hasCurrent := root["mcpServers"].(map[string]any)
+	if hasLegacy && hasCurrent {
+		return nil
+	}
+	if hasLegacy {
+		return legacy
+	}
+	return current
 }
 
 func doctorJSONWired(key string) func(string) bool {

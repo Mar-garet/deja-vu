@@ -412,6 +412,11 @@
       "path": "<tmp>/home/.trae/traecli.toml"
     },
     {
+      "name": "muse",
+      "state": "config-missing",
+      "path": "<tmp>/home/.config/muse/settings.json"
+    },
+    {
       "name": "kimi",
       "state": "config-missing",
       "path": "<tmp>/home/.kimi-code/mcp.json"
@@ -582,6 +587,11 @@
       "name": "trae",
       "state": "missing",
       "path": "<tmp>/home/.trae/cli/hooks.json"
+    },
+    {
+      "name": "muse",
+      "state": "missing",
+      "path": "<tmp>/home/.config/muse/settings.json"
     },
     {
       "name": "kimi",
