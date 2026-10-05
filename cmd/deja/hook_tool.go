@@ -723,7 +723,7 @@ func commandDecisionLine(dir, cwd, cmd, self string, lookupOnly bool) string {
 	if lookupOnly {
 		return ""
 	}
-	terms := prompt.Terms(normalizedCommandText(cmd))
+	terms := toolCommandTerms(cmd)
 	if len(terms) == 0 {
 		return ""
 	}
@@ -1170,4 +1170,10 @@ func toolSessionCount(n int) string {
 		return "1 session"
 	}
 	return fmt.Sprintf("%d sessions", n)
+}
+
+// toolCommandTerms is what the tool hook searches on for a command: its text
+// with the shell noise taken off, read as a command rather than as prose.
+func toolCommandTerms(cmd string) []string {
+	return prompt.CommandTerms(normalizedCommandText(cmd))
 }

@@ -19,10 +19,17 @@ import (
 // carry no ASCII identifier to find.
 func relevanceTerms(q string) []string { return query.RelevanceTerms(q) }
 
-// promptSearchTerms extracts the informative tokens from a natural-language
-// prompt: stop words and short fragments dropped, capped so the query stays
-// specific.
-func Terms(prompt string) []string {
+// Terms extracts the informative tokens from a natural-language prompt: stop
+// words and short fragments dropped, capped so the query stays specific.
+func Terms(prompt string) []string { return termsAsked(splitAsk(prompt)) }
+
+// CommandTerms is Terms for a shell command or a plan step. Lines still split —
+// the last one is what runs — but a line is not cut into clauses: "cd repo; go
+// test ./..." would lead with the test and drop the directory, and a full stop
+// inside a quoted commit message is not a boundary at all.
+func CommandTerms(text string) []string { return termsAsked(splitAskLine(text)) }
+
+func termsAsked(ask, rest string) []string {
 	var out []string
 	seen := map[string]bool{}
 	add := func(f string) bool {
@@ -36,10 +43,10 @@ func Terms(prompt string) []string {
 	// Six terms is the whole budget and a paste spends it before the question is
 	// reached: a repo listing, a set of @file mentions or a stack trace above
 	// "why does the fetcher time out?" left the question out of the query and
-	// auto-recall answered nothing (#3183). The ask is read first, the rest of
-	// the prompt fills what is left — the term rules themselves are untouched,
-	// and a one-line prompt takes the same path it always did.
-	ask, rest := splitAsk(prompt)
+	// auto-recall answered nothing (#3183). An instruction in front of the
+	// question on the same line does the same (#4751). The ask is read first,
+	// the rest of the prompt fills what is left — the term rules themselves are
+	// untouched.
 	if ask != "" {
 		if termsFrom(ask, seen, add) {
 			return out
@@ -114,42 +121,130 @@ func termsFrom(prompt string, seen map[string]bool, add func(string) bool) bool 
 	return false
 }
 
-// splitAsk separates the line the person is asking on from the rest of the
-// prompt. The ask is the last line that ends in a question mark, and where
-// there is none, the last line carrying any word at all — which is where an ask
-// under a paste sits. A single-line prompt has no split: it comes back whole as
-// the rest, and reads exactly as it did before.
+// splitAsk separates the question from the rest of the prompt. The ask is the
+// last line that ends in a question mark, and where there is none, the last line
+// carrying any word at all — which is where an ask under a paste sits.
 //
 // Measured on the bench's pasted-preamble arm — every question of the corpus
 // asked at home under a paste — this carried 9 of 47 to 45, against 46 for the
 // same questions with no paste at all. No other arm moved.
+//
+// Within that line the question can still sit behind an instruction: "without
+// calling any MCP tool and without reading any files: what jitter constant…"
+// spends all six terms before the question (#4751). So the line is cut into
+// clauses as well, and the clause holding the question leads. A one-line
+// prompt of a single clause has no split at all.
 func splitAsk(prompt string) (ask, rest string) {
-	if !strings.Contains(prompt, "\n") {
+	return split(prompt, true)
+}
+
+// splitAskLine is splitAsk without the clause cut, for command text.
+func splitAskLine(text string) (ask, rest string) {
+	return split(text, false)
+}
+
+func split(prompt string, byClause bool) (ask, rest string) {
+	lines := strings.Split(prompt, "\n")
+	q := askLine(lines)
+	if q < 0 {
 		return "", prompt
 	}
-	lines := strings.Split(prompt, "\n")
-	// The last question is the live one: people paste, ask, paste again, ask.
+	clause, left := "", ""
+	if byClause {
+		clause, left = askClause(lines[q])
+	}
+	if clause == "" {
+		if len(lines) == 1 {
+			return "", prompt
+		}
+		clause, left = lines[q], ""
+	}
+	others := make([]string, 0, len(lines))
+	others = append(others, lines[:q]...)
+	if left != "" {
+		others = append(others, left)
+	}
+	others = append(others, lines[q+1:]...)
+	return clause, strings.Join(others, "\n")
+}
+
+// askLine picks the line the person is asking on. The last question is the
+// live one: people paste, ask, paste again, ask.
+func askLine(lines []string) int {
 	q := -1
 	for i, l := range lines {
 		if strings.HasSuffix(strings.TrimRight(l, " \t"), "?") && hasWordRune(l) {
 			q = i
 		}
 	}
-	if q < 0 {
-		for i := len(lines) - 1; i >= 0; i-- {
-			if hasWordRune(lines[i]) {
-				q = i
-				break
-			}
+	if q >= 0 {
+		return q
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		if hasWordRune(lines[i]) {
+			return i
 		}
 	}
-	if q < 0 {
-		return "", prompt
+	return -1
+}
+
+// askClause cuts a line at its clause boundaries — a colon, semicolon, full
+// stop, question or exclamation mark followed by a space, or a dash between
+// words — and picks the ask among the clauses by the same rule askLine uses for
+// lines: the last that ends in a question mark, else the last with a word in it.
+// An instruction is typed in front of what it governs, so the tail is the ask.
+// The other clauses come back joined; a line of one clause returns "".
+func askClause(line string) (clause, rest string) {
+	parts := clauses(line)
+	if len(parts) < 2 {
+		return "", line
 	}
-	others := make([]string, 0, len(lines)-1)
-	others = append(others, lines[:q]...)
-	others = append(others, lines[q+1:]...)
-	return lines[q], strings.Join(others, "\n")
+	q := askLine(parts)
+	if q < 0 {
+		return "", line
+	}
+	others := make([]string, 0, len(parts)-1)
+	others = append(others, parts[:q]...)
+	others = append(others, parts[q+1:]...)
+	return parts[q], strings.Join(others, " ")
+}
+
+// clauses splits a line at its clause boundaries. A dot or colon with no space
+// after it is part of a word — main.go, 1.5, http://, 10:30 — and stays. So does
+// anything inside backticks or double quotes: `git commit -m "fix: x. y"` is
+// one thing being asked about, not three clauses.
+func clauses(line string) []string {
+	var out []string
+	rs := []rune(line)
+	start := 0
+	cut := func(end, next int) {
+		if c := strings.TrimSpace(string(rs[start:end])); c != "" {
+			out = append(out, c)
+		}
+		start = next
+	}
+	var quote rune
+	for i, r := range rs {
+		if quote != 0 {
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+		if r == '`' || r == '"' {
+			quote = r
+			continue
+		}
+		spaceAfter := i+1 == len(rs) || unicode.IsSpace(rs[i+1])
+		switch {
+		case (r == '?' || r == '!' || r == '.' || r == ':' || r == ';') && spaceAfter:
+			cut(i+1, i+1)
+		case (r == '—' || r == '–') && i > 0 && unicode.IsSpace(rs[i-1]) && spaceAfter:
+			cut(i, i+1)
+		}
+	}
+	cut(len(rs), len(rs))
+	return out
 }
 
 // hasWordRune reports whether a line carries anything a term could come from. A
