@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,7 +31,9 @@ func TestInstallTraeMCP(t *testing.T) {
 		t.Fatalf("path = %q, want %q", r.Path, cfg)
 	}
 	got := readString(t, cfg)
-	if !strings.HasPrefix(got, mine) || !strings.Contains(got, "[mcp_servers.deja]\ncommand = \"/bin/deja\"\nargs = [\"mcp\"]\n") {
+	command, args := mcpCommandArgs("/bin/deja")
+	want := fmt.Sprintf("[mcp_servers.deja]\ncommand = %q\nargs = %s\n", command, tomlStringArray(args))
+	if !strings.HasPrefix(got, mine) || !strings.Contains(got, want) {
 		t.Fatalf("traecli.toml:\n%s", got)
 	}
 	if strings.Contains(got, "type =") {
