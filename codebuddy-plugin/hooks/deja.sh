@@ -26,9 +26,10 @@ find_deja() {
 
 # `deja install codebuddy-auto` writes the same hooks into settings.json. If the
 # user has both, the plugin must stand down or every session gets the digest
-# twice.
+# twice. The installer writes the launcher (`.../deja-hook hook-context`), so
+# match the subcommand rather than a bare `deja hook-` (#4706).
 SETTINGS="${CODEBUDDY_CONFIG_DIR:-$HOME/.codebuddy}/settings.json"
-if [ -f "$SETTINGS" ] && grep -q "deja hook-" "$SETTINGS" 2>/dev/null; then
+if [ -f "$SETTINGS" ] && grep -qE 'deja[^"]*hook-(context|prompt|precompact|tool)' "$SETTINGS" 2>/dev/null; then
 	cat >/dev/null 2>&1 || true
 	exit 0
 fi
