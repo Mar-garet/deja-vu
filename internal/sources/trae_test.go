@@ -164,6 +164,7 @@ func TestTraeStoreIsItsOwnHarness(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("TRAE_HOME", "")
 	t.Setenv("DEJA_TRAE_ROOT", "")
+	t.Setenv("TRAECLI_HOME", "")
 	t.Setenv("CODEX_HOME", "")
 	t.Setenv("DEJA_CODEX_ROOT", "")
 	t.Setenv("DEJA_XCODE_CODEX_ROOT", "")
@@ -258,5 +259,53 @@ func TestTraeResumesWholeOnSplitMirror(t *testing.T) {
 	}
 	if got, want := textsOf(ss[0], "user"), []string{"now run the tests"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("tail user turns = %q, want %q", got, want)
+	}
+}
+
+// TRAECLI_HOME is TRAE CLI's own state directory: `TRAECLI_HOME=x traex
+// archive <id>` moves the rollout to x/archived_sessions, and `traex doctor`
+// reports it beside TRAE_HOME (traecli 0.207.1). DEJA_TRAE_ROOT still wins.
+func TestTraeRootFollowsTraecliHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("TRAE_HOME", filepath.Join(home, "th"))
+	t.Setenv("DEJA_TRAE_ROOT", "")
+	cli := filepath.Join(home, "state")
+	t.Setenv("TRAECLI_HOME", cli)
+	if got := TraeRoot(); got != cli {
+		t.Fatalf("TraeRoot with TRAECLI_HOME = %q, want %q", got, cli)
+	}
+	turn := `{"timestamp":"2026-10-01T09:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"hello trae"}}`
+	writeTraeRollout(t, filepath.Join(cli, "archived_sessions"), traeMeta, turn)
+	if n := len(LoadTrae()); n != 1 {
+		t.Fatalf("sessions = %d, want 1", n)
+	}
+	t.Setenv("DEJA_TRAE_ROOT", filepath.Join(home, "override"))
+	if got, want := TraeRoot(), filepath.Join(home, "override"); got != want {
+		t.Fatalf("TraeRoot with DEJA_TRAE_ROOT = %q, want %q", got, want)
+	}
+}
+
+// TRAE's binary ships Claude Code's tool set (Bash, Edit, Write, Read) next to
+// Codex's, so a call can arrive under either name. Both must leave the
+// command, the edited span and the file in the index.
+func TestTraeClaudeStyleTools(t *testing.T) {
+	p := writeTraeRollout(t, t.TempDir(),
+		traeMeta,
+		`{"timestamp":"2026-10-01T09:00:01.000Z","type":"event_msg","payload":{"type":"user_message","turn_id":"turn-1","message":"fix the retry"}}`,
+		`{"timestamp":"2026-10-01T09:00:02.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_1","name":"Bash","arguments":"{\"command\":\"go test ./retry\"}"}}`,
+		`{"timestamp":"2026-10-01T09:00:03.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_2","name":"Edit","arguments":"{\"file_path\":\"/repo/retry/backoff.go\",\"old_string\":\"delay = base\",\"new_string\":\"delay *= 2\"}"}}`,
+		`{"timestamp":"2026-10-01T09:00:04.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_2","output":"The file was edited."}}`,
+	)
+	s := parseTraeOne(t, p)
+	if got, want := textsOf(s, RoleCommand), []string{"$ go test ./retry"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("commands = %q, want %q", got, want)
+	}
+	if got := strings.Join(textsOf(s, RoleFiles), "\n"); !strings.Contains(got, "retry/backoff.go") {
+		t.Fatalf("files = %q, want the edited file", got)
+	}
+	if got := strings.Join(textsOf(s, RoleEdit), "\n"); !strings.Contains(got, "delay = base") {
+		t.Fatalf("edits = %q, want the replaced span", got)
 	}
 }

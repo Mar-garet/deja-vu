@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
 // Codex pins every hook a user approves in its config.toml, one table per hook
@@ -94,10 +92,10 @@ func sortedHookPositions(m map[codexHookPos]string) []codexHookPos {
 	return out
 }
 
-// moveCodexHookTrust rewrites the pins in codex's config.toml for the hooks
-// file at hooksPath after it went from before to after.
-func moveCodexHookTrust(hooksPath string, before, after map[string]any) error {
-	cfgPath := filepath.Join(sources.CodexHome(), "config.toml")
+// moveCodexHookTrust rewrites the pins in the config at cfgPath — codex's
+// config.toml, or TRAE's traecli.toml, which keeps the same hooks.state
+// tables — for the hooks file at hooksPath after it went from before to after.
+func moveCodexHookTrust(cfgPath, hooksPath string, before, after map[string]any) error {
 	old, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return nil

@@ -881,6 +881,13 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		// meant a machine that already had the server was told "unchanged"
 		// while the hooks under it were being rewired.
 		return wroteAll(hooks, mcp), nil
+	case "trae":
+		return installTrae(exe, uninstall)
+	case "trae-auto":
+		if err := readableStrictJSON(traeHooksPath()); err != nil {
+			return installResult{}, err
+		}
+		return installTraeAuto(exe, uninstall)
 	case "codebuddy":
 		return installCodeBuddyMCP(exe, uninstall)
 	case "codebuddy-auto":
@@ -4879,6 +4886,7 @@ func installTargetNames() []string {
 		"antigravity", "antigravity-auto",
 		"qwen", "qwen-auto",
 		"codebuddy", "codebuddy-auto",
+		"trae", "trae-auto",
 		"kimi", "kimi-auto",
 		"hermes", "hermes-auto",
 		"pi", "pi-auto",
@@ -5046,7 +5054,8 @@ func existingTargetChecks() map[string]string {
 		"gjc":          sources.GjcRoot(),
 		"zcode":        sources.ZCodeRoot(),
 		"commandcode":  commandCodeFirstRoot(),
-		"codebuddy":    sources.CodeBuddyRoot(), // its session store; deja creates the config dir
+		"codebuddy":    sources.CodeBuddyRoot(),                       // its session store; deja creates the config dir
+		"trae":         filepath.Join(sources.TraeRoot(), "sessions"), // the same: deja creates traecli.toml
 		// Reasonix's own config.toml, which it writes on first run. deja
 		// writes beside it — plugins/ and plugin-packages.json — and never
 		// into it, so keying on the home itself would make every machine a

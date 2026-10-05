@@ -55,12 +55,18 @@ var codexHookWiring = []struct{ Event, Sub, Matcher string }{
 }
 
 func installCodexHooks(exe string, uninstall bool) (installResult, error) {
-	exe = hookExeFor(exe, uninstall)
 	// Use CodexHome() (honours CODEX_HOME / DEJA_CODEX_ROOT) rather than a raw
 	// ~/.codex join, so a sandboxed install stays sandboxed and a non-default
 	// codex home gets its hooks written where codex actually reads them. Every
 	// other codex path already goes through it (e.g. doctor.go). See #850.
-	path := filepath.Join(sources.CodexHome(), "hooks.json")
+	return installCodexHooksAt(exe, filepath.Join(sources.CodexHome(), "hooks.json"), filepath.Join(sources.CodexHome(), "config.toml"), uninstall)
+}
+
+// installCodexHooksAt writes codexHookWiring into the hooks file at path and
+// moves the trust pins kept in cfgPath with it. TRAE CLI, a codex-rs fork,
+// reads the same file in its own home.
+func installCodexHooksAt(exe, path, cfgPath string, uninstall bool) (installResult, error) {
+	exe = hookExeFor(exe, uninstall)
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -92,7 +98,7 @@ func installCodexHooks(exe string, uninstall bool) (installResult, error) {
 		// config.toml; see codex_hook_trust.go. Install moves hooks too: a
 		// second copy of deja's entry it drops shifts the reader's hooks
 		// after it up a place (#4227).
-		err = moveCodexHookTrust(path, before, root)
+		err = moveCodexHookTrust(cfgPath, path, before, root)
 	}
 	return installResult{Path: path, Action: a}, err
 }

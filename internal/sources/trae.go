@@ -27,9 +27,17 @@ func TraeHome() string {
 
 // TraeRoot is the codex-rs store under that home: sessions/YYYY/MM/DD,
 // archived_sessions and history.jsonl, one level down at cli/ where Codex has
-// none. DEJA_TRAE_ROOT overrides it.
+// none. TRAECLI_HOME is TRAE's own name for this directory and moves the
+// sessions and hooks.json with it (traecli 0.207.1: `TRAECLI_HOME=x traex
+// archive <id>` writes x/archived_sessions). DEJA_TRAE_ROOT overrides both.
 func TraeRoot() string {
-	return EnvPath("DEJA_TRAE_ROOT", filepath.Join(TraeHome(), "cli"))
+	return EnvPath("DEJA_TRAE_ROOT", TraeCLIHome())
+}
+
+// TraeCLIHome is the directory TRAE itself keeps its state and hooks.json in,
+// whatever deja is told to read.
+func TraeCLIHome() string {
+	return EnvPath("TRAECLI_HOME", filepath.Join(TraeHome(), "cli"))
 }
 
 // TraeSessionDirs are the directories TRAE's rollouts live in.
@@ -226,6 +234,9 @@ func (tr *traeTurns) tool(s *model.Session, item map[string]any, cwd string, t t
 	}
 	switch pt {
 	case "function_call":
+		if traeClaudeTool(s, item, t) {
+			return
+		}
 		codexCall(s, traeShellCall(item), calls, t)
 	case "function_call_output", "custom_tool_call_output":
 		codexCallOutput(s, traeOutput(item), calls, t)
@@ -275,6 +286,26 @@ func traeItemText(item map[string]any, types ...string) string {
 		}
 	}
 	return b.String()
+}
+
+// traeClaudeTool reads a call made with Claude Code's tool set, which TRAE's
+// binary carries next to Codex's (Bash, Edit, Write, Read and the rest), through
+// the Claude dialect. Codex's names are lowercase and left to codexCall.
+func traeClaudeTool(s *model.Session, item map[string]any, t time.Time) bool {
+	name, _ := item["name"].(string)
+	if name == "" || name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	in := map[string]any{}
+	switch a := item["arguments"].(type) {
+	case string:
+		_ = json.Unmarshal([]byte(a), &in)
+	case map[string]any:
+		in = a
+	}
+	id, _ := item["call_id"].(string)
+	s.Messages = append(s.Messages, codeBuddyWorkRecords([]any{map[string]any{"type": "tool_use", "id": id, "name": name, "input": in}}, t)...)
+	return true
 }
 
 // traeShellCall turns TRAE's shell call into the shape codexCall reads. In
