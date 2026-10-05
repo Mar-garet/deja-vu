@@ -7,7 +7,7 @@
 
 <p align="center"><b>Your coding agents stop re-debugging what you already fixed.</b></p>
 
-<p align="center">Claude Code, Codex, Cursor and 32 more agents already save every session to disk.
+<p align="center">Claude Code, Codex, Cursor and 35 more agents already save every session to disk.
 deja indexes all of it, months back, and hands the part that matters
 to whichever agent is working now.</p>
 
@@ -51,7 +51,7 @@ deja install --auto
 ## Highlights
 
 - **Starts full.** Months of history from before you installed it are searchable on day one: `deja "connection pool exhausted"` over gigabytes.
-- **One memory, every agent.** A fix found in Codex comes back in Claude Code, Cursor or opencode; all [thirty-five agents](#supported-harnesses) read the same index.
+- **One memory, every agent.** A fix found in Codex comes back in Claude Code, Cursor or opencode; all [thirty-eight agents](#supported-harnesses) read the same index.
 - **Nobody has to ask.** Recall arrives at session start, before a file is edited or a command runs, and after a command fails.
 - **Survives compaction.** Over 43 measured compactions the summary kept 77% of the decisions and 0.2% of the commands; deja hands back the rest ([how](docs/compaction.md)).
 - **Indexes the work, not just the talk.** The files each turn opened, the commands with their exit status, the exact spans an edit replaced.

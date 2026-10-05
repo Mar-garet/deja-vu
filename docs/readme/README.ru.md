@@ -15,7 +15,7 @@ deja индексирует всё, на месяцы назад, и отдаё�
 
 <p align="center"><sub><em>Никто ничего не искал — агент вызвал deja сам. Два настоящих прогона, настоящая модель, настоящие вызовы инструментов, на синтетическом корпусе: ничья история не публикуется.</em></sub></p>
 
-<p align="center"><b>deja полна с первой минуты: история, которую 35 агентов уже записали, индекс за несколько секунд, без модели и без отдельного шага сбора.</b></p>
+<p align="center"><b>deja полна с первой минуты: история, которую 38 агентов уже записали, индекс за несколько секунд, без модели и без отдельного шага сбора.</b></p>
 
 <p align="center"><b>Самая точная, самая дешёвая в работе и самая быстрая память для кодинг-агентов из всех, что мы смогли измерить.</b></p>
 
@@ -101,7 +101,7 @@ shell-скрипт; используйте `scoop install deja-vu` (есть в 
 
 ## Что это даёт
 
-**Решено в Codex — помнит Claude.** Тридцать пять кодинг-агентов пишут каждый разговор в локальные файлы,
+**Решено в Codex — помнит Claude.** Тридцать восемь кодинг-агентов пишут каждый разговор в локальные файлы,
 deja превращает эти файлы в слой памяти, который читают все они.
 
 | | |
@@ -198,7 +198,8 @@ Claude Code · Cline · Codex CLI · opencode · aider · Gemini CLI · Cursor �
 Grok Build · Hermes · Goose · Qwen Code · Kimi Code · pi · omp (Oh My Pi) · OpenClaw ·
 Copilot CLI · VS Code Copilot Chat · Amp · prime-agent (PrimeIntellect) · Roo Code ·
 Continue · Crush · DeepSeek Harness · Cherry Studio · Senpi · gajae-code · Kimchi Coding ·
-Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · Zed.
+Command Code · ZCode · CodeWhale · Reasonix · Kiro · Kilo Code · CodeBuddy Code ·
+TRAE CLI · Muse Code · Zed.
 
 Что именно каждый из них поддерживает — MCP-recall, авто-recall, skills, команды, resume, handoff — см. в
 [матрице возможностей в английском README](../../README.md#supported-harnesses). Нестандартные пути к хранилищам
