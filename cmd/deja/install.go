@@ -2183,6 +2183,15 @@ func hookCommandKindOf(existing any, cmd string) hookCommandKind {
 	if s == cmd {
 		return hookDejas
 	}
+	// A quoted path is one token whatever is in it, so the line is deja's
+	// own when the path names deja and nothing follows but the subcommand.
+	// Read as a wrapper, an install from a new path left the old line and
+	// its dead path in place, and CodeBuddy's PowerShell form on Windows
+	// stacked beside the quoted line it replaces (#4728).
+	if bin, rest, ok := quotedHookLine(s); ok && rest == hookLineRest(cmd) && hookTokenIsDejas(bin) {
+		return hookDejas
+	}
+	s, cmd = unwrapPowerShellHook(s), unwrapPowerShellHook(cmd)
 	sub := cmd[strings.LastIndex(cmd, " ")+1:]
 	for i := 0; i < len(s); {
 		j := strings.Index(s[i:], " "+sub)
@@ -2260,6 +2269,60 @@ func hookTokenIsDejas(tok string) bool {
 // on to rewrite the command ask for hookDejas instead.
 func isDejaHookCommand(existing any, cmd string) bool {
 	return hookCommandKindOf(existing, cmd) != hookNotDejas
+}
+
+// powerShellHookHead is how codeBuddyHookRun's Windows line opens.
+const powerShellHookHead = `powershell -NoProfile -Command "`
+
+// unwrapPowerShellHook is the command inside codeBuddyHookRun's Windows line,
+// and the line itself when it is not one.
+func unwrapPowerShellHook(s string) string {
+	if len(s) > len(powerShellHookHead) && strings.HasPrefix(s, powerShellHookHead) && strings.HasSuffix(s, `"`) {
+		return s[len(powerShellHookHead) : len(s)-1]
+	}
+	return s
+}
+
+// quotedHookLine splits a hook line whose binary is quoted — `"<path>" rest`,
+// `'<path>' rest`, PowerShell's `& '<path>' rest`, or that inside
+// codeBuddyHookRun's Windows line — into the path and what follows it.
+func quotedHookLine(s string) (bin, rest string, ok bool) {
+	s = strings.TrimSpace(unwrapPowerShellHook(strings.TrimSpace(s)))
+	s = strings.TrimPrefix(s, "& ")
+	if len(s) < 2 || (s[0] != '"' && s[0] != '\'') {
+		return "", "", false
+	}
+	q := s[0]
+	var b strings.Builder
+	for i := 1; i < len(s); i++ {
+		if s[i] != q {
+			b.WriteByte(s[i])
+			continue
+		}
+		// PowerShell writes a single quote inside single quotes twice.
+		if q == '\'' && i+1 < len(s) && s[i+1] == '\'' {
+			b.WriteByte('\'')
+			i++
+			continue
+		}
+		if i+1 >= len(s) || s[i+1] != ' ' {
+			return "", "", false
+		}
+		return b.String(), strings.TrimSpace(s[i+1:]), true
+	}
+	return "", "", false
+}
+
+// hookLineRest is what a hook line deja writes runs after the binary: the
+// subcommand and its flags.
+func hookLineRest(cmd string) string {
+	if _, rest, ok := quotedHookLine(cmd); ok {
+		return rest
+	}
+	if i := strings.IndexByte(cmd, ' '); i >= 0 {
+		return strings.TrimSpace(cmd[i+1:])
+	}
+	return ""
 }
 
 // lastShellToken is the word a command name would occupy: the last run of
