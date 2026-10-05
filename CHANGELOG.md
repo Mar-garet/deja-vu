@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja install muse` and `muse-auto` on a machine with no Muse settings file write one Muse starts with: it refused a file without `schema_version` (#4736).
+- A Muse Code session that compacts gets its recovery packet with the next prompt or edit; `muse-auto` now wires PreCompact, and the log is found by session id (#4737).
 - Under `DEJA_INCLUDE_SUBAGENTS=1`, Muse Code's reminder and verification observers are no longer indexed as sessions, and a workflow subagent gets its project (#4711, #4712).
 - CodeBuddy: `deja resume` prints `codebuddy -c -r <id>` in the directory the session ran in, so the session-start recall reaches the reopened session (#4718), and `install codebuddy-auto` writes the `deja-history` skill and the `/deja` command where CodeBuddy reads them (#4707, #4708).
 

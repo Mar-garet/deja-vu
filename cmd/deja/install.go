@@ -1634,7 +1634,9 @@ func structurallyEmptyConfig(b []byte) bool {
 	switch trimmed {
 	case "", "{}", "[]", "null",
 		`{"mcpServers":{}}`, `{"mcp":{}}`, `{"mcp":{"servers":{}}}`,
-		`{"context_servers":{}}`, `{"servers":{}}`, "mcp_servers:":
+		`{"context_servers":{}}`, `{"servers":{}}`, "mcp_servers:",
+		// The seed Muse needs before it starts (seedMuseSettings).
+		`{"schema_version":1}`:
 		return true
 	}
 	return false

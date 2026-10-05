@@ -32,6 +32,33 @@ func museSettingsPath() string {
 	return filepath.Join(xdgConfigHome(), "muse", "settings.json")
 }
 
+// museSettingsSeed is the smallest settings file Muse starts with. Without
+// schema_version 1.4.1 and 1.4.2 refuse to start ("malformed settings file …
+// missing field `schema_version`"), and Muse writes no settings file of its
+// own, so a first install is what creates it (#4736).
+const museSettingsSeed = "{\n  \"schema_version\": 1\n}\n"
+
+// seedMuseSettings writes museSettingsSeed into a settings file that is missing
+// or empty, so what deja adds next lands in a file Muse accepts. An uninstall
+// that leaves only the seed behind removes the file it created, or empties the
+// one the reader had (structurallyEmptyConfig).
+func seedMuseSettings(path string) (string, error) {
+	old, err := readConfig(path)
+	if err != nil || len(bytes.TrimSpace(old)) != 0 {
+		return "unchanged", err
+	}
+	return writeIfChanged(path, old, []byte(museSettingsSeed))
+}
+
+// seededResult reports a file the seed created as created, which is what the
+// reader sees happen; the writer after it found a file and says updated.
+func seededResult(seed string, r installResult) installResult {
+	if seed == "created" && r.Action != "unchanged" {
+		r.Action = "created"
+	}
+	return r
+}
+
 // museHookWiring is every event deja installs into Muse.
 var museHookWiring = []struct{ Event, Sub, Matcher string }{
 	{"SessionStart", "hook-context", ""},
@@ -39,6 +66,11 @@ var museHookWiring = []struct{ Event, Sub, Matcher string }{
 	{"PreToolUse", "hook-tool", "bash|edit_file|write_file"},
 	{"PostToolUse", "hook-tool-after", "bash"},
 	{"PostToolUseFailure", "hook-tool-after", "bash"},
+	// Muse compacts in the middle of a turn, before a request that would not
+	// fit, and fires PreCompact first; the packet goes out on the next
+	// PreToolUse or prompt, since PostCompact takes no context and SessionStart
+	// does not fire again (#4737).
+	{"PreCompact", "hook-precompact", ""},
 	{"SessionEnd", "hook-session-end", ""},
 }
 
@@ -93,12 +125,24 @@ func installMuseMCP(exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
-	return installMCPJSONEntry(path, key, entry, false)
+	seed, err := seedMuseSettings(path)
+	if err != nil {
+		return installResult{}, err
+	}
+	r, err := installMCPJSONEntry(path, key, entry, false)
+	return seededResult(seed, r), err
 }
 
 func installMuseHooks(exe string, uninstall bool) (installResult, error) {
 	exe = hookExeFor(exe, uninstall)
 	path := museSettingsPath()
+	seed := "unchanged"
+	if !uninstall {
+		var err error
+		if seed, err = seedMuseSettings(path); err != nil {
+			return installResult{}, err
+		}
+	}
 	var res installResult
 	for i, h := range museHookWiring {
 		r, err := installSettingsHookCmd(path, h.Event, h.Matcher, museHookTimeout, hookRun(exe, h.Sub), uninstall)
@@ -109,7 +153,7 @@ func installMuseHooks(exe string, uninstall bool) (installResult, error) {
 			res = r
 		}
 	}
-	return res, nil
+	return seededResult(seed, res), nil
 }
 
 // installMuseAuto writes the hooks first: a settings file deja refuses

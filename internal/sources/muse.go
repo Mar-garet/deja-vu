@@ -2,8 +2,10 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -395,4 +397,51 @@ func (w museWorkspaceFacts) root() string {
 func MuseWorkspace(path string) string {
 	_, ws, _ := parseMuseLog(path)
 	return ws
+}
+
+// museSessionID is the shape of a session id, the directory name it is kept
+// under. Checked before the id goes into a glob.
+var museSessionID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// MuseSessionPath is the log of the session with this id, or "". Muse's hook
+// payload names the session and sends transcript_path null, and the day
+// directory it sits under is the day it started.
+func MuseSessionPath(id string) string {
+	if !museSessionID.MatchString(id) {
+		return ""
+	}
+	for _, root := range MuseRoots() {
+		if m, _ := filepath.Glob(filepath.Join(root, "*", "*", "*", id, museLogName)); len(m) > 0 {
+			return m[0]
+		}
+	}
+	return ""
+}
+
+// readMuseCompaction captures a Muse session for a PreCompact hook: the log
+// found by its id, read whole as the index reads it. The id has to be the
+// log's own stream, so a misplaced log is never taken for this session.
+func readMuseCompaction(id string) (CompactionTranscript, error) {
+	path := MuseSessionPath(id)
+	if path == "" {
+		return CompactionTranscript{}, fmt.Errorf("%w: no muse session %q", ErrTranscriptIdentity, id)
+	}
+	info, err := regularCompactionFile(path)
+	if err != nil {
+		return CompactionTranscript{}, err
+	}
+	ss, workspace, err := parseMuseLog(path)
+	if err != nil {
+		return CompactionTranscript{}, err
+	}
+	if len(ss) != 1 || ss[0].ID != id {
+		return CompactionTranscript{}, fmt.Errorf("%w: %s is not session %q", ErrTranscriptIdentity, path, id)
+	}
+	return CompactionTranscript{
+		Session: ss[0], Harness: "muse", NativeSessionID: id, Workspace: workspace,
+		Path: path, Fingerprint: sessionFingerprint(ss[0]), SourceSize: info.Size(), SourceMTime: info.ModTime(),
+		// Read through the parser, not by offset: nothing for the
+		// compaction-to-edit metric to count against.
+		MetricComplete: false,
+	}, nil
 }

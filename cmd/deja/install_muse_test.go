@@ -111,6 +111,7 @@ func TestInstallMuseAuto(t *testing.T) {
 		{"PreToolUse", "hook-tool", "bash|edit_file|write_file"},
 		{"PostToolUse", "hook-tool-after", "bash"},
 		{"PostToolUseFailure", "hook-tool-after", "bash"},
+		{"PreCompact", "hook-precompact", ""},
 		{"SessionEnd", "hook-session-end", ""},
 	} {
 		entries, _ := hooks[w.event].([]any)
@@ -279,5 +280,59 @@ func TestInstallMuseAutoRefusesWhole(t *testing.T) {
 	}
 	if servers, _ := readMuseSettings(t, path)["mcpServers"].(map[string]any); servers["deja"] != nil {
 		t.Fatalf("uninstall left deja in mcpServers: %v", servers)
+	}
+}
+
+// Muse writes no settings file of its own and refuses to start on one without
+// schema_version, so the file a first install creates carries it, and the
+// uninstall takes the file away again. An empty file the reader made comes
+// back empty.
+func TestInstallMuseSeedsSchemaVersion(t *testing.T) {
+	home := filepath.Join(hermeticEnv(t), "home")
+	path := filepath.Join(home, ".config", "muse", "settings.json")
+	t.Cleanup(func() { removingWiring = false; createdByThisRun = nil; snapshotsByThisRun = nil })
+	uninstall := func(target string) {
+		t.Helper()
+		removingWiring = true
+		defer func() { removingWiring = false }()
+		if _, err := installTarget(target, "/bin/deja", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, target := range []string{"muse", "muse-auto"} {
+		r, err := installTarget(target, "/bin/deja", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Action != "created" {
+			t.Errorf("%s: action = %q, want created", target, r.Action)
+		}
+		if v := readMuseSettings(t, path)["schema_version"]; v != float64(1) {
+			t.Fatalf("%s: schema_version = %v, want 1 — Muse will not start without it", target, v)
+		}
+		uninstall(target)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			b, _ := os.ReadFile(path)
+			t.Fatalf("%s: uninstall left the file it created: %s", target, b)
+		}
+	}
+
+	// A later run: what this one created is no longer the file in question.
+	createdByThisRun, snapshotsByThisRun = nil, nil
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installTarget("muse-auto", "/bin/deja", false); err != nil {
+		t.Fatal(err)
+	}
+	if v := readMuseSettings(t, path)["schema_version"]; v != float64(1) {
+		t.Fatalf("empty file: schema_version = %v, want 1", v)
+	}
+	uninstall("muse-auto")
+	if b, err := os.ReadFile(path); err != nil || len(b) != 0 {
+		t.Fatalf("empty file came back as %q (%v), want empty", b, err)
 	}
 }
