@@ -1249,7 +1249,9 @@ included: the field says which decision this is, not that something is wrong
 with it. A consumer reading its presence as "this was withdrawn" wants
 `lifecycle != "accepted"`.
 
-The MCP `blame` tool returns the same array shape.
+The MCP `blame` tool does not: it answers in the framed text recall uses, one
+numbered row per session, so an agent reads it the way it reads every other
+answer.
 
 ## `deja blame <path>:<line> --attribution --json`
 
