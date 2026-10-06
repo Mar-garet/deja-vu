@@ -8,8 +8,8 @@ import (
 )
 
 // withDirectorySessions puts the sessions about an asked file's directory at
-// the head of an answer that found nothing exact, or only loosened matches. A rule is usually written
-// for a package ("every change in cmd/reconcile is replayed against ..."),
+// the head of an answer that found nothing exact, or only loosened matches.
+// A rule is usually written for a package ("every change in cmd/reconcile is replayed against ..."),
 // while an agent about to edit asks by file ("cmd/reconcile/match.go"). The
 // path is one term that only matched sessions naming the file, so the package
 // rule never surfaced, or lost to a session sharing one ordinary word (#4762).
@@ -22,7 +22,14 @@ func withDirectorySessions(dir string, o query.Options, r SearchResult) SearchRe
 	if strings.Contains(o.Query, "\"") || r.Strict > 0 {
 		return r
 	}
-	for _, d := range parentDirs(RelevanceTerms(o.Query)) {
+	terms := RelevanceTerms(o.Query)
+	// A session that already answers two of the question's other words is a
+	// real answer to a question that is about more than the file. A session
+	// that only mentions the directory does not get to jump it (#4764).
+	if answersTheRest(r.Sessions, terms) {
+		return r
+	}
+	for _, d := range parentDirs(terms) {
 		o2 := o
 		o2.Query = d
 		r2, err := searchDetailedOnce(dir, o2)
@@ -48,6 +55,59 @@ func withDirectorySessions(dir string, o query.Options, r SearchResult) SearchRe
 		return r
 	}
 	return r
+}
+
+// answersTheRest reports whether any of the leading sessions holds at least
+// two of the query's words other than its file paths. Words, not substrings:
+// "set" inside "setting" is not the question's word.
+func answersTheRest(ss []model.Session, terms []string) bool {
+	var rest [][]string
+	for _, t := range terms {
+		if ks := tokens(t); !strings.Contains(t, "/") && len(ks) > 0 {
+			rest = append(rest, ks)
+		}
+	}
+	if len(rest) < 2 {
+		return false
+	}
+	// The head is where the jump would happen, and what the ranking matched
+	// sits in the first stretch of each; a marathon's whole text would cost
+	// megabytes of tokenizing for nothing.
+	const head, room = 5, 256 << 10
+	if len(ss) > head {
+		ss = ss[:head]
+	}
+	for _, s := range ss {
+		var text strings.Builder
+		for _, m := range s.Messages {
+			if text.Len() >= room {
+				break
+			}
+			text.WriteString(m.Text)
+			text.WriteByte('\n')
+		}
+		words := map[string]bool{}
+		for _, w := range tokens(strings.ToLower(text.String())) {
+			words[w] = true
+		}
+		hits := 0
+		for _, ks := range rest {
+			all := true
+			for _, k := range ks {
+				if !words[k] {
+					all = false
+					break
+				}
+			}
+			if all {
+				hits++
+			}
+		}
+		if hits >= 2 {
+			return true
+		}
+	}
+	return false
 }
 
 // parentDirs lists the directories of the file paths among the terms, whole
