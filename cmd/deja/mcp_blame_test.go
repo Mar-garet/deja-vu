@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -26,43 +25,36 @@ func TestMCPBlameLeavesTheTranscriptBehind(t *testing.T) {
 		Title: "pool exhaustion", Count: 3, Score: 1.5, Tier: "exact",
 		Snippets: []string{"we chose transaction pooling"},
 	}}
-	out := mustMarshalBlame(hits, 0, false)
+	out := renderMCPBlame("pool.go", "pool.go", hits, 0, false)
 	if len(out) > 4096 {
 		t.Fatalf("blame answered %d bytes for one hit; the transcript is still in there", len(out))
 	}
-	var got []map[string]any
-	if err := json.Unmarshal(out, &got); err != nil {
-		t.Fatal(err)
-	}
-	// The payload leads with notes — a refresh warning, and the line saying
-	// what this text is — so the hit is the first element carrying a session.
-	var sess map[string]any
-	for _, item := range got {
-		if s, ok := item["session"].(map[string]any); ok {
-			sess = s
-			break
-		}
-	}
-	if sess == nil {
-		t.Fatalf("no hit in the payload: %s", out)
-	}
-	if _, ok := sess["messages"]; ok {
+	if strings.Contains(out, strings.Repeat("x", 100)) {
 		t.Fatal("the message list must not travel to an agent")
 	}
-	// Everything an agent reads has to survive.
-	for _, want := range []string{"id", "harness", "project", "title", "touched"} {
-		if _, ok := sess[want]; !ok {
-			t.Errorf("session lost %q", want)
+	// Everything an agent reads has to survive: who, where, which session,
+	// what it was about and what it said.
+	for _, want := range []string{"[claude] api · s1 · 3 mentions", "title: pool exhaustion", "- we chose transaction pooling", "untrusted reference data"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the page lost %q:\n%s", want, out)
 		}
 	}
-	var hit map[string]any
-	for _, item := range got {
-		if _, ok := item["session"]; ok {
-			hit = item
-			break
+}
+
+// blame is asked "who decided this", and the JSON it answered in had no field
+// for a decision taken back: attachBlameLifecycles set it and the agent never
+// saw it (#4634).
+func TestMCPBlameSaysTheDecisionWasTakenBack(t *testing.T) {
+	hits := []search.BlameHit{{
+		Session:   model.Session{ID: "s1", Harness: "claude", Project: "api", Title: "pool size"},
+		Count:     2,
+		Snippets:  []string{"set the pool to 50"},
+		Lifecycle: "rejected", LifecycleAt: "2026-09-01", LifecycleNote: "50 starved the replicas",
+	}}
+	out := renderMCPBlame("pool.go", "pool.go", hits, 0, false)
+	for _, want := range []string{"[this was tried and rejected, 2026-09-01]", "50 starved the replicas"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the page lost %q:\n%s", want, out)
 		}
-	}
-	if len(hit["snippets"].([]any)) != 1 {
-		t.Error("snippets are the part an agent actually reads")
 	}
 }

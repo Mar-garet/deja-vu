@@ -54,7 +54,7 @@ func embeddedMarshallers(t reflect.Type, seen map[reflect.Type]bool) []string {
 func TestNoReportedTypeEmbedsAMarshaller(t *testing.T) {
 	roots := []any{
 		doctorReport{}, stats.Report{}, usage.Summary{}, usage.ImpactReport{},
-		blameSessionJSON{}, blameHitJSON{}, model.Session{}, index.SessionMeta{},
+		model.Session{}, index.SessionMeta{},
 	}
 	// One map across the roots: a type's fields do not depend on which root
 	// reached it, so inspecting it once inspects it for all of them.

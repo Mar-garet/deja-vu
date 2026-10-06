@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-
 	"github.com/vshulcz/deja-vu/internal/index"
 	"github.com/vshulcz/deja-vu/internal/search"
 	"path/filepath"
@@ -39,14 +37,7 @@ func TestBlameSaysNoHistoryRatherThanAnEmptyArray(t *testing.T) {
 	if strings.TrimSpace(body) == "[]" {
 		t.Fatal("blame answered a bare [] — an agent cannot tell that from a tool that failed")
 	}
-	var rows []map[string]any
-	if err := json.Unmarshal([]byte(body), &rows); err != nil {
-		t.Fatalf("blame answered something that is not the payload shape: %v (%s)", err, body)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d, want the one note: %s", len(rows), body)
-	}
-	note, _ := rows[0]["note"].(string)
+	note := body
 	if !strings.Contains(note, "untouched.go") {
 		t.Errorf("the note does not name the file: %q", note)
 	}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,17 +44,7 @@ func TestBlameTellsTheAgentWhatItIsReading(t *testing.T) {
 	if hits == 0 {
 		t.Fatalf("the fixture found no history for retry.go: %s", body)
 	}
-	var items []map[string]any
-	if err := json.Unmarshal([]byte(body), &items); err != nil {
-		t.Fatalf("blame no longer answers with a JSON array, so the note has to move: %v", err)
-	}
-	said := false
-	for _, it := range items {
-		if note, _ := it["note"].(string); strings.Contains(note, "untrusted") {
-			said = true
-		}
-	}
-	if !said {
+	if !strings.HasPrefix(body, recallFrameHeader) || !strings.HasSuffix(body, recallFrameFooter) {
 		t.Errorf("blame hands over transcript text and says nothing about what it is:\n%.300s", body)
 	}
 }

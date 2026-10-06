@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,12 +60,7 @@ func TestBlameStaysBoundedWithAll(t *testing.T) {
 		t.Errorf("blame with all=true answered %d bytes (%d hits); the cap is %d", len(text), hits, blameMCPBudget)
 	}
 
-	var arr []map[string]any
-	if err := json.Unmarshal([]byte(text), &arr); err != nil {
-		t.Fatalf("blame answer is not a JSON array: %v", err)
-	}
-	note, _ := arr[len(arr)-1]["note"].(string)
-	if !strings.Contains(note, "more sessions touch this path") {
-		t.Errorf("truncated blame answer does not say what was left out: last element %v", arr[len(arr)-1])
+	if !strings.Contains(text, fmt.Sprintf("%d more sessions touch this path", 300-hits)) {
+		t.Errorf("truncated blame answer does not say what was left out:\n%s", text[max(len(text)-400, 0):])
 	}
 }

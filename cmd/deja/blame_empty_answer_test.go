@@ -28,11 +28,6 @@ func TestBlameSaysWhyItFoundNothing(t *testing.T) {
 	if !strings.Contains(text, "no indexed history") {
 		t.Errorf("an empty store answers with nothing at all:\n%s", text)
 	}
-	// Still JSON, still an array: an agent parses this.
-	var out []map[string]any
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		t.Fatalf("the answer stopped being a JSON array (%v):\n%s", err, text)
-	}
 }
 
 // A store that holds sessions, asked about a file none of them touched, keeps

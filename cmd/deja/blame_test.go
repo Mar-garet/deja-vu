@@ -44,10 +44,10 @@ func TestBlameCLIAndMCP(t *testing.T) {
 		t.Fatalf("blame out=%q err=%v", out, err)
 	}
 	text, err := callMCPTool(index.DefaultDir(), "blame", json.RawMessage(`{"path":"parser.go","harness":"claude","limit":1}`))
-	if err != nil || !strings.Contains(text, `"session"`) {
+	if err != nil || countBlameSessions(text) != 1 {
 		t.Fatalf("mcp blame=%q err=%v", text, err)
 	}
-	if text, err := callMCPTool(index.DefaultDir(), "blame", json.RawMessage(`{"path":"parser.go","all":true}`)); err != nil || !strings.Contains(text, `"session"`) {
+	if text, err := callMCPTool(index.DefaultDir(), "blame", json.RawMessage(`{"path":"parser.go","all":true}`)); err != nil || countBlameSessions(text) == 0 {
 		t.Fatalf("mcp all blame=%q err=%v", text, err)
 	}
 	if err := runBlame(index.DefaultDir(), []string{"parser.go"}); err != nil {
