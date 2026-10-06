@@ -245,6 +245,14 @@ func Blame(ss []model.Session, target BlameTarget, o BlameOptions) []BlameHit {
 			if message.Role == sources.RoleToolOutput && digest.IsAgentArtifact(text) {
 				continue
 			}
+			// Nor is a data dump: a JSON document or a long file listing names
+			// the file as one entry among many, and every entry counted as a
+			// mention. On a real store the top row for a busy file was a
+			// session with 1113 of them, quoted as raw JSON from deja's own
+			// --json output (#4776).
+			if message.Role == sources.RoleToolOutput && isDataDump(text) {
+				continue
+			}
 			count, level := mentionScore(text, base, forms)
 			if count == 0 {
 				continue
@@ -725,4 +733,110 @@ func BlameLifecycleLine(h BlameHit) string {
 		head += ": " + SafeNote(h.LifecycleNote)
 	}
 	return head
+}
+
+// dumpListingPaths is how many distinct file paths make tool output a listing
+// rather than output about the files in it. A failing build or a commit names a
+// handful; `git status` on a busy tree, `find` and an index dump name dozens.
+const dumpListingPaths = 10
+
+// isDataDump reports whether tool output is a document or a listing rather
+// than something said about a file: JSON, whole or cut off where the harness
+// truncated it, rows of JSON records, or at least dumpListingPaths distinct
+// paths on lines that are mostly nothing else. A stack trace names as many files, and alternates them
+// with the code that ran, so it stays history.
+func isDataDump(text string) bool {
+	t := strings.TrimSpace(text)
+	// The document can follow a line or two of its own: deja prints "deja:
+	// updated 2 files" to stderr ahead of its --json, and the harness keeps
+	// both. JSON from there on that is most of the output is the dump.
+	for off := 0; off < len(t); {
+		line := t[off:]
+		// Or after a one-word label on its line: a web search hands back
+		// "Links: [{"title": …".
+		if i := strings.Index(line, ": "); i > 0 && i <= 24 && !strings.ContainsAny(line[:i], " \t\n") {
+			if startsJSON(line[i+2:]) && (len(line)-i-2)*2 >= len(t) {
+				return true
+			}
+		}
+		if startsJSON(line) && len(line)*2 >= len(t) {
+			return true
+		}
+		nl := strings.IndexByte(t[off:], '\n')
+		if nl < 0 {
+			break
+		}
+		off += nl + 1
+	}
+	// Or rows that each carry a JSON record, as a database query prints
+	// them: a key every 40 bytes is data, where prose quoting a small
+	// object has one or two in a paragraph.
+	if len(t) >= 80 && strings.Count(t, `":`)*40 >= len(t) {
+		return true
+	}
+	seen := map[string]bool{}
+	lines, pathLines := 0, 0
+	for _, line := range strings.Split(t, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		lines++
+		found := false
+		for _, tok := range strings.FieldsFunc(line, dumpFieldSep) {
+			if p := pathToken(tok); p != "" {
+				seen[p] = true
+				found = true
+			}
+		}
+		if found {
+			pathLines++
+		}
+	}
+	return len(seen) >= dumpListingPaths && pathLines*10 >= lines*6
+}
+
+// startsJSON reports whether s opens a JSON object or array of values.
+func startsJSON(s string) bool {
+	s = strings.TrimLeft(s, " \t\r")
+	if len(s) < 2 || (s[0] != '{' && s[0] != '[') {
+		return false
+	}
+	rest := strings.TrimLeft(s[1:], " \t\r\n")
+	return rest != "" && strings.ContainsRune(`"{[`, rune(rest[0]))
+}
+
+func dumpFieldSep(r rune) bool {
+	return strings.ContainsRune(" \t\r\"',()[]{}", r)
+}
+
+// pathToken is tok as a file path — something/name.ext, with a trailing
+// :line:col dropped — or "".
+func pathToken(tok string) string {
+	if i := strings.IndexByte(tok, ':'); i > 0 {
+		if !strings.ContainsAny(tok[:i], `/\`) {
+			return "" // a URL scheme or a key, not a path
+		}
+		tok = tok[:i]
+	}
+	slash := strings.LastIndexAny(tok, `/\`)
+	if slash < 0 {
+		return ""
+	}
+	// A file extension is short and lower case; a Go trace's
+	// pkg/path.Func is not one.
+	name := tok[slash+1:]
+	dot := strings.LastIndexByte(name, '.')
+	if dot <= 0 {
+		return ""
+	}
+	ext := name[dot+1:]
+	if ext == "" || len(ext) > 6 || ext[0] < 'a' || ext[0] > 'z' {
+		return ""
+	}
+	for _, r := range ext {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return ""
+		}
+	}
+	return tok
 }
