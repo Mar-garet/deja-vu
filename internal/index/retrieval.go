@@ -225,16 +225,20 @@ func searchDetailedOnce(dir string, o query.Options) (SearchResult, error) {
 		ss, err := scanRecords(dir, m, o, nil)
 		return SearchResult{Sessions: ss, Tier: fallbackTier, Variants: fallbackVariants}, err
 	}
+	// When every session holding the words is filtered out — most often the
+	// agent's own live session, which holds them because the question came
+	// from it — the answer is still the rest of the ladder, not nothing. The
+	// early return here served empty to 23 of 255 real recall calls (#4766).
 	posts = cutPostingsBySession(posts, m, o)
-	if len(posts) == 0 {
-		return SearchResult{}, nil
+	var ss []model.Session
+	if len(posts) > 0 {
+		// With the variants the rung above collected, not without them. A
+		// substring variant needs none — the text holding "opencode" holds
+		// "code" too — but a compound spelled apart is not a substring of
+		// anything the store wrote, so the postings found the session and
+		// this check dropped it again (#2125).
+		ss, err = scanRecordsWithVariants(dir, m, o, postingOffsets(posts), fallbackVariants)
 	}
-	// With the variants the rung above collected, not without them. A
-	// substring variant needs none — the text holding "opencode" holds "code"
-	// too — but a compound spelled apart is not a substring of anything the
-	// store wrote, so the postings found the session and this check dropped it
-	// again (#2125).
-	ss, err := scanRecordsWithVariants(dir, m, o, postingOffsets(posts), fallbackVariants)
 	if err == nil && len(ss) == 0 {
 		if result, ferr := stemSearch(dir, m, o); ferr != nil {
 			return SearchResult{}, fmt.Errorf("stem postings: %w", ferr)
