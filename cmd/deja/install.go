@@ -250,7 +250,7 @@ func runInstall(dir string, args []string, uninstall bool) error {
 			if p, a, err := dropRulesBlock(t); err != nil {
 				note(t, err)
 			} else if p != "" && a != "unchanged" && !banner {
-				fmt.Printf("%s: rules %s %s\n", t, a, p)
+				fmt.Printf("%s: rules %s %s\n", t, a, shortHome(p))
 			}
 		}
 		if guidance {
@@ -285,7 +285,7 @@ func runInstall(dir string, args []string, uninstall bool) error {
 				continue
 			}
 			if cr.Path != "" && !banner {
-				fmt.Printf("%s: command %s %s\n", t, cr.Action, cr.Path)
+				fmt.Printf("%s: command %s %s\n", t, cr.Action, shortHome(cr.Path))
 			}
 			if cr.Path != "" && uninstall {
 				pruneGuidanceDirs(cr.Path)
@@ -314,7 +314,7 @@ func runInstall(dir string, args []string, uninstall bool) error {
 			if r.Path == "" {
 				fmt.Printf("%s: %s\n", t, r.Action)
 			} else {
-				fmt.Printf("%s: %s %s\n", t, r.Action, r.Path)
+				fmt.Printf("%s: %s %s\n", t, r.Action, shortHome(r.Path))
 			}
 			// Under the action rather than in place of it, the way guidance
 			// prints its own note: the action is still what happened (#2218).
