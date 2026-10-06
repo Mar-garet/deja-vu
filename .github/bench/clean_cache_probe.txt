@@ -1,0 +1,65 @@
+# Probe for the go-31948 bench: the steps of clean_cache_lock.txt that remove
+# a cache another live go command (or the cleaning one itself) has mmapped,
+# run on both the base and the patched toolchain. Every step may fail; the
+# logs say which ones do.
+
+[short] skip
+
+env GOCACHE=$WORK/cache
+
+? go test -count=1 -v .
+? go run ./cleaner
+? go clean -i -cache
+
+-- go.mod --
+module example
+
+go 1.24
+-- main.go --
+package main
+
+import "os"
+
+func main() { os.Exit(0) }
+-- clean_test.go --
+package main
+
+import (
+	"os/exec"
+	"testing"
+	"time"
+)
+
+func TestCleanInTest(t *testing.T) {
+	done := make(chan error, 1)
+	go func() {
+		out, err := exec.Command("go", "clean", "-cache").CombinedOutput()
+		if err != nil {
+			t.Logf("go clean -cache: %s", out)
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("go clean -cache waited for its own go test")
+	}
+}
+-- cleaner/main.go --
+package main
+
+import (
+	"os"
+	"os/exec"
+)
+
+func main() {
+	cmd := exec.Command("go", "clean", "-cache")
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		panic(err)
+	}
+}

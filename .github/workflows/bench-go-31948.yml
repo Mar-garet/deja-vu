@@ -1,0 +1,98 @@
+# Throwaway: runs the cmd/go tests of the golang/go#31948 CL (go clean -cache
+# waits for go commands using the cache) on Windows, with linux and macOS as
+# controls. The windows base job runs the same tests without the CL, so a
+# failure can be told apart from one that is already on master.
+name: bench go 31948
+
+on:
+  push:
+    branches: [bench/go-31948]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-latest, tree: patched}
+          - {os: windows-latest, tree: base}
+          - {os: ubuntu-latest, tree: patched}
+          - {os: macos-latest, tree: patched}
+    name: ${{ matrix.os }} ${{ matrix.tree }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: ''
+      BASE: 0b6b8381b6a8190c585cd454c747a501a5bfec7b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: stable
+          cache: false
+
+      - name: fetch go
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/go"
+          cd "$RUNNER_TEMP/go"
+          git config core.autocrlf false
+          git fetch -q --depth=1 https://go.googlesource.com/go "$BASE" ||
+            git fetch -q --shallow-since=2026-09-15 https://go.googlesource.com/go master
+          git checkout -q "$BASE"
+          git log -1 --format='%H %s'
+
+      - name: apply
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/go"
+          if [ "${{ matrix.tree }}" = patched ]; then
+            # checkout gives this repo CRLF on Windows; the patch has to stay LF
+            tr -d '\r' < "$GITHUB_WORKSPACE/.github/bench/go-31948.patch" > "$RUNNER_TEMP/cl.patch"
+            git apply "$RUNNER_TEMP/cl.patch"
+          fi
+          tr -d '\r' < "$GITHUB_WORKSPACE/.github/bench/clean_cache_probe.txt" > src/cmd/go/testdata/script/clean_cache_probe.txt
+          git status --short
+
+      - name: build
+        id: build
+        run: |
+          set -euo pipefail
+          boot="$(go env GOROOT)"
+          cd "$RUNNER_TEMP/go/src"
+          if [ "$RUNNER_OS" = Windows ]; then
+            GOROOT_BOOTSTRAP="$boot" cmd //c make.bat --no-banner
+          else
+            GOROOT_BOOTSTRAP="$boot" ./make.bash --no-banner
+          fi
+          echo "$RUNNER_TEMP/go/bin" >> "$GITHUB_PATH"
+
+      - name: unit tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          go version
+          go test -short -count=1 cmd/go/internal/cache cmd/go/internal/clean cmd/go/internal/lockedfile/...
+
+      - name: probe (mmapped cache entries)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: go test -count=1 -v cmd/go -run 'TestScript/clean_cache_probe$'
+
+      - name: cache scripts
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: go test -count=1 cmd/go -run 'TestScript/(clean_cache_lock|clean_testcache|build_cache|test_cache)'
+
+      - name: cache scripts verbose on failure
+        if: ${{ failure() && steps.build.outcome == 'success' }}
+        run: go test -count=1 -v cmd/go -run 'TestScript/clean_cache_lock$' || true
+
+      - name: short cmd/go
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: go test -short -count=1 -timeout 150m cmd/go

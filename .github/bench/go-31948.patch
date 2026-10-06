@@ -1,0 +1,510 @@
+From 753e731dbc527dc99927b55d6aa21286987fd408 Mon Sep 17 00:00:00 2001
+From: vshulcz <vshulcz@gmail.com>
+Date: Tue, 6 Oct 2026 10:10:50 +0300
+Subject: [PATCH] cmd/go: make go clean -cache wait for go commands using the
+ cache
+
+go clean -cache removes entries that a running build has already looked
+up, and the compiler, linker or vet then fails with "no such file or
+directory". Go commands that use the build cache now hold a shared lock
+on GOCACHE/clean.lock, and go clean -cache takes an exclusive lock
+before removing anything. go run, go tool and go doc -http release the
+lock before starting the program, except on Windows, where the program
+may be running from the cache.
+
+TODO(numbers): quiet-machine re-measure. Four loops of go build ./...
+and go vet ./... on a 56-package module with go clean -cache started
+every 2s: N of M runs failed on a missing cache file before (C cleans),
+N of M with this change (C cleans, clean wait p50/max). Lock cost per
+go command and warm go build/vet/list times (n=20).
+
+A clean waits until no go command is using the cache and says so after
+a second. TODO(numbers): wait behind K back-to-back build loops. The
+second lock suggested in the issue would shorten that wait, but a go
+command started without GOCACHE_INTERNAL_LOCKED by a test or a
+-toolexec wrapper would then deadlock with its parent and the clean.
+
+Programs run by a go command that holds the lock get the locked
+directory in GOCACHE_INTERNAL_LOCKED. A go command they start does not
+lock that cache again, so go clean -cache run from a test does not wait
+for its own go test. Such a clean can still break the parent, as before.
+
+Fixes #31948
+
+Change-Id: Ie8d90299491beb0625824fb465e058ca48b334d0
+---
+ src/cmd/go/alldocs.go                         |   1 +
+ src/cmd/go/internal/cache/default.go          | 134 ++++++++++++++++++
+ src/cmd/go/internal/cache/default_test.go     |  85 +++++++++++
+ src/cmd/go/internal/clean/clean.go            |   8 ++
+ src/cmd/go/internal/doc/pkgsite.go            |   2 +
+ src/cmd/go/internal/run/run.go                |   2 +
+ src/cmd/go/internal/tool/tool.go              |   3 +
+ .../go/testdata/script/clean_cache_lock.txt   |  90 ++++++++++++
+ 8 files changed, 325 insertions(+)
+ create mode 100644 src/cmd/go/internal/cache/default_test.go
+ create mode 100644 src/cmd/go/testdata/script/clean_cache_lock.txt
+
+diff --git a/src/cmd/go/alldocs.go b/src/cmd/go/alldocs.go
+index 5343762633..559ab2a342 100644
+--- a/src/cmd/go/alldocs.go
++++ b/src/cmd/go/alldocs.go
+@@ -328,6 +328,7 @@
+ // The -x flag causes clean to print remove commands as it executes them.
+ //
+ // The -cache flag causes clean to remove the entire go build cache.
++// It first waits for other go commands using the cache to finish.
+ //
+ // The -testcache flag causes clean to expire all test results in the
+ // go build cache.
+diff --git a/src/cmd/go/internal/cache/default.go b/src/cmd/go/internal/cache/default.go
+index cc4e0517b4..75a48483d5 100644
+--- a/src/cmd/go/internal/cache/default.go
++++ b/src/cmd/go/internal/cache/default.go
+@@ -8,10 +8,15 @@ import (
+ 	"fmt"
+ 	"os"
+ 	"path/filepath"
++	"runtime"
++	"slices"
++	"strings"
+ 	"sync"
++	"time"
+ 
+ 	"cmd/go/internal/base"
+ 	"cmd/go/internal/cfg"
++	"cmd/go/internal/lockedfile"
+ )
+ 
+ // Default returns the default cache to use.
+@@ -48,6 +53,11 @@ func initDefaultCache() Cache {
+ 		// Best effort.
+ 		os.WriteFile(filepath.Join(dir, "README"), []byte(cacheREADME), 0666)
+ 	}
++	if cfg.GOCACHEPROG == "" {
++		// Lock before Open, which creates the subdirectories
++		// that a concurrent "go clean -cache" may be removing.
++		lockShared(dir)
++	}
+ 
+ 	diskCache, err := Open(dir)
+ 	if err != nil {
+@@ -103,3 +113,127 @@ func DefaultDir() (string, bool, error) {
+ 
+ 	return defaultDir, defaultDirChanged, defaultDirErr
+ }
++
++// "go clean -cache" removes entries that a concurrent go command may still
++// need (go.dev/issue/31948). To prevent that, a go command using the cache
++// holds a shared lock on GOCACHE/clean.lock until it exits, and
++// "go clean -cache" waits for an exclusive lock on it before removing
++// anything. A waiting clean does not block other go commands, so it waits
++// until there is a moment when no go command is using the cache.
++//
++// User programs run by a go command that holds the lock (tests, go generate
++// commands, go tool and go run programs on Windows) get the locked directory
++// in $GOCACHE_INTERNAL_LOCKED. A go command started by them does not lock
++// that cache again: a build is covered by its ancestor's lock, and
++// "go clean -cache" would otherwise wait for its own ancestor forever.
++// Such a clean does not wait at all, as before.
++const lockedEnv = "GOCACHE_INTERNAL_LOCKED"
++
++var sharedLock *lockedfile.File
++
++// lockShared takes the shared lock on the cache in dir, if possible.
++// The lock is held until the go command exits or calls Unlock.
++func lockShared(dir string) {
++	if !canLock(dir) {
++		return
++	}
++	// The lock file gets the umask, usually 0644. In a cache shared by
++	// several users, a clean run by a user other than its creator
++	// cannot open it for writing and does not wait (see LockExclusive).
++	f, err := lockedfile.OpenFile(lockFile(dir), os.O_RDONLY|os.O_CREATE, 0o666)
++	if err != nil {
++		// Locking is best-effort: the cache may be read-only,
++		// or the platform may not support file locks.
++		return
++	}
++	sharedLock = f
++	base.AtExit(func() {
++		// The operating system may not release the lock promptly at exit.
++		if sharedLock != nil {
++			sharedLock.Close()
++			sharedLock = nil
++		}
++	})
++	locked := dir
++	if old := os.Getenv(lockedEnv); old != "" {
++		locked = old + string(filepath.ListSeparator) + dir
++	}
++	// Only user programs see this, not a re-executed toolchain,
++	// which does not inherit the lock.
++	setOrigEnv(locked)
++}
++
++// Unlock releases the shared lock on the default cache for a go command
++// that is done with the cache but keeps running, such as "go run" while the
++// program runs. On Windows, where a running executable cannot be removed,
++// it keeps the lock: the program may have been run from the cache.
++func Unlock() {
++	if sharedLock == nil || runtime.GOOS == "windows" {
++		return
++	}
++	sharedLock.Close()
++	sharedLock = nil
++	setOrigEnv(os.Getenv(lockedEnv))
++}
++
++func setOrigEnv(locked string) {
++	cfg.OrigEnv = slices.DeleteFunc(cfg.OrigEnv, func(kv string) bool {
++		return strings.HasPrefix(kv, lockedEnv+"=")
++	})
++	if locked != "" {
++		cfg.OrigEnv = append(cfg.OrigEnv, lockedEnv+"="+locked)
++	}
++}
++
++// LockExclusive waits until no other go command uses the cache in dir and
++// keeps new ones from starting until unlock is called. If dir is locked by
++// a go command that started this one, or cannot be locked, LockExclusive
++// does nothing.
++func LockExclusive(dir string) (unlock func()) {
++	if sharedLock != nil {
++		// This go command used the cache itself,
++		// for example to load packages for "go clean -i -cache".
++		sharedLock.Close()
++		sharedLock = nil
++	} else if !canLock(dir) {
++		// A clean run during "go test" can still remove entries that
++		// the parent uses for other packages, as before.
++		return func() {}
++	}
++	t := time.AfterFunc(time.Second, func() {
++		fmt.Fprintf(os.Stderr, "go: waiting for other go commands to finish using %s\n", dir)
++	})
++	f, err := lockedfile.OpenFile(lockFile(dir), os.O_RDWR|os.O_CREATE, 0o666)
++	t.Stop()
++	if err != nil {
++		// Such as a lock file created by another user: an exclusive
++		// lock needs it open for writing. Clean without waiting, as before.
++		return func() {}
++	}
++	return func() { f.Close() }
++}
++
++func canLock(dir string) bool {
++	// On Plan 9, lockedfile only provides exclusive locks,
++	// which would serialize all go commands.
++	if runtime.GOOS == "plan9" {
++		return false
++	}
++	// A program may name its parent's cache by another path, such as a symlink.
++	fi, err := os.Stat(dir)
++	for _, locked := range filepath.SplitList(os.Getenv(lockedEnv)) {
++		if locked == dir {
++			return false
++		}
++		if err == nil {
++			if lfi, err := os.Stat(locked); err == nil && os.SameFile(fi, lfi) {
++				return false
++			}
++		}
++	}
++	return true
++}
++
++func lockFile(dir string) string {
++	return filepath.Join(dir, "clean.lock")
++}
+diff --git a/src/cmd/go/internal/cache/default_test.go b/src/cmd/go/internal/cache/default_test.go
+new file mode 100644
+index 0000000000..496852b25c
+--- /dev/null
++++ b/src/cmd/go/internal/cache/default_test.go
+@@ -0,0 +1,85 @@
++// Copyright 2026 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++//go:build !js && !plan9 && !wasip1
++
++package cache
++
++import (
++	"internal/testenv"
++	"os"
++	"path/filepath"
++	"slices"
++	"testing"
++	"time"
++
++	"cmd/go/internal/cfg"
++	"cmd/go/internal/lockedfile"
++)
++
++func TestLockExclusiveWaitsForShared(t *testing.T) {
++	dir := t.TempDir()
++	shared, err := lockedfile.OpenFile(lockFile(dir), os.O_RDONLY|os.O_CREATE, 0o666)
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	locked := make(chan func())
++	go func() { locked <- LockExclusive(dir) }()
++	select {
++	case unlock := <-locked:
++		unlock()
++		t.Fatal("LockExclusive returned while the cache was locked for use")
++	case <-time.After(100 * time.Millisecond):
++	}
++
++	shared.Close()
++	unlock := <-locked
++	unlock()
++}
++
++func TestLockSharedThenExclusive(t *testing.T) {
++	t.Setenv(lockedEnv, "")
++	defer func(env []string) { cfg.OrigEnv = env }(cfg.OrigEnv)
++	cfg.OrigEnv = nil
++	dir := t.TempDir()
++
++	lockShared(dir)
++	if sharedLock == nil {
++		t.Fatal("lockShared did not lock")
++	}
++	if want := lockedEnv + "=" + dir; !slices.Contains(cfg.OrigEnv, want) {
++		t.Errorf("cfg.OrigEnv = %q, want %q", cfg.OrigEnv, want)
++	}
++
++	// The same process can take the exclusive lock.
++	LockExclusive(dir)()
++	if sharedLock != nil {
++		t.Error("LockExclusive did not release the shared lock")
++	}
++
++	// A process whose parent locked dir does not lock it.
++	t.Setenv(lockedEnv, dir)
++	lockShared(dir)
++	if sharedLock != nil {
++		sharedLock.Close()
++		sharedLock = nil
++		t.Error("lockShared locked a directory locked by the parent")
++	}
++
++	// Also when the parent named it through a symlink.
++	if testenv.HasSymlink() {
++		link := filepath.Join(t.TempDir(), "link")
++		if err := os.Symlink(dir, link); err != nil {
++			t.Fatal(err)
++		}
++		t.Setenv(lockedEnv, link)
++		lockShared(dir)
++		if sharedLock != nil {
++			sharedLock.Close()
++			sharedLock = nil
++			t.Error("lockShared locked a directory locked by the parent through a symlink")
++		}
++	}
++}
+diff --git a/src/cmd/go/internal/clean/clean.go b/src/cmd/go/internal/clean/clean.go
+index b93aaf4682..61e95bce5f 100644
+--- a/src/cmd/go/internal/clean/clean.go
++++ b/src/cmd/go/internal/clean/clean.go
+@@ -71,6 +71,7 @@ dependencies of the packages named by the import paths.
+ The -x flag causes clean to print remove commands as it executes them.
+ 
+ The -cache flag causes clean to remove the entire go build cache.
++It first waits for other go commands using the cache to finish.
+ 
+ The -testcache flag causes clean to expire all test results in the
+ go build cache.
+@@ -162,6 +163,12 @@ func runClean(ctx context.Context, cmd *base.Command, args []string) {
+ 			base.Fatal(err)
+ 		}
+ 		if dir != "off" {
++			unlock := func() {}
++			if !cfg.BuildN {
++				// Wait for go commands using the cache to finish.
++				unlock = cache.LockExclusive(dir)
++			}
++
+ 			// Remove the cache subdirectories but not the top cache directory.
+ 			// The top cache directory may have been created with special permissions
+ 			// and not something that we want to remove. Also, we'd like to preserve
+@@ -180,6 +187,7 @@ func runClean(ctx context.Context, cmd *base.Command, args []string) {
+ 				printedErrors = true
+ 				base.Error(err)
+ 			}
++			unlock()
+ 		}
+ 	}
+ 
+diff --git a/src/cmd/go/internal/doc/pkgsite.go b/src/cmd/go/internal/doc/pkgsite.go
+index 84ece1844d..1d7b510dea 100644
+--- a/src/cmd/go/internal/doc/pkgsite.go
++++ b/src/cmd/go/internal/doc/pkgsite.go
+@@ -18,6 +18,7 @@ import (
+ 	"strings"
+ 
+ 	"cmd/go/internal/base"
++	"cmd/go/internal/cache"
+ 	"cmd/go/internal/cfg"
+ 	"cmd/go/internal/load"
+ 	"cmd/go/internal/modload"
+@@ -149,6 +150,7 @@ func doPkgsite(ctx context.Context, urlPath, fragment string) error {
+ 		}
+ 		return nil
+ 	}
++	cache.Unlock() // let go clean -cache proceed while the server runs
+ 	cmd := exec.Command(pkgsite, "-gorepo", cfg.GOROOT, "-http", addr, "-open", path)
+ 	cmd.Env = env
+ 	cmd.Stdout = os.Stderr
+diff --git a/src/cmd/go/internal/run/run.go b/src/cmd/go/internal/run/run.go
+index 79232d6449..6ebf4d3b11 100644
+--- a/src/cmd/go/internal/run/run.go
++++ b/src/cmd/go/internal/run/run.go
+@@ -12,6 +12,7 @@ import (
+ 	"strings"
+ 
+ 	"cmd/go/internal/base"
++	"cmd/go/internal/cache"
+ 	"cmd/go/internal/cfg"
+ 	"cmd/go/internal/load"
+ 	"cmd/go/internal/modload"
+@@ -210,6 +211,7 @@ func buildRunProgram(b *work.Builder, ctx context.Context, a *work.Action) error
+ 		}
+ 	}
+ 
++	cache.Unlock() // let go clean -cache proceed while the program runs
+ 	base.RunStdin(cmdline)
+ 	return nil
+ }
+diff --git a/src/cmd/go/internal/tool/tool.go b/src/cmd/go/internal/tool/tool.go
+index 018c808e54..8ca622a964 100644
+--- a/src/cmd/go/internal/tool/tool.go
++++ b/src/cmd/go/internal/tool/tool.go
+@@ -28,6 +28,7 @@ import (
+ 	"time"
+ 
+ 	"cmd/go/internal/base"
++	"cmd/go/internal/cache"
+ 	"cmd/go/internal/cfg"
+ 	"cmd/go/internal/load"
+ 	"cmd/go/internal/modindex"
+@@ -379,6 +380,7 @@ func buildAndRunBuiltinTool(ld *modload.Loader, ctx context.Context, toolName, t
+ 
+ 	runFunc := func(b *work.Builder, ctx context.Context, a *work.Action) error {
+ 		cmdline := str.StringList(builtTool(a), a.Args)
++		cache.Unlock() // let go clean -cache proceed while the tool runs
+ 		return runBuiltTool(toolName, nil, cmdline)
+ 	}
+ 
+@@ -391,6 +393,7 @@ func buildAndRunModtool(ld *modload.Loader, ctx context.Context, toolName, tool
+ 		// to provide a runner to run the binary, for example a simulator for binaries
+ 		// that are cross-compiled to a different platform.
+ 		cmdline := str.StringList(work.FindExecCmd(), builtTool(a), a.Args)
++		cache.Unlock() // before reading cfg.OrigEnv, which it updates
+ 		// Use same environment go run uses to start the executable:
+ 		// the original environment with cfg.GOROOTbin added to the path.
+ 		env := slices.Clip(cfg.OrigEnv)
+diff --git a/src/cmd/go/testdata/script/clean_cache_lock.txt b/src/cmd/go/testdata/script/clean_cache_lock.txt
+new file mode 100644
+index 0000000000..36aaa58d4d
+--- /dev/null
++++ b/src/cmd/go/testdata/script/clean_cache_lock.txt
+@@ -0,0 +1,90 @@
++# 'go clean -cache' waits for go commands using the cache (go.dev/issue/31948),
++# but not for the go command that started it.
++
++[short] skip 'runs go test and go run'
++
++env GOCACHE=$WORK/cache
++
++# While 'go test' runs, a clean that does not know it was started by
++# 'go test' waits; one that does know cleans without waiting.
++go test -count=1 .
++stdout '^ok'
++
++# A program run by 'go run' can clean the cache.
++go run ./cleaner
++! exists $GOCACHE/00
++
++# 'go clean -i -cache' loads packages through the cache,
++# then cleans it without waiting for itself.
++go clean -i -cache
++
++-- go.mod --
++module example
++
++go 1.24
++-- main.go --
++package main
++
++import "os"
++
++func main() { os.Exit(0) }
++-- clean_test.go --
++package main
++
++import (
++	"bufio"
++	"os"
++	"os/exec"
++	"slices"
++	"strings"
++	"testing"
++	"time"
++)
++
++func TestCleanWaits(t *testing.T) {
++	cmd := exec.Command("go", "clean", "-cache")
++	cmd.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool {
++		return strings.HasPrefix(kv, "GOCACHE_INTERNAL_LOCKED=")
++	})
++	stderr, err := cmd.StderrPipe()
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := cmd.Start(); err != nil {
++		t.Fatal(err)
++	}
++	defer cmd.Wait()
++	defer cmd.Process.Kill()
++	s := bufio.NewScanner(stderr)
++	if !s.Scan() || !strings.Contains(s.Text(), "waiting for other go commands") {
++		t.Fatalf("go clean -cache did not wait for go test: %q", s.Text())
++	}
++}
++
++func TestCleanInTest(t *testing.T) {
++	done := make(chan error, 1)
++	go func() { done <- exec.Command("go", "clean", "-cache").Run() }()
++	select {
++	case err := <-done:
++		if err != nil {
++			t.Fatal(err)
++		}
++	case <-time.After(time.Minute):
++		t.Fatal("go clean -cache waited for its own go test")
++	}
++}
++-- cleaner/main.go --
++package main
++
++import (
++	"os"
++	"os/exec"
++)
++
++func main() {
++	cmd := exec.Command("go", "clean", "-cache")
++	cmd.Stderr = os.Stderr
++	if err := cmd.Run(); err != nil {
++		panic(err)
++	}
++}
+-- 
+2.50.1
+
