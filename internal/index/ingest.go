@@ -1536,7 +1536,7 @@ func publishNewestFirst(dir string, ss []model.Session, progress io.Writer) {
 	}
 	newest := append([]model.Session(nil), ss...)
 	sort.Slice(newest, func(i, j int) bool { return newest[i].Updated.After(newest[j].Updated) })
-	newest = newest[:partialPublishSessions]
+	newest = newest[:newestSlice(newest)]
 	tmp := dir + ".part"
 	_ = os.RemoveAll(tmp)
 	if err := os.MkdirAll(filepath.Join(tmp, "buckets"), 0o700); err != nil {
@@ -1564,10 +1564,32 @@ func publishNewestFirst(dir string, ss []model.Session, progress io.Writer) {
 // pass, and partialPublishSessions how much of it lands first. A few hundred
 // sessions is what a person has touched recently enough to ask about, and it
 // writes in about a second where the whole corpus takes fourteen.
+//
+// partialPublishMessages bounds the slice by what it holds as well. The newest
+// sessions are the long ones still being worked in, and 200 of them can hold
+// more text than the rest of the store: on 3,871 sessions and 370k messages
+// the slice took 28 s and the build 63 s, against 43 s with no slice at all
+// (#4768).
 const (
 	partialPublishFrom     = 400
 	partialPublishSessions = 200
+	partialPublishMessages = 20000
 )
+
+// newestSlice is how many of the newest-first sessions go into the early
+// index: up to partialPublishSessions, stopping once partialPublishMessages is
+// reached. The newest session always goes in, whatever it holds.
+func newestSlice(newest []model.Session) int {
+	n, msgs := 0, 0
+	for n < len(newest) && n < partialPublishSessions {
+		if n > 0 && msgs+len(newest[n].Messages) > partialPublishMessages {
+			break
+		}
+		msgs += len(newest[n].Messages)
+		n++
+	}
+	return n
+}
 
 func writeSessions(tmp, dir string, ss []model.Session, files map[string]FileState, scope string) error {
 	return writeSessionsWithSync(tmp, dir, ss, files, scope, importedState{compactions: compactionsForRebuild(dir, readTombstones())})

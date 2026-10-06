@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A first build on a store of long sessions answers sooner: the early slice of newest sessions stops at 20,000 messages as well as 200 sessions. On 3,871 sessions and 370k messages, recall comes online at 19 s instead of 44 s and the build ends at 45 s instead of 64 s (#4768).
 - Agents call deja before they change code, config, a dependency or a schedule, not only when asked about past work. The line is in the MCP server instructions, every skill and guidance file, and the npm plugins' `deja_recall`. On Claude Code the instructions also say how to load the deferred tool. On 10 synthetic change tasks with a recorded decision, Opus on Claude Code went from 0/10 to 10/10 (#4760).
 
 ### Fixed
