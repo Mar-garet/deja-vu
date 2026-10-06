@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Recall by file path finds what was settled for the file's directory: `cmd/reconcile/match.go` used to miss a session that set the rule for `cmd/reconcile`, or rank it under one sharing a single word. Those sessions now come first, and recall says they are about the directory rather than "No session is about this" (#4762).
 - The session-start note about a limit hit in another agent fires on Claude Code's real wording ("You've hit your session limit", "You've hit your limit", "API Error: 529 Overloaded"), and reads the newest session of this project from another harness; a parallel session anywhere on the machine used to hide it (#4758).
 - The per-prompt hook searches on the question even when an instruction comes before it on the same line ("without reading any files: what jitter constant…"); the instruction used to take all six search terms and the hook stayed silent (#4751).
 - Kilo CLI: a store where a few sessions went through Kilo's `/api/session` route indexes every session again; deja read only those few and dropped the rest, and a session continued from `kilo run` keeps both halves (#4694).

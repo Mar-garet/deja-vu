@@ -1515,7 +1515,13 @@ func recallTextResultFrom(dir, q, harness string, limit, offset, budget int) (st
 	if result.Tier == search.TierError {
 		hits = search.ErrorHits(ss)
 	} else if result.Tier == search.TierRelevance {
-		hits = markStrictHits(search.RelevanceHitsWeighted(ss, index.RelevanceMatchTerms(q), result.TermIDF), result)
+		terms := index.RelevanceMatchTerms(q)
+		if result.Directory != "" {
+			// The directory is what these sessions matched on; without it the
+			// snippet chooser looks for the file's words and shows nothing.
+			terms = append(terms, result.Directory)
+		}
+		hits = markStrictHits(search.RelevanceHitsWeighted(ss, terms, result.TermIDF), result)
 	} else if hits, err = search.Run(ss, o); err != nil {
 		return "", 0, 0, nil, nil, err
 	}
@@ -1600,6 +1606,13 @@ func recallTextResultFrom(dir, q, harness string, limit, offset, budget int) (st
 		fmt.Fprintf(&b, "No exact match; using close spellings: %s\n", strings.Join(fuzzySummary(result.Variants), ", "))
 	} else if result.Tier == search.TierError {
 		fmt.Fprintln(&b, "No exact match; these sessions hit the same error (matched by signature).")
+	} else if result.Directory != "" && strictShown == 0 {
+		// The file was asked about, nothing names it, and these sessions are
+		// about the directory it sits in. "No session is about this" over a
+		// rule set for that directory read as "nothing applies", and the
+		// agent changed the file without the check the rule asked for (#4762).
+		fmt.Fprintf(&b, "Nothing in history names that file; sessions about its directory %s come first. A rule set for the directory may apply to this change, so check whether it still holds before acting on it.\n", recallListingLine(result.Directory))
+		namesTheAsked = true
 	} else if strictShown > 0 {
 		// Before every heuristic below it, because this one is a fact about
 		// the answer rather than a reading of its wording: these sessions
