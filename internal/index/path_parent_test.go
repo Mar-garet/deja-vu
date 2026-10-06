@@ -43,8 +43,6 @@ func TestFilePathRecallFindsTheRuleForItsDirectory(t *testing.T) {
 		"/home/dev/ledger/cmd/reconcile/match.go",
 		`cmd\reconcile\match.go`, // already split into words, ranks on them
 		"cmd/reconcile/match.go amount tolerance 0.005 0.01",
-		// pgx matches two of these words, the rule only the directory.
-		"cmd/reconcile/match.go amount numeric",
 	} {
 		r, err := SearchWithRecoveryDetailed(dir, query.Options{Query: q, All: true}, nil)
 		if err != nil {
@@ -84,5 +82,49 @@ func TestParentDirs(t *testing.T) {
 		if got := parentDirs(RelevanceTerms(q)); !reflect.DeepEqual(got, want) {
 			t.Errorf("parentDirs(%q) = %q, want %q", q, got, want)
 		}
+	}
+}
+
+// A long question that names a file is about more than the file. When a session
+// already answers several of its other words, a session that merely mentions
+// the file's directory must not be put ahead of it: on a real store a marathon
+// that listed docs/registry once went to the top of a thirteen-word query whose
+// answer had been second.
+func TestDirectorySessionsDoNotJumpAnAnswerToTheRestOfTheQuery(t *testing.T) {
+	tmp := t.TempDir()
+	claudeRoot := filepath.Join(tmp, "claude")
+	setHome(t, filepath.Join(tmp, "home"))
+	t.Setenv("DEJA_CLAUDE_ROOT", claudeRoot)
+	dir := filepath.Join(tmp, "index.db")
+	t.Setenv("DEJA_INDEX_DIR", dir)
+	proj := filepath.Join(claudeRoot, "-w-site")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(sid, text string) {
+		line := `{"type":"user","sessionId":"` + sid + `","timestamp":"2026-01-02T03:04:05Z","message":{"role":"user","content":"` + text + `"}}` + "\n"
+		if err := os.WriteFile(filepath.Join(proj, sid+".jsonl"), []byte(line), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("review", "Review of the registry footer: the mobile table overflows and the grpfold toggle hides the CTA.")
+	write("listing", "Listed the tree: docs/registry, docs/guide, cmd/deja, internal/index.")
+	write("other", "Bumped the Go toolchain in CI.")
+	if err := Ensure(dir, "", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	r, err := SearchWithRecoveryDetailed(dir, query.Options{Query: "docs/registry/deepseek.html footer mobile table grpfold CTA", All: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Sessions) == 0 || r.Sessions[0].ID != "review" {
+		var ids []string
+		for _, s := range r.Sessions {
+			ids = append(ids, s.ID)
+		}
+		t.Fatalf("got %v (directory %q), want the review that answers the rest of the query first", ids, r.Directory)
+	}
+	if r.Directory != "" {
+		t.Errorf("answer labelled as about directory %q although the lead session is not", r.Directory)
 	}
 }
