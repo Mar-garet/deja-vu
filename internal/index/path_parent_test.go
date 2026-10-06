@@ -41,6 +41,7 @@ func TestFilePathRecallFindsTheRuleForItsDirectory(t *testing.T) {
 		"cmd/reconcile/match.go",
 		"cmd/reconcile/match.go tolerance",
 		"/home/dev/ledger/cmd/reconcile/match.go",
+		`cmd\reconcile\match.go`, // already split into words, ranks on them
 		"cmd/reconcile/match.go amount tolerance 0.005 0.01",
 		// pgx matches two of these words, the rule only the directory.
 		"cmd/reconcile/match.go amount numeric",

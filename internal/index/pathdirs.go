@@ -17,7 +17,9 @@ import (
 // Only a directory named exactly counts; the answer is labelled relevance, so
 // a caller still reads it as leads rather than as a record of the file.
 func withDirectorySessions(dir string, o query.Options, r SearchResult) SearchResult {
-	if strings.Contains(o.Query, "\"") {
+	// A strict head holds every word, the path included: that answer names the
+	// file and needs nothing put in front of it.
+	if strings.Contains(o.Query, "\"") || r.Strict > 0 {
 		return r
 	}
 	for _, d := range parentDirs(RelevanceTerms(o.Query)) {
@@ -39,6 +41,7 @@ func withDirectorySessions(dir string, o query.Options, r SearchResult) SearchRe
 			}
 		}
 		r.Total += len(merged) - len(r.Sessions)
+		r.Capped = r.Capped || r2.Capped
 		r.Sessions = merged
 		r.Tier = query.TierRelevance
 		r.Directory = d
