@@ -10,6 +10,10 @@ already exists that you have no record of ("I already have X", "we use Y for
 this"), and before telling them something on this machine does not exist. It searches this machine's own history across
 every AI coding tool used on it, further back than deja itself was installed.
 
+Before you change code, config, a dependency or a schedule, call deja once
+with mode recall and the task's key nouns (file, package, table, setting). If a
+result bears on the change, say so in one line before you act.
+
 One tool, `deja`, with a `mode`:
 
 - `recall` — search with the most specific token available: an exact error

@@ -42,7 +42,7 @@ func TestEverySurfaceSaysWhenTheIndexIsBeingRebuilt(t *testing.T) {
 	if got := statusline(); strings.Contains(got, "rebuilding") {
 		t.Errorf("a healthy index was called a rebuild: %q", got)
 	}
-	if got := mcpInstructions(dir); strings.Contains(got, "being rebuilt") {
+	if got := mcpInstructions(dir, ""); strings.Contains(got, "being rebuilt") {
 		t.Errorf("a healthy index was called a rebuild: %q", got)
 	}
 
@@ -56,7 +56,7 @@ func TestEverySurfaceSaysWhenTheIndexIsBeingRebuilt(t *testing.T) {
 	if got := statusline(); !strings.Contains(got, "rebuilding the index") {
 		t.Errorf("statusline claims an ordinary day during a rebuild: %q", got)
 	}
-	if got := mcpInstructions(dir); !strings.Contains(got, "being rebuilt right now") {
+	if got := mcpInstructions(dir, ""); !strings.Contains(got, "being rebuilt right now") {
 		t.Errorf("MCP instructions say nothing about the rebuild: %q", got)
 	}
 
@@ -74,7 +74,7 @@ func TestEverySurfaceSaysWhenTheIndexIsBeingRebuilt(t *testing.T) {
 	if got := statusline(); strings.Contains(got, "rebuilding") {
 		t.Errorf("a machine with no index was told about a rebuild: %q", got)
 	}
-	if got := mcpInstructions(dir); strings.Contains(got, "being rebuilt") {
+	if got := mcpInstructions(dir, ""); strings.Contains(got, "being rebuilt") {
 		t.Errorf("a machine with no index was told about a rebuild: %q", got)
 	}
 }

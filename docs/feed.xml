@@ -6,10 +6,24 @@
   <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/"></link>
   <link rel="self" type="application/atom+xml" href="https://vshulcz.github.io/deja-vu/feed.xml"></link>
   <link rel="hub" href="https://pubsubhubbub.appspot.com/"></link>
-  <updated>2026-10-05T00:00:00Z</updated>
+  <updated>2026-10-06T00:00:00Z</updated>
   <author>
     <name>vshulcz</name>
   </author>
+  <entry>
+    <title>Add memory to Kilo Code: every agent&#39;s sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-kilocode.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-kilocode.html"></link>
+    <updated>2026-10-06T00:00:00Z</updated>
+    <summary>Kilo Code keeps its tasks in the editor&#39;s global storage and its CLI history in a SQLite store. deja reads both, and adds the sessions from every other agent.</summary>
+  </entry>
+  <entry>
+    <title>Add memory to Roo Code: every agent&#39;s sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-roo.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-roo.html"></link>
+    <updated>2026-10-06T00:00:00Z</updated>
+    <summary>Roo Code has no lifecycle hooks yet, so deja arrives as an MCP server, a skill that says when to call it, a /deja command and an approval entry.</summary>
+  </entry>
   <entry>
     <title>deja-vu — the one memory your coding agents share</title>
     <id>https://vshulcz.github.io/deja-vu/</id>
@@ -249,13 +263,6 @@
     <summary>Hermes searches its own sessions and keeps MEMORY.md. deja adds the other thirty-seven agents: a plugin on pre_llm_call, the MCP tools, and a skill.</summary>
   </entry>
   <entry>
-    <title>Add memory to Kilo Code: every agent&#39;s sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-kilocode.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-kilocode.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Kilo Code keeps its tasks in the editor&#39;s global storage and its CLI history in a SQLite store. deja reads both, and adds the sessions from every other agent.</summary>
-  </entry>
-  <entry>
     <title>Add memory to Kimchi Coding: past sessions — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/guide/memory-for-kimchi.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-kimchi.html"></link>
@@ -282,12 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-omp.html"></link>
     <updated>2026-10-05T00:00:00Z</updated>
     <summary>Oh My Pi (omp) keeps a session log per agent directory and reads none of it back. deja wires its extension, MCP server and skill, and indexes every agent.</summary>
-  </entry>
-  <entry>
-    <title>Add memory to OpenClaw: every agent&#39;s sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-openclaw.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-openclaw.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>OpenClaw keeps a session log per agent and can resume one, but reads no earlier session. deja indexes them with every other agent on the machine.</summary>
   </entry>
 </feed>

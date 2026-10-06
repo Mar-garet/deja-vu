@@ -145,7 +145,7 @@ export default {
       api.registerTool({
         name: "deja_recall",
         description:
-          "Search this machine's own past AI coding sessions — every agent used on it, including months before deja was installed. Use before debugging an error or re-implementing something that may already exist, and whenever the user implies the work happened before.",
+          "Search this machine's own past AI coding sessions — every agent used on it, including months before deja was installed. Use before debugging an error or re-implementing something that may already exist, before changing code, config, a dependency or a schedule, and whenever the user implies the work happened before.",
         parameters: RECALL_SCHEMA,
         async execute(_id, params) {
           const limit = String(Math.min(Math.max(Number(params.limit) || 5, 1), 20))

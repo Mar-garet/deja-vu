@@ -160,11 +160,19 @@ func readMCPLine(br *bufio.Reader, max int) (line []byte, overlong bool, err err
 func handleMCP(dir string, req rpcRequest) (any, int, string) {
 	switch req.Method {
 	case "initialize":
+		var p struct {
+			ClientInfo struct {
+				Name string `json:"name"`
+			} `json:"clientInfo"`
+		}
+		// A malformed or missing clientInfo only loses the client-specific
+		// sentence; initialize itself must still succeed.
+		_ = json.Unmarshal(req.Params, &p)
 		return map[string]any{
 			"protocolVersion": mcpProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "deja", "version": version},
-			"instructions":    mcpInstructions(dir),
+			"instructions":    mcpInstructions(dir, p.ClientInfo.Name),
 		}, 0, ""
 	case "tools/list":
 		return map[string]any{"tools": []map[string]any{dejaTool()}}, 0, ""

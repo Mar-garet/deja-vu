@@ -147,7 +147,7 @@
 <p>That writes three things:</p>
 <ul>
 <li><b>The MCP server</b>, into <code>&lt;globalStorage&gt;/kilocode.kilo-code/settings/mcp_settings.json</code> for every host that carries the extension, and into the CLI's own <code>&lt;config&gt;/kilo/kilo.jsonc</code> — Kilo vendors OpenCode, so the CLI takes OpenCode's <code>mcp</code> block. One tool with a mode: search past sessions, read one in full, see a file's history, ask what fixed an error, ask how a command is really run here, get the commands and files this project's past sessions worked with, store a decision.</li>
-<li><b>The <code>deja-history</code> skill</b>, into <code>~/.kilocode/skills</code>, which is where Kilo's loader looks first. It is what tells the model when to look: before re-debugging an error, when you say "didn't we fix this".</li>
+<li><b>The <code>deja-history</code> skill</b>, into <code>~/.kilocode/skills</code>, which is where Kilo's loader looks first. It is what tells the model when to look: before re-debugging an error, before changing code or config, when you say "didn't we fix this".</li>
 <li><b>The <code>/deja</code> command</b>, at <code>&lt;config&gt;/kilo/commands/deja.md</code>, where Kilo's workflows doc puts global commands, for asking directly.</li>
 </ul>
 <p>On a machine with the CLI and no editor, the CLI config, the skill and the command are still written, and the run says the extension's settings were not, rather than reporting a server it wired nowhere.</p>
