@@ -34,8 +34,14 @@ func Search(dir string, o query.Options) ([]model.Session, error) {
 
 func SearchDetailed(dir string, o query.Options) (SearchResult, error) {
 	r, err := searchDetailedOnce(dir, o)
-	if err != nil || len(r.Sessions) > 0 || o.Regex {
+	if err != nil || o.Regex {
 		return r, err
+	}
+	if len(r.Sessions) > 0 {
+		if r.Tier != query.TierExact {
+			return withDirectorySessions(dir, o, r), nil
+		}
+		return r, nil
 	}
 	// A question that embeds a quoted phrase ("when did I read \"x y\"?")
 	// and matched nothing anywhere: the phrase kept its exactness contract,
@@ -62,7 +68,7 @@ func SearchDetailed(dir string, o query.Options) (SearchResult, error) {
 			}
 		}
 	}
-	return r, err
+	return withDirectorySessions(dir, o, r), nil
 }
 
 var quotedSpanRE = regexp.MustCompile(`"[^"]*"`)

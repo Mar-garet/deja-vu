@@ -1155,6 +1155,9 @@ type SearchResult struct {
 	// relevance had a strict head of 1 to 9 sessions and none of them had
 	// matched nothing (#3815).
 	Strict int
+	// Directory is set when the answer leads with sessions about the asked
+	// file's directory because none named the file (#4762).
+	Directory string `json:",omitempty"`
 	// StrictIDs is which of them, keyed harness+":"+id — the order of
 	// Sessions is the merged ranking's, so the head is not the first Strict
 	// of them. A caller telling a reader what one session is needs the
