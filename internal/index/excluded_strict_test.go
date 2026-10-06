@@ -53,4 +53,18 @@ func TestExcludingTheOnlyFullMatchFallsThroughToTheRanking(t *testing.T) {
 			t.Fatal("the excluded session came back")
 		}
 	}
+	// A regex skips the postings and scans records, which never looked at the
+	// exclusion at all.
+	rx, err := SearchWithRecoveryDetailed(dir, query.Options{Query: "jitter", Regex: true, All: true, ExcludeSessions: map[string]bool{"live": true}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range rx.Sessions {
+		if s.ID == "live" {
+			t.Fatal("a regex search served the excluded session")
+		}
+	}
+	if len(rx.Sessions) == 0 {
+		t.Fatal("the regex found nothing, so the exclusion was never exercised")
+	}
 }

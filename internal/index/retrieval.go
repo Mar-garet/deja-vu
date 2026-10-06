@@ -2820,7 +2820,7 @@ func scanRecordsWithVariants(dir string, m Manifest, o query.Options, offsets []
 	by := map[string]*model.Session{}
 	add := func(r Record) {
 		meta, ok := m.Sessions[r.Key]
-		if !ok {
+		if !ok || o.ExcludeSessions[meta.ID] {
 			return
 		}
 		if o.Harness != "" && !harnessMatches(meta.Harness, o.Harness) {
