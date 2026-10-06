@@ -276,11 +276,7 @@ func TestMCPToolContract(t *testing.T) {
 	t.Run("blame finds file discussion", func(t *testing.T) {
 		resp := driveMCP(t, `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"blame","arguments":{"path":"parser.go"}}}`)
 		text := callText(t, resp[0])
-		var hits []map[string]any
-		if err := json.Unmarshal([]byte(text), &hits); err != nil {
-			t.Fatalf("blame result not a JSON array: %q (%v)", text, err)
-		}
-		if len(hits) == 0 {
+		if countBlameSessions(text) == 0 {
 			t.Fatalf("blame parser.go found nothing; a session names it")
 		}
 	})

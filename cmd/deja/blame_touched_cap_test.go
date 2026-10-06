@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -28,30 +27,26 @@ func TestABlameRowNamesAFewTouchedFilesNotForty(t *testing.T) {
 		},
 		Count: 1, Snippets: []string{"… internal/thing00.go …"},
 	}
-	body := mustMarshalBlame([]search.BlameHit{hit}, 0, false)
-
-	var rows []map[string]any
-	if err := json.Unmarshal(body, &rows); err != nil {
-		t.Fatal(err)
-	}
-	var got []any
-	for _, row := range rows {
-		sess, ok := row["session"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if list, ok := sess["touched"].([]any); ok {
-			got = list
+	body := renderMCPBlame("internal/thing00.go", "thing00.go", []search.BlameHit{hit}, 0, false)
+	var line string
+	for _, l := range strings.Split(body, "\n") {
+		if strings.HasPrefix(l, "also worked on: ") {
+			line = strings.TrimPrefix(l, "also worked on: ")
 		}
 	}
-	if len(got) == 0 {
-		t.Fatal("the row names no touched file at all")
+	if line == "" {
+		t.Fatalf("the row names no other file at all:\n%s", body)
 	}
+	got := strings.Split(line, ", ")
 	if len(got) > blameTouchedCap {
 		t.Errorf("the row names %d touched files, which is the manifest's list rather than a few", len(got))
 	}
-	// The head of the list is the most-touched end, so that is what survives.
-	if first, _ := got[0].(string); !strings.HasSuffix(first, "thing00.go") {
-		t.Errorf("the kept file is %q, not the one the session touched most", first)
+	// The head of the list is the most-touched end, so that is what survives,
+	// past the file that was asked about.
+	if got[0] != "thing01.go" {
+		t.Errorf("the first other file is %q, not the one the session touched most", got[0])
+	}
+	if strings.Contains(line, "/work/") {
+		t.Errorf("the row spends its budget on full paths: %s", line)
 	}
 }

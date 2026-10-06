@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/vshulcz/deja-vu/internal/model"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -63,14 +63,14 @@ func TestBlameReadsWithoutWaitingForARebuild(t *testing.T) {
 	}
 }
 
-// And the answer says so: recall prints the sentence in prose, blame answers in
-// JSON, so the note goes in the payload rather than nowhere.
+// And the answer says so, in the line recall uses for the same state.
 func TestBlameSaysWhenItServedASnapshot(t *testing.T) {
-	body := string(mustMarshalBlame(nil, 0, true))
+	hits := []search.BlameHit{{Session: model.Session{ID: "s", Harness: "claude", Project: "proj"}, Count: 1}}
+	body := renderMCPBlame("a.go", "a.go", hits, 0, true)
 	if !strings.Contains(body, "index refresh running in the background") {
 		t.Errorf("a snapshot answer says nothing about the refresh: %s", body)
 	}
-	if quiet := string(mustMarshalBlame(nil, 0, false)); strings.Contains(quiet, "refresh") {
+	if quiet := renderMCPBlame("a.go", "a.go", hits, 0, false); strings.Contains(quiet, "refresh") {
 		t.Errorf("an ordinary answer carries the note: %s", quiet)
 	}
 }
@@ -86,42 +86,40 @@ func TestTheRefreshNoteDoesNotCostASession(t *testing.T) {
 			Snippets: []string{strings.Repeat("y", 300)},
 		})
 	}
-	quiet := countBlameSessions(t, blameBodyFor(hits, false))
-	noisy := countBlameSessions(t, blameBodyFor(hits, true))
-	if noisy != quiet {
+	quiet := countBlameSessions(blameBodyFor(hits, false))
+	noisy := countBlameSessions(blameBodyFor(hits, true))
+	if quiet < 2 || noisy != quiet {
 		t.Errorf("the note cost %d session(s): %d against %d", quiet-noisy, noisy, quiet)
 	}
 	// What it does cost is its own length, and no more.
 	over := len(blameBodyFor(hits, true)) - blameMCPBudget
-	if note := len(`{"note":"index refresh running in the background — the very newest sessions may not appear yet"},`); over > note {
+	if note := len("(index refresh running in the background — the very newest sessions may not appear yet)\n"); over > note {
 		t.Errorf("the payload is %d bytes over the budget, more than the note's %d", over, note)
 	}
 }
 
 // blameBodyFor runs the same trim-then-note sequence blameTextResult does.
-func blameBodyFor(hits []search.BlameHit, refreshing bool) []byte {
-	body := mustMarshalBlame(hits, 0, false)
+func blameBodyFor(hits []search.BlameHit, refreshing bool) string {
+	body := renderMCPBlame("a.go", "a.go", hits, 0, false)
 	for len(body) > blameMCPBudget && len(hits) > 1 {
 		hits = hits[:max(len(hits)*3/4, 1)]
-		body = mustMarshalBlame(hits, 0, false)
+		body = renderMCPBlame("a.go", "a.go", hits, 0, false)
 	}
 	if refreshing {
-		body = mustMarshalBlame(hits, 0, true)
+		body = renderMCPBlame("a.go", "a.go", hits, 0, true)
 	}
 	return body
 }
 
-func countBlameSessions(t *testing.T, body []byte) int {
-	t.Helper()
-	var rows []map[string]any
-	if err := json.Unmarshal(body, &rows); err != nil {
-		t.Fatal(err)
-	}
+// countBlameSessions counts the numbered rows of a blame page.
+func countBlameSessions(body string) int {
 	n := 0
-	for _, r := range rows {
-		if _, ok := r["session"]; ok {
+	for _, line := range strings.Split(body, "\n") {
+		if blameRowRE.MatchString(line) {
 			n++
 		}
 	}
 	return n
 }
+
+var blameRowRE = regexp.MustCompile(`^\d+\. \[`)
