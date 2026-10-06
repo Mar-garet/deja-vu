@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `deja doctor` on Windows says when the CodeBuddy plugin is on but CodeBuddy finds no Git Bash to run its shell scripts, and points at `deja install codebuddy-auto` (#4753).
+
 ## [0.21.7] - 2026-10-06
 
 Agents now look up past decisions before they change code, config, a

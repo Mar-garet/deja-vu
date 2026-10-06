@@ -1451,6 +1451,11 @@ func doctorMCP(w io.Writer) {
 		if trust != "" {
 			fmt.Fprintf(w, "  %-12s %s\n", "", trust)
 		}
+		if c.name == "codebuddy" {
+			if note := codeBuddyPluginNote(); note != "" {
+				fmt.Fprintf(w, "  %-12s %s\n", "", note)
+			}
+		}
 		// One "wired" can be two registrations: a hand add under another name
 		// — the project is called deja-vu, after all — plus the `deja` a later
 		// install wrote beside it. Each session then starts the server twice
