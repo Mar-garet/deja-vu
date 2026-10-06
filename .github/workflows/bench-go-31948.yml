@@ -87,7 +87,14 @@ jobs:
 
       - name: cache scripts
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: go test -count=1 cmd/go -run 'TestScript/(clean_cache_lock|clean_testcache|build_cache|test_cache)'
+        run: |
+          set -o pipefail
+          go test -count=1 -v cmd/go -run 'TestScript/(clean_cache_lock|clean_testcache|build_cache|test_cache)' > "$RUNNER_TEMP/scripts.txt" 2>&1 || { cat "$RUNNER_TEMP/scripts.txt"; exit 1; }
+          grep -E -- '--- (PASS|FAIL|SKIP): TestScript/|^(ok|FAIL)' "$RUNNER_TEMP/scripts.txt"
+
+      - name: clean_cache_lock x5
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.tree == 'patched' }}
+        run: go test -count=5 -v cmd/go -run 'TestScript/clean_cache_lock$' | grep -E -- '--- (PASS|FAIL|SKIP): TestScript/|^(ok|FAIL)|did not wait|waited'
 
       - name: cache scripts verbose on failure
         if: ${{ failure() && steps.build.outcome == 'success' }}
@@ -95,4 +102,6 @@ jobs:
 
       - name: short cmd/go
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: go test -short -count=1 -timeout 150m cmd/go
+        # list_pkgconfig_error fails on windows-latest with or without the CL:
+        # the runner's Strawberry pkg-config.bat is not runnable from Go.
+        run: go test -short -count=1 -timeout 150m -skip 'TestScript/list_pkgconfig_error' cmd/go
