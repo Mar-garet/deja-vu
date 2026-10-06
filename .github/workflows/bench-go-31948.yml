@@ -94,7 +94,9 @@ jobs:
 
       - name: clean_cache_lock x5
         if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.tree == 'patched' }}
-        run: go test -count=5 -v cmd/go -run 'TestScript/clean_cache_lock$' | grep -E -- '--- (PASS|FAIL|SKIP): TestScript/|^(ok|FAIL)|did not wait|waited'
+        run: |
+          set -o pipefail
+          go test -count=5 -v cmd/go -run 'TestScript/clean_cache_lock$' | grep -E -- '--- (PASS|FAIL|SKIP): TestScript/|^(ok|FAIL)|did not wait|waited'
 
       - name: cache scripts verbose on failure
         if: ${{ failure() && steps.build.outcome == 'success' }}
