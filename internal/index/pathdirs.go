@@ -58,31 +58,48 @@ func withDirectorySessions(dir string, o query.Options, r SearchResult) SearchRe
 }
 
 // answersTheRest reports whether any of the leading sessions holds at least
-// two of the query's words other than its file paths.
+// two of the query's words other than its file paths. Words, not substrings:
+// "set" inside "setting" is not the question's word.
 func answersTheRest(ss []model.Session, terms []string) bool {
-	var rest []string
+	var rest [][]string
 	for _, t := range terms {
-		if !strings.Contains(t, "/") {
-			rest = append(rest, t)
+		if ks := tokens(t); !strings.Contains(t, "/") && len(ks) > 0 {
+			rest = append(rest, ks)
 		}
 	}
 	if len(rest) < 2 {
 		return false
 	}
-	// The head is where the jump would happen; a long tail of marathons
-	// would cost megabytes of lowercasing for nothing.
-	if len(ss) > 5 {
-		ss = ss[:5]
+	// The head is where the jump would happen, and what the ranking matched
+	// sits in the first stretch of each; a marathon's whole text would cost
+	// megabytes of tokenizing for nothing.
+	const head, room = 5, 256 << 10
+	if len(ss) > head {
+		ss = ss[:head]
 	}
 	for _, s := range ss {
 		var text strings.Builder
 		for _, m := range s.Messages {
-			text.WriteString(strings.ToLower(m.Text))
+			if text.Len() >= room {
+				break
+			}
+			text.WriteString(m.Text)
 			text.WriteByte('\n')
 		}
-		all, hits := text.String(), 0
-		for _, t := range rest {
-			if strings.Contains(all, t) {
+		words := map[string]bool{}
+		for _, w := range tokens(strings.ToLower(text.String())) {
+			words[w] = true
+		}
+		hits := 0
+		for _, ks := range rest {
+			all := true
+			for _, k := range ks {
+				if !words[k] {
+					all = false
+					break
+				}
+			}
+			if all {
 				hits++
 			}
 		}

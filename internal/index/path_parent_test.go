@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/vshulcz/deja-vu/internal/model"
 	"github.com/vshulcz/deja-vu/internal/query"
 )
 
@@ -126,5 +127,16 @@ func TestDirectorySessionsDoNotJumpAnAnswerToTheRestOfTheQuery(t *testing.T) {
 	}
 	if r.Directory != "" {
 		t.Errorf("answer labelled as about directory %q although the lead session is not", r.Directory)
+	}
+}
+
+func TestAnswersTheRestCountsWordsNotSubstrings(t *testing.T) {
+	ss := []model.Session{{Messages: []model.Message{{Text: "Forget the setting, the numerical drift is fine."}}}}
+	if answersTheRest(ss, RelevanceTerms("cmd/x/y.go set numeric")) {
+		t.Error(`"set" in "setting" and "numeric" in "numerical" counted as the query's words`)
+	}
+	ss[0].Messages[0].Text = "Set the numeric column default."
+	if !answersTheRest(ss, RelevanceTerms("cmd/x/y.go set numeric")) {
+		t.Error("two of the query's words, whole, were not counted")
 	}
 }
