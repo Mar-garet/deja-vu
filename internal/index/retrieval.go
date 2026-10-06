@@ -4065,6 +4065,10 @@ func closeTokens(query string, idx *tokenIndex) []string {
 	for _, token := range idx.markedFormsOf(query) {
 		consider(token, 1)
 	}
+	// The same for ä, ö, ü and ß against their ASCII spellings (#4690).
+	for _, token := range idx.digraphFormsOf(query) {
+		consider(token, 1)
+	}
 	sort.Slice(matches, func(i, j int) bool {
 		if matches[i].distance == matches[j].distance {
 			return matches[i].token < matches[j].token

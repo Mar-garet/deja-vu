@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -108,6 +109,13 @@ type tokenIndex struct {
 	marked     []string
 	byUnmarked map[string][]string
 	markedOnce sync.Once
+	// umlauted holds the tokens with ä, ö, ü or ß, keyed on first use by how
+	// the same word is written in ASCII: Müller is mueller in a handle, an
+	// email or a URL. Two edits and a different length from it, so the edit
+	// window never joined them, while muller, one edit away, did (#4690).
+	umlauted    []string
+	byDigraph   map[string][]string
+	digraphOnce sync.Once
 }
 
 const maxIndexedTokenLen = 64
@@ -127,8 +135,42 @@ func newTokenIndex(set map[string]bool) *tokenIndex {
 		if hasMark(tok) {
 			idx.marked = append(idx.marked, tok)
 		}
+		if strings.ContainsAny(tok, "äöüß") {
+			idx.umlauted = append(idx.umlauted, tok)
+		}
 	}
 	return idx
+}
+
+// umlautDigraphs writes ä, ö, ü and ß the way German does without them.
+var umlautDigraphs = strings.NewReplacer("ä", "ae", "ö", "oe", "ü", "ue", "ß", "ss")
+
+// digraphFormsOf is the other spelling of word under umlautDigraphs: the
+// umlauted tokens written word in ASCII, or, for an umlauted word, its ASCII
+// spelling when the corpus holds it.
+func (t *tokenIndex) digraphFormsOf(word string) []string {
+	if strings.ContainsAny(word, "äöüß") {
+		if d := umlautDigraphs.Replace(word); t.set[d] {
+			return []string{d}
+		}
+		return nil
+	}
+	// Every digraph form holds ae, oe, ue or ss, so a word with neither an e
+	// nor an ss is no umlauted token's ASCII spelling.
+	if !strings.Contains(word, "e") && !strings.Contains(word, "ss") {
+		return nil
+	}
+	t.digraphOnce.Do(func() {
+		t.byDigraph = make(map[string][]string, len(t.umlauted))
+		for _, tok := range t.umlauted {
+			d := umlautDigraphs.Replace(tok)
+			t.byDigraph[d] = append(t.byDigraph[d], tok)
+		}
+		for _, forms := range t.byDigraph {
+			sort.Strings(forms)
+		}
+	})
+	return t.byDigraph[word]
 }
 
 // markedForms keys the marked tokens by their unmarked form, once.

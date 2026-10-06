@@ -230,3 +230,32 @@ func TestAThaiWordIsFoundInsideASentence(t *testing.T) {
 		t.Errorf("an absent word matched the sentence: %d hits", len(res.Sessions))
 	}
 }
+
+// German writes ä, ö, ü and ß as ae, oe, ue and ss wherever the letter is not
+// available, so a name stored as Müller is asked for as mueller. muller reached
+// it as one edit; mueller is two and a letter longer, and found nothing (#4690).
+func TestAnUmlautMeetsItsASCIISpelling(t *testing.T) {
+	for _, c := range []struct{ stored, query string }{
+		{"Müller", "mueller"},
+		{"Müller", "muller"},
+		{"mueller", "Müller"},
+		{"Straße", "strasse"},
+		{"Größe", "groesse"},
+		{"Ärger", "aerger"},
+		{"mueller", "Mu\u0308ller"}, // typed decomposed
+	} {
+		dir := seedOneWord(t, c.stored)
+		res, err := SearchDetailed(dir, query.Options{Query: c.query, All: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Sessions) != 1 || res.Tier != query.TierClose {
+			t.Errorf("%q stored, %q asked: %d hits on tier %q, want 1 on close", c.stored, c.query, len(res.Sessions), res.Tier)
+		}
+	}
+	// The digraph is an exact spelling, not one more edit on top of the others.
+	dir := seedOneWord(t, "Müller")
+	if res, _ := SearchDetailed(dir, query.Options{Query: "muellex", All: true}); len(res.Sessions) != 0 {
+		t.Errorf("muellex reached Müller")
+	}
+}
