@@ -13,10 +13,12 @@ import (
 // other; the same index answers both.
 const (
 	cliSkillName = "deja-search"
-	cliSkillDesc = "deja-vu memory — search the user's past AI coding sessions with the deja CLI. Use when they say things like 'didn't we fix this before', 'what did we decide about X' or 'I already have that', before re-debugging an error that may already be solved, and before telling them something on this machine does not exist."
+	cliSkillDesc = "deja-vu memory — search the user's past AI coding sessions with the deja CLI. Use when they say things like 'didn't we fix this before', 'what did we decide about X' or 'I already have that', before re-debugging an error that may already be solved, before changing code, config, a dependency or a schedule, and before telling them something on this machine does not exist."
 )
 
 const cliSkillBody = `Search deja before re-deriving past work: when the user refers to earlier sessions or decisions, before debugging an error, and before implementing something that may already exist. It searches this machine's own history across every AI coding tool used on it, going back further than deja itself was installed.
+
+Before you change code, config, a dependency or a schedule, run ` + "`deja search --json`" + ` once with the task's key nouns (file, package, table, setting). If a result bears on the change, say so in one line before you act.
 
 Two triggers are easy to miss because they are not questions:
 

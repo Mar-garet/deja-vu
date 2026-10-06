@@ -55,8 +55,11 @@ inclusion: always
 
 This machine indexes every coding session it has, across agents, with deja-vu.
 Before debugging an error or re-implementing something, call the deja tool with
-mode recall and the user's own words — the specific tokens win. Outside a
-session: %s search -- "<query>".
+mode recall and the user's own words — the specific tokens win.
+Before you change code, config, a dependency or a schedule, call deja once
+with mode recall and the task's key nouns (file, package, table, setting).
+If a result bears on the change, say so in one line before you act.
+Outside a session: %s search -- "<query>".
 `, exe)
 }
 

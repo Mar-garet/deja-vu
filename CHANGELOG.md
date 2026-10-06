@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deja install trae` adds the MCP server to TRAE CLI's `traecli.toml`, and `trae-auto` adds the session-start, per-prompt, tool and compaction hooks to its `hooks.json`; TRAE runs them once you trust them at start-up (#4702).
 - `deja install trae-ide` wires TRAE IDE: the MCP server in `User/mcp.json` and the skill in `~/.trae/skills` (`Trae CN` and `~/.trae-cn` for the CN build; with both builds installed, each gets its own). `trae-ide-auto` adds hooks to `~/.trae/hooks.json`, which TRAE IDE runs only after you turn hooks on in Settings > Hooks; install and doctor both say so. Its chats are encrypted and not indexed (#4731).
 
+### Changed
+
+- Agents call deja before they change code, config, a dependency or a schedule, not only when asked about past work. The line is in the MCP server instructions, every skill and guidance file, and the npm plugins' `deja_recall`. On Claude Code the instructions also say how to load the deferred tool. On 10 synthetic change tasks with a recorded decision, Opus on Claude Code went from 0/10 to 10/10 (#4760).
+
 ### Fixed
 
 - The session-start note about a limit hit in another agent fires on Claude Code's real wording ("You've hit your session limit", "You've hit your limit", "API Error: 529 Overloaded"), and reads the newest session of this project from another harness; a parallel session anywhere on the machine used to hide it (#4758).

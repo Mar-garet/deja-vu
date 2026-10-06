@@ -105,7 +105,7 @@ function tools(ctx) {
   guarded(() => ctx.tools.register(defineTool({
     name: "deja_recall",
     description:
-      "Search this machine's own past AI coding sessions — every agent used on it, including months before deja was installed. Use before debugging an error or re-implementing anything that may already exist. Match on the most specific token available: an exact error string, function name, file path or flag.",
+      "Search this machine's own past AI coding sessions — every agent used on it, including months before deja was installed. Use before debugging an error or re-implementing anything that may already exist, and before changing code, config, a dependency or a schedule. Match on the most specific token available: an exact error string, function name, file path or flag.",
     parameters: {
       query: {
         type: "string",
