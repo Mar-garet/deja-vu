@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A word with ä, ö, ü or ß is found by its ASCII spelling and the other way round: `mueller` finds `Müller`, `strasse` finds `Straße`. Only `muller` did before (#4690).
+
 ## [0.21.7] - 2026-10-06
 
 Agents now look up past decisions before they change code, config, a
