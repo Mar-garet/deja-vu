@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.7] - 2026-10-06
+
+Agents now look up past decisions before they change code, config, a
+dependency or a schedule, not only when asked about history. On Claude Code
+that took a test set from 0/10 to 10/10. Recall got more reliable where it was
+quietly failing: it no longer answers empty when the only full match is the
+agent's own session (23 of 255 real calls did), and a file path finds the rule
+written for its directory. A first build on a store of long sessions answers
+at 19 s instead of 44 s. New harnesses: TRAE CLI and TRAE IDE, CodeBuddy Code,
+WorkBuddy and Muse Code. The index version is now 67, so the store rebuilds
+once on the first run after upgrading.
+
 ### Added
 
 - TRAE CLI 2.0 sessions are read from `~/.trae/cli` (`TRAE_HOME`, `DEJA_TRAE_ROOT`) as harness `trae`, with their own doctor row and `traex resume`. Prompts come only from TRAE's user events, so the runtime context it writes under the user role is not indexed as something you said (#4680).
