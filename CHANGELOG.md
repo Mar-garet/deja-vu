@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deja doctor` on Windows says when the CodeBuddy plugin is on but CodeBuddy finds no Git Bash to run its shell scripts, and points at `deja install codebuddy-auto` (#4753).
 - A word with ä, ö, ü or ß is found by its ASCII spelling and the other way round: `mueller` finds `Müller`, `strasse` finds `Straße`. Only `muller` did before (#4690).
 
 ## [0.21.7] - 2026-10-06
