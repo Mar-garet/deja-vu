@@ -18,7 +18,7 @@ import (
 func TestBlameSkipsDataDumpsInToolOutput(t *testing.T) {
 	now := time.Now().UTC()
 	target := BlameTarget{FullPath: "/work/app/internal/pool/pool.go", Base: "pool.go", Stem: "pool"}
-	jsonDump := `[{"session": {"id": "x1", "harness": "claude", "project": "app", "touched": ["/work/app/internal/pool/pool.go", "/work/app/cmd/main.go"]}, "score": 3.2}]`
+	jsonDump := `[{"session": {"id": "x1", "harness": "claude", "project": "app", "path": "/home/u/.claude/projects/-work-app/x1.jsonl", "touched": ["/work/app/internal/pool/pool.go", "/work/app/cmd/main.go"]}, "score": 3.2, "tier": "exact"}]`
 	// Cut off mid-document, the way a harness truncates long tool output.
 	truncated := strings.Repeat(`{"path":"/work/app/internal/pool/pool.go","count":3},`, 40)[:900]
 	var listing strings.Builder
@@ -33,7 +33,7 @@ func TestBlameSkipsDataDumpsInToolOutput(t *testing.T) {
 			{Role: "user", Text: "check what deja knows", Time: now},
 			{Role: sources.RoleToolOutput, Text: jsonDump, Time: now},
 			{Role: sources.RoleToolOutput, Text: "Web search results for query: \"pool.go\"\n\nLinks: " + jsonDump, Time: now},
-			{Role: sources.RoleToolOutput, Text: "ses_1|2026-05-25|/work/app|pool work|{\"role\":\"user\",\"time\":{\"created\":1},\"summary\":{\"diffs\":[{\"file\":\"internal/pool/pool.go\",\"additions\":3}]}}", Time: now},
+			{Role: sources.RoleToolOutput, Text: strings.Repeat("ses_1|2026-05-25|/work/app|pool work|{\"role\":\"user\",\"time\":{\"created\":1},\"summary\":{\"diffs\":[{\"file\":\"internal/pool/pool.go\",\"additions\":3}]}}\n", 3), Time: now},
 			// deja's stderr line lands ahead of its own --json.
 			{Role: sources.RoleToolOutput, Text: "deja: updated 2 files (5 new messages)\n" + jsonDump, Time: now},
 			{Role: sources.RoleToolOutput, Text: "[" + truncated, Time: now},
@@ -69,6 +69,25 @@ func TestBlameSkipsDataDumpsInToolOutput(t *testing.T) {
 	got := Blame([]model.Session{evidence}, target, BlameOptions{All: true})
 	if len(got) != 1 || got[0].Count != 2 {
 		t.Fatalf("tool output about the file stopped counting: %+v", got)
+	}
+
+	// A compiler or linter reporting on a dozen files is a report: each line
+	// says something about a line of a file.
+	var vet strings.Builder
+	for i := range 12 {
+		fmt.Fprintf(&vet, "internal/pkg%02d/file%02d.go:%d:2: unused variable x\n", i, i, i+3)
+	}
+	vet.WriteString("internal/pool/pool.go:88:2: unused variable maxConns\n")
+	// And one small JSON object is an API's error body, not a dump.
+	small := model.Session{
+		Harness: "claude", ID: "small", Project: "app", Updated: now,
+		Messages: []model.Message{
+			{Role: sources.RoleToolOutput, Text: vet.String(), Time: now},
+			{Role: sources.RoleToolOutput, Text: `{"error": "Failed: \"internal/pool/pool.go\" exceeds the size limit", "code": 413}`, Time: now},
+		},
+	}
+	if got := Blame([]model.Session{small}, target, BlameOptions{All: true}); len(got) != 1 || got[0].Count != 2 {
+		t.Fatalf("a linter report or a small error object was read as a dump: %+v", got)
 	}
 
 	// Output quoting a small object while saying something is not a dump.

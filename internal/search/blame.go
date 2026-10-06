@@ -740,6 +740,9 @@ func BlameLifecycleLine(h BlameHit) string {
 // handful; `git status` on a busy tree, `find` and an index dump name dozens.
 const dumpListingPaths = 10
 
+// dumpMinBytes is the least tool output that can be a dump.
+const dumpMinBytes = 200
+
 // isDataDump reports whether tool output is a document or a listing rather
 // than something said about a file: JSON, whole or cut off where the harness
 // truncated it, rows of JSON records, or at least dumpListingPaths distinct
@@ -747,6 +750,11 @@ const dumpListingPaths = 10
 // with the code that ran, so it stays history.
 func isDataDump(text string) bool {
 	t := strings.TrimSpace(text)
+	// One small object is a record, an API's error body or a config line:
+	// it names the file once and counts once. Dumps run to hundreds of bytes.
+	if len(t) < dumpMinBytes {
+		return false
+	}
 	// The document can follow a line or two of its own: deja prints "deja:
 	// updated 2 files" to stderr ahead of its --json, and the harness keeps
 	// both. JSON from there on that is most of the output is the dump.
@@ -771,7 +779,7 @@ func isDataDump(text string) bool {
 	// Or rows that each carry a JSON record, as a database query prints
 	// them: a key every 40 bytes is data, where prose quoting a small
 	// object has one or two in a paragraph.
-	if len(t) >= 80 && strings.Count(t, `":`)*40 >= len(t) {
+	if strings.Count(t, `":`)*40 >= len(t) {
 		return true
 	}
 	seen := map[string]bool{}
@@ -781,12 +789,19 @@ func isDataDump(text string) bool {
 			continue
 		}
 		lines++
-		found := false
+		found, diagnostic := false, false
 		for _, tok := range strings.FieldsFunc(line, dumpFieldSep) {
-			if p := pathToken(tok); p != "" {
+			if p, at := pathToken(tok); p != "" {
 				seen[p] = true
 				found = true
+				diagnostic = diagnostic || at
 			}
+		}
+		// file.go:12:3 is a compiler, a linter or a test runner saying
+		// something about that line — a report, not a listing, however many
+		// files it names.
+		if diagnostic {
+			return false
 		}
 		if found {
 			pathLines++
@@ -809,34 +824,36 @@ func dumpFieldSep(r rune) bool {
 	return strings.ContainsRune(" \t\r\"',()[]{}", r)
 }
 
-// pathToken is tok as a file path — something/name.ext, with a trailing
-// :line:col dropped — or "".
-func pathToken(tok string) string {
+// pathToken is tok as a file path — something/name.ext — or "", and whether
+// a :line followed it.
+func pathToken(tok string) (string, bool) {
+	at := false
 	if i := strings.IndexByte(tok, ':'); i > 0 {
 		if !strings.ContainsAny(tok[:i], `/\`) {
-			return "" // a URL scheme or a key, not a path
+			return "", false // a URL scheme or a key, not a path
 		}
+		at = i+1 < len(tok) && tok[i+1] >= '0' && tok[i+1] <= '9'
 		tok = tok[:i]
 	}
 	slash := strings.LastIndexAny(tok, `/\`)
 	if slash < 0 {
-		return ""
+		return "", false
 	}
 	// A file extension is short and lower case; a Go trace's
 	// pkg/path.Func is not one.
 	name := tok[slash+1:]
 	dot := strings.LastIndexByte(name, '.')
 	if dot <= 0 {
-		return ""
+		return "", false
 	}
 	ext := name[dot+1:]
 	if ext == "" || len(ext) > 6 || ext[0] < 'a' || ext[0] > 'z' {
-		return ""
+		return "", false
 	}
 	for _, r := range ext {
 		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
-			return ""
+			return "", false
 		}
 	}
-	return tok
+	return tok, at
 }
