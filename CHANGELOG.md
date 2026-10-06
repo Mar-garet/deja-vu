@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `deja blame` no longer quotes a JSON dump or a long file listing from tool output as a session's excerpt, or counts each path in it as a mention. deja's own `--json` output, web search results and query rows were the usual source (#4776).
+- `deja blame` no longer quotes a JSON dump or a long file listing from tool output as a session's excerpt, or counts each path in it as a mention. deja's own `--json` output and web search results were the usual source (#4776).
 - `deja doctor` on Windows says when the CodeBuddy plugin is on but CodeBuddy finds no Git Bash to run its shell scripts, and points at `deja install codebuddy-auto` (#4753).
 - A word with ä, ö, ü or ß is found by its ASCII spelling and the other way round: `mueller` finds `Müller`, `strasse` finds `Straße`. Only `muller` did before (#4690).
 
