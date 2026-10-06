@@ -242,6 +242,7 @@ func TestAnUmlautMeetsItsASCIISpelling(t *testing.T) {
 		{"Straße", "strasse"},
 		{"Größe", "groesse"},
 		{"Ärger", "aerger"},
+		{"mueller", "Mu\u0308ller"}, // typed decomposed
 	} {
 		dir := seedOneWord(t, c.stored)
 		res, err := SearchDetailed(dir, query.Options{Query: c.query, All: true})

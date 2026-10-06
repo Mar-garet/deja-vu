@@ -155,6 +155,8 @@ func (t *tokenIndex) digraphFormsOf(word string) []string {
 		}
 		return nil
 	}
+	// Every digraph form holds ae, oe, ue or ss, so a word with neither an e
+	// nor an ss is no umlauted token's ASCII spelling.
 	if !strings.Contains(word, "e") && !strings.Contains(word, "ss") {
 		return nil
 	}
