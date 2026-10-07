@@ -1457,7 +1457,19 @@ func recallTextResultIn(dir, q, harness, project string, limit, offset, budget i
 		// current index with an honest note.
 		requestWarmup(dir)
 	}
-	if strings.TrimSpace(project) != "" {
+	// An agent names the project by the directory it works in, often a git
+	// worktree no recorded session carries in its path. A directory on this
+	// machine scopes the way the cwd does: every worktree of the repo, matched
+	// by the rule the hooks use.
+	var pathScope []string
+	if p := strings.TrimSpace(project); filepath.IsAbs(p) {
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			pathScope = howScope(p, "", false)
+		}
+	}
+	if len(pathScope) > 0 {
+		o.Projects = pathScope
+	} else if strings.TrimSpace(project) != "" {
 		// Named by the caller: a filter, the way the tool describes it. It was
 		// accepted and then ignored.
 		o.Projects = []string{project}
@@ -1465,6 +1477,9 @@ func recallTextResultIn(dir, q, harness, project string, limit, offset, budget i
 	result, o2, hits, policyHidden, err := recallRank(dir, q, o)
 	if err != nil {
 		return "", 0, 0, nil, nil, err
+	}
+	if len(pathScope) > 0 {
+		hits = inProjectHits(hits, pathScope)
 	}
 	if project == "" {
 		// The project the agent is working in answers first. The prompt hook
