@@ -1481,9 +1481,18 @@ func recallTextResultIn(dir, q, harness, project string, limit, offset, budget i
 			// sessions the hooks call this project's, by the same rule, so a
 			// directory that merely shares the name does not lead (#2333).
 			ph = inProjectHits(ph, scope)
+			// Even when another project matches the words better: there the
+			// words are someone else's PR or pool, here they are the decision
+			// this repository lives by, which is why the hook ranks inside the
+			// project only. The rest of the machine follows only from the same
+			// tier, so the lines above the page describe all of it.
 			if perr == nil && len(ph) > 0 {
+				rest := hitsNotIn(hits, ph)
+				if result.Tier != pr.Tier {
+					rest = nil
+				}
 				result, o2, policyHidden = pr, po2, phidden
-				hits = append(ph, hitsNotIn(hits, ph)...)
+				hits = append(ph, rest...)
 			}
 		}
 	}
