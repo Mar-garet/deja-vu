@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -76,5 +77,63 @@ func TestRecallPutsThisProjectsAnswerFirst(t *testing.T) {
 	t.Chdir(ledgerd)
 	if named := ask(`{"mode":"recall","q":"pgx upgrade PR reviewer owner review","project":"src/other"}`); strings.Contains(named, "Dana") {
 		t.Fatalf("project src/other still served ledgerd's session:\n%s", firstLines(named, 12))
+	}
+}
+
+// Agents name the project by the directory they work in, and that is often a
+// git worktree whose path no recorded session carries. Recall took the path
+// as a name to find inside recorded paths and answered with nothing.
+func TestRecallProjectNamedByAWorktreePath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	hermeticEnv(t)
+	root := os.Getenv("DEJA_CLAUDE_ROOT")
+	work := t.TempDir()
+	repo := filepath.Join(work, "src", "ledgerd")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", "init")
+	tree := filepath.Join(work, "runs", "wt1")
+	git("worktree", "add", "-q", "--detach", tree)
+
+	line := func(sid, cwd, role, text string) string {
+		b, _ := json.Marshal(map[string]any{"type": role, "sessionId": sid, "cwd": cwd, "timestamp": "2026-09-10T10:00:00Z",
+			"message": map[string]any{"role": role, "content": text}})
+		return string(b)
+	}
+	writeClaudeFixture(t, filepath.Join(root, sources.ClaudeProjectName(repo), "pay.jsonl"), "pay", []string{
+		line("pay", repo, "user", "what do we call the new payouts service binary"),
+		line("pay", repo, "assistant", "Every service binary is named ledger-<name>d, so payouts is ledger-payoutd."),
+	})
+	other := filepath.Join(work, "src", "other")
+	writeClaudeFixture(t, filepath.Join(root, sources.ClaudeProjectName(other), "o.jsonl"), "o", []string{
+		line("o", other, "user", "rename the payouts service binary"),
+		line("o", other, "assistant", "Renamed the payouts service binary to payd."),
+	})
+	dir := index.DefaultDir()
+	if err := index.Ensure(dir, "", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(tree)
+	args, _ := json.Marshal(map[string]string{"mode": "recall", "q": "payouts service binary name", "project": tree})
+	text, err := callMCPTool(dir, "deja", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "ledger-payoutd") {
+		t.Fatalf("project named by its worktree path lost the repo's session:\n%s", firstLines(text, 12))
+	}
+	if strings.Contains(text, "payd.") {
+		t.Fatalf("project named by path still served another project's session:\n%s", firstLines(text, 12))
 	}
 }
