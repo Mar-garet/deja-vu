@@ -23,7 +23,7 @@ row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
 `ToolUse` or `Response` assistant side. `kiro-cli chat --resume-id
 <conversation_id>` reopens a row.
 
-**Last verified:** 2026-10-02
+**Last verified:** 2026-10-07
 
 ## Known quirks and drift
 
@@ -88,6 +88,18 @@ row of `conversations_v2` keyed by the directory it ran in, and the row's JSON
   front of every turn whether it is wanted or not, which is why it names the
   tool and stops rather than carrying the full skill deja writes where a skill
   is loaded on demand.
+- Skill: `deja install kiro` also writes `~/.kiro/skills/deja-history/SKILL.md`.
+  On kiro-cli 2.28 a skill there is listed in `disclose_context` in both
+  engines (#4802).
+- Global hooks: `deja install kiro-auto` writes `~/.kiro/hooks/deja.json`
+  (`{"version":"v1","hooks":[…]}`): SessionStart runs `hook-context --plain`,
+  UserPromptSubmit `hook-prompt --plain`, SessionEnd `hook-session-end`. The
+  IDE and `kiro-cli --v3` run it in every chat, whatever the agent. On a 2.28
+  stand both outputs reached the model; SessionEnd fires on leaving the TUI,
+  not in `--no-interactive`. PreToolUse and PostToolUse stdout is dropped
+  (`sendStdout:false` in `acp-server.js`), so a pre-edit line or a fix for a
+  failed command can only ride the next prompt, which waits on deferred
+  delivery. The default V2 engine ignores this file and runs the agent below.
 - Auto-recall: `deja install kiro-auto` writes the above and an agent of
   deja's own, `~/.kiro/agents/deja.json` (`tools: ["*"]`, `includeMcpJson`),
   with two hooks: `agentSpawn` runs `deja hook-context --plain` and

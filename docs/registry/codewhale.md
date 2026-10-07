@@ -43,7 +43,7 @@ rather than anything either side said.
 set, the legacy root is not consulted — and deja does not reach outside it
 either.
 
-**Last verified:** 2026-09-20
+**Last verified:** 2026-10-07
 
 ## Known quirks and drift
 
@@ -52,20 +52,43 @@ either.
   one millisecond per record, so two identical turns stay two records rather
   than collapsing into one the way they did for Zed (#3333).
 - **Bookkeeping sits beside the transcripts.** `offline_queue.json`,
-  `session_boot_owners.json` and the `checkpoints/` slot share the sessions directory; they
-  are named rather than counted, so drift in the store still shows up as an
-  unread file.
-- **The shapes come from the source, not from a running install.** The store
-  layout, the role list and the tool names are read out of CodeWhale's own
-  crates — `session_manager.rs`, `core/src/request.rs`, `core/src/role.rs`,
-  `tui/src/tools/registry.rs` — and its `docs/REBRAND.md`. Nothing here has been
-  checked against a live CodeWhale on this machine.
-- **Resume is real, the store shape is not checked live.** `codewhale --help` on
-  0.9.13 lists `--resume`, `--session-id` and `--continue`, and `--continue`
-  refuses in a directory with no saved session, which is how the per-workspace
-  scoping shows. `codewhale exec` does not persist a session at all — the TUI
-  writes them — so the file layout above is still read from the source rather
-  than from one the binary wrote here.
-- **Nothing is wired.** deja reads this store and writes nothing into CodeWhale.
-  Its MCP server map, its hook block and its plugin marketplace are each a
-  channel an install could use; none is written yet.
+  `session_boot_owners.json` and the `checkpoints/` slot share the sessions
+  directory, and 0.10.0 adds a directory per session (approval receipts,
+  runtime state), `.late-usage/` and `.work-graph-import-archive/`, which keeps
+  copies of migrated sessions. A transcript sits directly in the root, so
+  everything in a subdirectory is bookkeeping; the files beside the
+  transcripts are named rather than counted, so drift there still shows up as
+  an unread file.
+- **Checked against a running install.** On a 0.10.0 TUI against a stub
+  endpoint (#4802), the session files had the shape above. Every user message
+  also carries a `<turn_meta>` text block — the date, the workspace, the
+  permission posture — which is the harness talking and is dropped.
+- **Wiring.** `deja install codewhale` writes the server into
+  `$CODEWHALE_HOME/mcp.json` under `servers` (not `mcpServers`), and adds
+  `mcp_deja_deja` to `[tools] always_load` in `config.toml`. CodeWhale boots
+  servers lazily; without that entry the tool was missing from the request.
+  The skill goes in `~/.agents/skills`, which CodeWhale lists beside its own
+  `skills/` and `~/.claude/skills` and shows each copy it finds.
+- **Auto-recall.** `deja install codewhale-auto` adds three `[[hooks.hooks]]`
+  entries. Hooks fire only in the TUI; `codewhale exec`, the ACP and app
+  servers fire none. Of the events, only two put text in front of the model:
+  - `message_submit` may replace the message with `{"text": …}`. deja keeps
+    the person's text first and appends the session digest (first message of
+    a session only) and the prompt's recall, framed in `<deja-recall>`.
+    `session_start`'s stdout is discarded, which is why the digest rides here.
+    CodeWhale saves the replaced message and shows it in the transcript; the
+    framed part is not indexed.
+  - `tool_call_before` may add `additionalContext`, appended to the tool's
+    result as `[hook context] …` and capped at 2,000 characters. deja sends no
+    `decision`, which CodeWhale reads as allow. The line arrives only on a
+    tool that ran without error: a failed call's result goes out without it.
+  - `session_end` (on `/quit`, not on a kill) ends the live stamp.
+  `tool_call_after`, `turn_end` and `session_start` output never reaches the
+  model, and there is no compaction event, so the fix for a failed command
+  and a compaction packet have no channel yet. The hooks' `sess_…` ids are not
+  the store's file ids, so a session's live stamp does not keep MCP recall off
+  its own transcript.
+- **Resume.** `codewhale --help` on 0.9.13 lists `--resume`, `--session-id`
+  and `--continue`, and `--continue` refuses in a directory with no saved
+  session, which is how the per-workspace scoping shows. `codewhale exec`
+  does not persist a session; the TUI writes them.

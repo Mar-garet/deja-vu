@@ -2004,6 +2004,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"kiro", kiroMCPSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"senpi", senpiMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"kimchi", kimchiMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
+		{"codewhale", codewhaleMCPPath(), doctorJSONWired("servers"), doctorJSONDejaKeys("servers")},
 		{"gjc", gjcMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"zcode", zcodeConfigPath(), doctorZCodeWired, nil},
 		{"commandcode", commandCodeMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},

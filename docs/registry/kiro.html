@@ -59,7 +59,7 @@
 <p><code>history</code> holds the turns: a <code>Prompt</code> or <code>ToolUseResults</code> user side, a</p>
 <p><code>ToolUse</code> or <code>Response</code> assistant side. `kiro-cli chat --resume-id</p>
 <p>&lt;conversation_id&gt;` reopens a row.</p>
-<p><strong>Last verified:</strong> 2026-10-02</p>
+<p><strong>Last verified:</strong> 2026-10-07</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li>Resume: <code>cd &lt;cwd&gt; &amp;&amp; kiro-cli chat --resume-id &lt;sessionId&gt;</code>, which needs</li>
@@ -140,6 +140,22 @@
 <p>front of every turn whether it is wanted or not, which is why it names the</p>
 <p>tool and stops rather than carrying the full skill deja writes where a skill</p>
 <p>is loaded on demand.</p>
+<ul>
+<li>Skill: <code>deja install kiro</code> also writes <code>~/.kiro/skills/deja-history/SKILL.md</code>.</li>
+</ul>
+<p>On kiro-cli 2.28 a skill there is listed in <code>disclose_context</code> in both</p>
+<p>engines (#4802).</p>
+<ul>
+<li>Global hooks: <code>deja install kiro-auto</code> writes <code>~/.kiro/hooks/deja.json</code></li>
+</ul>
+<p>(<code>{&#34;version&#34;:&#34;v1&#34;,&#34;hooks&#34;:[…]}</code>): SessionStart runs <code>hook-context --plain</code>,</p>
+<p>UserPromptSubmit <code>hook-prompt --plain</code>, SessionEnd <code>hook-session-end</code>. The</p>
+<p>IDE and <code>kiro-cli --v3</code> run it in every chat, whatever the agent. On a 2.28</p>
+<p>stand both outputs reached the model; SessionEnd fires on leaving the TUI,</p>
+<p>not in <code>--no-interactive</code>. PreToolUse and PostToolUse stdout is dropped</p>
+<p>(<code>sendStdout:false</code> in <code>acp-server.js</code>), so a pre-edit line or a fix for a</p>
+<p>failed command can only ride the next prompt, which waits on deferred</p>
+<p>delivery. The default V2 engine ignores this file and runs the agent below.</p>
 <ul>
 <li>Auto-recall: <code>deja install kiro-auto</code> writes the above and an agent of</li>
 </ul>

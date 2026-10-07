@@ -74,6 +74,13 @@
     <summary>Kilo Code keeps its tasks in the editor&#39;s global storage and its CLI history in a SQLite store. deja reads both, and adds the sessions from every other agent.</summary>
   </entry>
   <entry>
+    <title>Add memory to Kimchi Coding: past sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-kimchi.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-kimchi.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Kimchi keeps a session log per directory and reads none of it back. deja wires its MCP server, and its Claude-compatible extensions pick up the rest.</summary>
+  </entry>
+  <entry>
     <title>Add memory to Kimi Code: every agent&#39;s sessions — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/guide/memory-for-kimi.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-kimi.html"></link>
@@ -123,11 +130,32 @@
     <summary>deja is local by design: no background network, credentials redacted at index time, and forget/exclude controls over what is indexed and kept.</summary>
   </entry>
   <entry>
+    <title>Where Claude Code and Codex store sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/where-sessions-are-stored.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/where-sessions-are-stored.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where each coding agent keeps its conversation history file, in thirty-eight formats, and how to read them without the tool that wrote them.</summary>
+  </entry>
+  <entry>
+    <title>Where Cherry Studio stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/cherrystudio.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/cherrystudio.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where Cherry Studio writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>Where Cline stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/cline.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/cline.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>Where Cline writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where CodeWhale stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/codewhale.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/codewhale.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where CodeWhale writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where Continue stores its history — session format</title>
@@ -207,11 +235,25 @@
     <summary>Where Kilo Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
+    <title>Where Kimchi Coding stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/kimchi.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimchi.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where Kimchi Coding writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>Where Kimi Code stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/kimi.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimi.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>Where Kimi Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Kiro stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/kiro.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kiro.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where Kiro writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where omp (Oh My Pi) stores its history — session format</title>
@@ -247,47 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/pi.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>Where pi writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where prime-agent (PrimeIntellect) stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/prime.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/prime.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where prime-agent (PrimeIntellect) writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where prime-agent (PrimeIntellect) stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/prime.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/prime.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where prime-agent (PrimeIntellect) writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Reasonix stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/reasonix.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/reasonix.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Reasonix writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Zed stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/zed.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/zed.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Zed writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Zed stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/zed.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/zed.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Zed writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Claude Code 丢了上下文：怎么找回来 — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/zh/guide/lost-context.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/zh/guide/lost-context.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>崩溃、清空窗口或重启会带走智能体的上下文，但带不走会话记录。怎么把工作找回来，以及怎样让下一次不必再付这个代价。</summary>
   </entry>
 </feed>

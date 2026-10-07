@@ -50,7 +50,7 @@
 <p>does, under the same project layout: <code>role</code>, <code>content</code>, <code>timestamp</code>,</p>
 <p><code>sessionId</code>, one message per line. Some lines also carry the API&#39;s <code>usage</code></p>
 <p>block, which deja has no use for and ignores.</p>
-<p><strong>Last verified:</strong> 2026-09-17</p>
+<p><strong>Last verified:</strong> 2026-10-07</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li><strong>The CLI database is OpenCode&#39;s schema with Claude Code&#39;s tool names.</strong></li>
@@ -58,6 +58,12 @@
 <p>It goes through OpenCode&#39;s schema reader (see below), checked against a</p>
 <p>store the ZCode 3.14.4 runtime wrote, whose tool parts needed their own</p>
 <p>names read (#4428).</p>
+<ul>
+<li>Skill and command: zcode-app-cli 3.14.4 scans <code>~/.zcode/skills</code>, then</li>
+</ul>
+<p><code>~/.agents/skills</code> (<code>resolveDefaultSkillRoots</code>), and <code>~/.zcode/commands</code>,</p>
+<p>then <code>~/.agents/commands</code>, expanding <code>$ARGUMENTS</code>. deja writes the shared</p>
+<p>skill and <code>~/.zcode/commands/deja.md</code> (#4802).</p>
 <ul>
 <li>Wiring: <code>deja install zcode</code> writes the server into <code>mcp.servers</code> in</li>
 </ul>

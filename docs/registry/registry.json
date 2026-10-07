@@ -68,7 +68,7 @@
         "command": true,
         "resume": true,
         "handoff": "exec",
-        "prereq": ""
+        "prereq": "threads from 0.0.1774963753 on live on ampcode.com; only older local threads are read"
       },
       "gaps": {}
     },
@@ -655,11 +655,11 @@
         "fixtures/registry/cherrystudio/projects/-workspace-registry-demo/registry-cherrystudio.jsonl"
       ],
       "parser_source": "internal/sources/cherrystudio.go",
-      "last_verified": "2026-09-17",
+      "last_verified": "2026-10-07",
       "display_name": "Cherry Studio",
       "capabilities": {
         "mcp": true,
-        "auto": false,
+        "auto": true,
         "skill": true,
         "command": false,
         "resume": false,
@@ -667,10 +667,6 @@
         "prereq": "import the server once in Settings -> MCP; enable the skill for the agent"
       },
       "gaps": {
-        "auto": {
-          "state": "impossible",
-          "why": "Cherry Studio has no hook surface for a third party: it is an Electron app whose agent sessions run inside it, and the extension points are the MCP server list and its import paths (#3644)."
-        },
         "command": {
           "state": "impossible",
           "why": "No slash-command surface for a third party: commands are the app's own and an MCP server cannot register one (#3644)."
@@ -732,7 +728,7 @@
     {
       "id": "kimchi",
       "store_paths": [
-        "${KIMCHI_CODING_AGENT_DIR:-${XDG_CONFIG_HOME:-~/.config}/kimchi/harness}/sessions/--<encoded-cwd>--/*.jsonl",
+        "~/.config/kimchi/harness/sessions/--<encoded-cwd>--/*.jsonl",
         "${DEJA_KIMCHI_ROOT}/**/*.jsonl"
       ],
       "format_kind": "jsonl",
@@ -741,33 +737,17 @@
       ],
       "parser_source": "internal/sources/senpi.go",
       "display_name": "Kimchi Coding",
-      "last_verified": "2026-09-17",
+      "last_verified": "2026-10-07",
       "capabilities": {
         "mcp": true,
-        "auto": false,
-        "skill": false,
-        "command": false,
+        "auto": true,
+        "skill": true,
+        "command": true,
         "resume": true,
         "handoff": "paste",
         "prereq": "none"
       },
-      "gaps": {
-        "auto": {
-          "state": "blocked",
-          "why": "Kimchi can run the hooks `deja install claude` already writes, through a compatibility extension that ships disabled: `kimchi resources enable extensions.claude-code-hook-adapter`. That switch is the user's, so deja records it rather than claiming auto-recall (docs/hooks.md).",
-          "source": "https://github.com/getkimchi/kimchi/blob/main/docs/hooks.md"
-        },
-        "skill": {
-          "state": "blocked",
-          "why": "Same shape: `extensions.claude-code-skills` loads ~/.claude/skills — where deja already writes — and also ships disabled (#3651).",
-          "source": "https://github.com/getkimchi/kimchi/blob/main/docs/hooks.md"
-        },
-        "command": {
-          "state": "blocked",
-          "why": "In Kimchi a skill is the command: `extensions.claude-code-skills` contributes skills through Pi resource discovery so `/skill:<name>` works, and it ships disabled. So this is not a second file to write — it is the same switch the skill waits on, and a command file of our own would add an entry nothing reads (#3651).",
-          "source": "https://github.com/getkimchi/kimchi/blob/main/docs/hooks.md"
-        }
-      }
+      "gaps": {}
     },
     {
       "id": "commandcode",
@@ -809,27 +789,17 @@
       ],
       "parser_source": "internal/sources/zcode.go",
       "display_name": "ZCode",
-      "last_verified": "2026-09-17",
+      "last_verified": "2026-10-07",
       "capabilities": {
         "mcp": true,
         "auto": true,
-        "skill": false,
-        "command": false,
+        "skill": true,
+        "command": true,
         "resume": true,
         "handoff": "paste",
         "prereq": "sqlite3 for the CLI database"
       },
-      "gaps": {
-        "skill": {
-          "state": "unknown",
-          "why": "Nothing found names a user-level skill directory for ZCode. Its extension surface, as inspected by the memory plugin that got there first, is the hook block and the server map in `~/.zcode/cli/setting.json` plus a plugin manifest probe order; guidance therefore reaches the model through the MCP tool descriptions and the injected session block (#3651).",
-          "source": "https://github.com/volcengine/OpenViking/blob/main/examples/agent-hook-plugin/DESIGN.md"
-        },
-        "command": {
-          "state": "unknown",
-          "why": "Nothing found names a custom-command surface in ZCode. What is documented by a third party is its hook block and a strict HTTP-only server map, so the work here is auto-recall through the hooks rather than a command file (#3651)."
-        }
-      }
+      "gaps": {}
     },
     {
       "id": "kiro",
@@ -848,28 +818,18 @@
         "fixtures/registry/kiro/w-api/sess_00000000-0000-4000-8000-000000000000/messages.jsonl"
       ],
       "parser_source": "internal/sources/kiro.go",
-      "last_verified": "2026-10-02",
+      "last_verified": "2026-10-07",
       "display_name": "Kiro",
       "capabilities": {
         "mcp": true,
-        "auto": false,
-        "skill": false,
+        "auto": true,
+        "skill": true,
         "command": false,
         "resume": true,
         "handoff": "paste",
         "prereq": "sqlite3 for the CLI database"
       },
       "gaps": {
-        "auto": {
-          "state": "blocked",
-          "why": "Only in an agent chosen for it: `deja install kiro-auto` writes a `deja` agent whose agentSpawn and userPromptSubmit hooks carry the digest and per-prompt recall, but a plain `kiro-cli chat` starts the built-in kiro_default, which takes no hooks from a file. It fires with `kiro-cli chat --agent deja` or after `kiro-cli agent set-default deja`; deja does not switch the default for you (#4304).",
-          "source": "https://github.com/vshulcz/deja-vu/issues/4304"
-        },
-        "skill": {
-          "state": "impossible",
-          "why": "Kiro has a user-level guidance channel and deja writes it — `~/.kiro/steering/deja.md`, the global half of steering, scanned for every project — but it is not a skill and calling it one would misdescribe what it costs. A steering document declares an inclusion mode, and the only mode measured as loaded by kiro-cli is `always`: `manual` is not loaded and cannot be invoked from a session, `fileMatch` was withheld (KiroCrew's steering reference, measured against 2.19.1). So the text rides in front of every turn whether it is wanted or not, which is why deja's file there is four lines rather than the skill it writes where one is loaded on demand — the same call aider's entry makes (#3651).",
-          "source": "https://github.com/kirodotdev/KiroCrew/blob/main/docs/reference/kiro-cli/steering.md"
-        },
         "command": {
           "state": "unknown",
           "why": "Kiro's upstream — Amazon Q Developer CLI — keeps user-level custom prompts in `~/.aws/amazonq/prompts` (`crates/chat-cli/src/util/paths.rs`), but Kiro renamed its config tree rather than moving it wholesale: its server file is `~/.kiro/settings/mcp.json`, not the Q path. So the location of Kiro's equivalent cannot be inferred from the fork, and writing a guessed directory would leave a command nothing lists (#3651)."
@@ -915,7 +875,7 @@
         "fixtures/registry/roo/tasks/1767225700000/api_conversation_history.json"
       ],
       "parser_source": "internal/sources/roo.go",
-      "last_verified": "2026-09-07",
+      "last_verified": "2026-10-07",
       "display_name": "Roo Code",
       "capabilities": {
         "mcp": true,
@@ -928,9 +888,9 @@
       },
       "gaps": {
         "auto": {
-          "state": "blocked",
-          "why": "Roo's hooks are in flight upstream, not shipped: PR #10785 implements a Claude Code-style hooks system, #11128 is Hooks beta and #11663 Hooks phase 1, all still open, and no release names lifecycle hooks. A user's bug report about PreToolUse coverage (#10834) shows they work on a branch build. Becomes work the day one of those merges",
-          "source": "https://github.com/RooCodeInc/Roo-Code/pull/10785"
+          "state": "impossible",
+          "why": "Roo Code is archived: RooCodeInc/Roo-Code was archived on 2026-05-15, the hooks PRs (#10785, #11128, #11663) never merged, @roo-code/cli is gone from npm, and the last extension, 3.54.0, has no hook event in its bundle. Recall arrives when the model calls the tool.",
+          "source": "https://github.com/RooCodeInc/Roo-Code"
         }
       }
     },
@@ -948,7 +908,7 @@
         "fixtures/registry/zed/zed.sql"
       ],
       "parser_source": "internal/sources/zed.go",
-      "last_verified": "2026-09-20",
+      "last_verified": "2026-10-07",
       "display_name": "Zed",
       "capabilities": {
         "mcp": true,
@@ -963,12 +923,12 @@
         "auto": {
           "state": "impossible",
           "why": "Zed's agent exposes no lifecycle hook: nothing runs before a prompt is sent, and the extension API covers language servers, slash commands, context servers and debuggers only, so there is no point at which recall could be injected. Becomes work the day Zed ships one",
-          "source": "no hook API in Zed 1.16.1 or extension API 0.7"
+          "source": "no hook API in Zed 1.22.0 (#52729 closed unmerged) or extension API 0.7"
         },
         "resume": {
           "state": "impossible",
           "why": "The agent lives in the editor and no zed CLI flag reopens a thread by id, so there is nothing for deja to print. Reopening a thread is a thing the editor does, not a command",
-          "source": "no thread flag in the zed CLI of 1.16.1"
+          "source": "no thread flag in the zed CLI of 1.22.0"
         }
       }
     },
@@ -984,31 +944,18 @@
         "fixtures/registry/codewhale/sessions/registry-codewhale.json"
       ],
       "parser_source": "internal/sources/codewhale.go",
-      "last_verified": "2026-09-20",
+      "last_verified": "2026-10-07",
       "display_name": "CodeWhale",
       "capabilities": {
-        "mcp": false,
-        "auto": false,
-        "skill": false,
+        "mcp": true,
+        "auto": true,
+        "skill": true,
         "command": false,
         "resume": true,
         "handoff": "paste",
         "prereq": "none"
       },
       "gaps": {
-        "mcp": {
-          "state": "todo",
-          "why": "CodeWhale reads an MCP server map and a hook block out of its own config, and it has a plugin marketplace besides; none of it is written yet — this release reads the store and wires nothing (#3794)."
-        },
-        "auto": {
-          "state": "todo",
-          "why": "Its hook events are documented (tool_call_before, tool_call_after, session_busy, session_idle, turn_end, subagent_spawn) and a session-start channel is what an -auto target needs; not written yet (#3794)."
-        },
-        "skill": {
-          "state": "unknown",
-          "why": "Nothing found names a user-level skill directory for CodeWhale. Guidance would reach the model through the MCP tool descriptions once the server is wired.",
-          "source": "https://github.com/Hmbown/CodeWhale/blob/main/docs/HOOKS.md"
-        },
         "command": {
           "state": "unknown",
           "why": "Custom commands come from its plugin marketplace rather than a directory deja can write; not checked against a live install.",
@@ -1022,7 +969,7 @@
         "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
         "${CODEBUDDY_CONFIG_DIR:-~/.codebuddy}/projects/<mangled-cwd>/<session-id>/subagents/agent-<id>.jsonl",
         "${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/<mangled-cwd>/<session-id>.jsonl",
-  "~/.workbuddy-ai/projects/<mangled-cwd>/<session-id>.jsonl",
+        "~/.workbuddy-ai/projects/<mangled-cwd>/<session-id>.jsonl",
         "${DEJA_CODEBUDDY_ROOTS}/<mangled-cwd>/<session-id>.jsonl"
       ],
       "format_kind": "jsonl",
