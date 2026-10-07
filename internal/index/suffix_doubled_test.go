@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// English doubles a final consonant before -ing, -ed and -er, and the ladder
+// English doubles a final consonant before -ing and -ed, and the ladder
 // only stripped the suffix: "logging" reached "logg" and stopped, so recall
 // asked about "structured logging" missed the session that says "log" and
 // "logs" (#4785).
@@ -16,7 +16,6 @@ func TestSuffixFormsUndoTheDoubledConsonant(t *testing.T) {
 	}{
 		{"logging", []string{"log"}},
 		{"logged", []string{"log"}},
-		{"logger", []string{"log"}},
 		{"pinned", []string{"pin"}},
 		{"committing", []string{"commit"}},
 		{"commit", []string{"committing", "committed"}},
@@ -36,9 +35,20 @@ func TestSuffixFormsUndoTheDoubledConsonant(t *testing.T) {
 	}
 }
 
-// Only a doubled consonant is undone. "user" is not "us", "falling" keeps
-// "fall", and a vowel ending doubles nothing.
+// Only a doubled consonant before -ing or -ed is undone. Before -er the
+// spelling cannot tell an agent noun from a word of its own: letter is not
+// let's. "falling" keeps "fall", and a vowel ending doubles nothing.
 func TestSuffixFormsLeaveUndoubledWordsAlone(t *testing.T) {
+	for w, bad := range map[string]string{"letter": "let", "matter": "mat", "summer": "sum", "butter": "but", "dinner": "din"} {
+		if slices.Contains(suffixForms(w), bad) {
+			t.Errorf("%s reached %s: %v", w, bad, suffixForms(w))
+		}
+	}
+	for _, w := range []string{"let", "sum", "bug"} {
+		if slices.Contains(doubledForms(w), w+w[len(w)-1:]+"er") {
+			t.Errorf("%s expanded to an -er form: %v", w, doubledForms(w))
+		}
+	}
 	if slices.Contains(suffixForms("user"), "us") {
 		t.Errorf("user reached us: %v", suffixForms("user"))
 	}

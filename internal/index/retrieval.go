@@ -3934,9 +3934,6 @@ func oneSuffixStep(word string) []string {
 		add(base)
 		add(base + "e")
 		add(undoubled(base))
-	case strings.HasSuffix(word, "er") && undoubled(strings.TrimSuffix(word, "er")) != "":
-		// logger -> log. Only past a doubled consonant: "user" is not "us".
-		add(undoubled(strings.TrimSuffix(word, "er")))
 	case strings.HasSuffix(word, "ment"):
 		base := strings.TrimSuffix(word, "ment")
 		add(base)
@@ -3983,8 +3980,9 @@ func oneSuffixStep(word string) []string {
 	return out
 }
 
-// undoubled is base without the consonant English doubles before -ing, -ed and
-// -er (logg -> log, pinn -> pin), or "" when base does not end in one. Asked
+// undoubled is base without the consonant English doubles before -ing and -ed
+// (logg -> log, pinn -> pin). Not -er: logger is log's, but letter, matter and
+// summer are not let's, mat's and sum's, and the spelling cannot tell them apart, or "" when base does not end in one. Asked
 // about "structured logging", recall missed the session that only says "log"
 // and "logs": logging stripped to logg and stopped there (#4785).
 func undoubled(base string) string {
@@ -3995,15 +3993,15 @@ func undoubled(base string) string {
 	return base[:n-1]
 }
 
-// doubledForms is the other direction for a short word ending
-// consonant-vowel-consonant: log -> logging, logged, logger.
+// doubledForms is the other direction for a word ending
+// consonant-vowel-consonant: log -> logging, logged.
 func doubledForms(word string) []string {
 	n := len(word)
 	if n < 3 || !isConsonant(word[n-1]) || isConsonant(word[n-2]) || !isConsonant(word[n-3]) || strings.ContainsRune("wxy", rune(word[n-1])) {
 		return nil
 	}
 	d := word + word[n-1:]
-	return []string{d + "ing", d + "ed", d + "er"}
+	return []string{d + "ing", d + "ed"}
 }
 
 func isConsonant(c byte) bool {
