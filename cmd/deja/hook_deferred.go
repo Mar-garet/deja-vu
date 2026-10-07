@@ -361,7 +361,7 @@ func withStdin(raw []byte, fn func() error) error {
 	if err != nil {
 		return fn()
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	defer f.Close()
 	if _, err := f.Write(raw); err != nil {
 		return fn()
@@ -382,7 +382,7 @@ func captureDeferredStdout(fn func() error) ([]byte, error) {
 	if err != nil {
 		return nil, fn()
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	defer f.Close()
 	old := os.Stdout
 	os.Stdout = f
