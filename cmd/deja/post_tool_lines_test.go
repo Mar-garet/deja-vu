@@ -119,7 +119,7 @@ func TestTraeFailureEventCarriesTheFixPair(t *testing.T) {
 // PostToolUse with its exitCode when it fails (3.14.4).
 func TestZCodeWiresTheToolEvents(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	if _, err := installZCodeHooks("/bin/deja", false); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestZCodeWiresTheToolEvents(t *testing.T) {
 // PostToolUse and puts the file line there.
 func TestQwenRetiresOnlyTheOldFixPair(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	settings := filepath.Join(home, ".qwen", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func TestQwenRetiresOnlyTheOldFixPair(t *testing.T) {
 // Grok's read_file goes through PreToolUse with the editors.
 func TestGrokWiresTheReadBeforeTheEdit(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("GROK_HOME", filepath.Join(home, ".grok"))
 	if _, err := installGrokAuto("/bin/deja", false); err != nil {
 		t.Fatal(err)
