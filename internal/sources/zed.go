@@ -399,8 +399,9 @@ type zedSnapshot struct {
 // was installed: Zed rewrites a thread in the new shape only when that thread
 // is next saved.
 //
-// Only user and assistant text is indexed. Thinking, tool payloads, images and
-// mentions' inlined file bodies are skipped by design, as they are for cline.
+// User and assistant text is indexed, and Zed's compaction summary under the
+// summary role. Thinking, tool payloads, images and mentions' inlined file
+// bodies are skipped by design, as they are for cline.
 func zedMessage(raw json.RawMessage) (role, text string) {
 	trimmed := strings.TrimSpace(string(raw))
 	if trimmed == `"Resume"` {
@@ -416,6 +417,19 @@ func zedMessage(raw json.RawMessage) (role, text string) {
 	}
 	if body, ok := tagged["Agent"]; ok {
 		return "assistant", zedContentText(body, "Text")
+	}
+	if body, ok := tagged["Compaction"]; ok {
+		// Zed's own summary of the turns it compacted, {"Compaction":{"Summary":"…"}}
+		// (crates/agent/src/thread.rs CompactionInfo). The turns stay in the
+		// thread, so this is the summary role and not anyone's speech; a
+		// provider-native compaction holds opaque items and no text (#4795).
+		var info struct {
+			Summary string `json:"Summary"`
+		}
+		if json.Unmarshal(body, &info) != nil {
+			return "", ""
+		}
+		return RoleSummary, strings.TrimSpace(info.Summary)
 	}
 	return zedLegacyMessage(tagged)
 }

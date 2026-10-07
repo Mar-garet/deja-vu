@@ -657,6 +657,12 @@ func legacyPluginJSFor(target, exe string) string {
   return {
     "experimental.chat.system.transform": async (input, output) => {
       try {
+        // The title request runs this transform too, and the digest went into
+        // the title generator's prompt (#4795). Kilo names it title-<session>;
+        // opencode 1.x passes the session's own id, with the title agent's
+        // prompt first.
+        if (String(input.sessionID || "").startsWith("title-")) return
+        if (String(output.system?.[0] || "").startsWith("You are a title generator")) return
         // The summary request is the last one a compaction makes, and the
         // digest has no business in it: asked here, deja would hand the
         // summariser the recovery packet meant for the turn after.

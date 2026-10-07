@@ -46,7 +46,7 @@ run` in a project with one earlier Kilo session sent the model a system
 message opening with the `<deja-recall>` digest naming that session, and the
 reply answered from it.
 
-**Last verified:** 2026-10-02
+**Last verified:** 2026-10-07
 
 Kilo Code is a Roo Code fork that vendors OpenCode — `packages/opencode` is
 1,780 files inside the Kilo repository — and `packages/kilo-vscode/src/legacy-migration`
@@ -101,6 +101,8 @@ directory is put under it (#4534).
   own loader looks first (`packages/opencode/src/kilocode/paths.ts`). A machine
   with the CLI and no editor gets the CLI config, the skill and the command,
   and a note saying no editor host carried the extension.
-- Hooks are the CLI's only: the extension is a Roo fork whose hooks are still in flight
-  upstream, so in the editor recall arrives when the model calls the tool. The CLI's plugin
-  is the `kilocode-auto` file above.
+- The extension gets the same plugin. Kilo 7.x's VS Code extension starts its
+  bundled CLI as `kilo serve` and leaves `XDG_CONFIG_HOME` alone, so the server
+  loads `<config>/kilo/plugins/deja.js` like a terminal session does. Measured
+  on VSIX 7.8.7 with a stub model: the digest reached the system prompt and the
+  per-prompt recall the user turn of a session the extension's server ran.

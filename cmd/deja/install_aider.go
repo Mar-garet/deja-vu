@@ -467,19 +467,25 @@ func cmdAider(dir string, rest []string, sourceInstance string) error {
 	if err != nil {
 		return fmt.Errorf("aider is not on PATH: %w", err)
 	}
-	// Ctrl-C reaches the whole foreground group and is aider's own key for
-	// stopping a reply; left to its default it ended this process instead, and
-	// the file kept the digest. A SIGTERM or a closed terminal ended it too,
-	// and left aider running with nobody waiting on it: those go on to aider,
-	// and this waits for it to exit.
+	cmd := exec.Command(bin, rest...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return runOutlivingSignals(cmd)
+}
+
+// runOutlivingSignals runs a wrapped harness and waits for it whatever signal
+// arrives, so the wrapper's cleanup still runs. Ctrl-C reaches the whole
+// foreground group and is the harness's own key for stopping a reply; left to
+// its default it ended this process instead, and the file kept the digest. A
+// SIGTERM or a closed terminal ended it too, and left the harness running with
+// nobody waiting on it: those go on to the harness, and this waits for it to
+// exit.
+func runOutlivingSignals(cmd *exec.Cmd) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer func() {
 		signal.Stop(sig)
 		close(sig)
 	}()
-	cmd := exec.Command(bin, rest...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
 		return err
 	}

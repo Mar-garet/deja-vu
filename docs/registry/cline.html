@@ -46,8 +46,11 @@
 <li><strong>Format</strong>: whole-file JSON rewritten on change (not append-only) — full re-parse after atomic replacement, no incremental offsets. A change to the manifest alone, as <code>cline history update --title</code> makes, re-reads the session too (#4319), and so does a change to the task&#39;s own entry in <code>state/taskHistory.json</code> (#4446)</li>
 </ul>
 <p><code>user</code>/<code>assistant</code> turns are indexed for their text, from string content or</p>
-<p><code>type:&#34;text&#34;</code> blocks; thinking, images, compaction artifacts and non-lead agents</p>
-<p>are skipped by design. Tool calls are read as well: <code>run_commands</code> becomes a</p>
+<p><code>type:&#34;text&#34;</code> blocks; thinking, images and non-lead agents are skipped by</p>
+<p>design. A compaction leaves <code>messages.json</code> whole and writes its summary to</p>
+<p><code>&lt;sessionId&gt;.compaction.json</code> beside it, as the message whose <code>metadata.kind</code></p>
+<p>is <code>compaction_summary</code>; <code>metadata.summary</code> is indexed under the summary role,</p>
+<p>and a change to that file re-reads the session (#4795). Tool calls are read as well: <code>run_commands</code> becomes a</p>
 <p>command record, the file tools a files record, and the editor&#39;s two sides</p>
 <p>(<code>old_text</code>, <code>new_text</code>) the replaced span and the hashed written lines; an</p>
 <p><code>editor</code> call with only <code>new_text</code> creates or inserts, and gives the written</p>
