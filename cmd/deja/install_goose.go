@@ -851,7 +851,7 @@ func cmdGoose(dir string, rest []string, sourceInstance string) error {
 		if err := os.Setenv("GOOSE_MOIM_MESSAGE_FILE", moim); err != nil {
 			return err
 		}
-		defer os.Remove(moim)
+		defer func() { _ = os.Remove(moim) }()
 	}
 	if err := refreshGooseHints(); err != nil {
 		fmt.Fprintf(os.Stderr, "deja: could not refresh recall: %v\n", err)
