@@ -78,6 +78,9 @@ var codeBuddyHookWiring = []struct{ Event, Sub, Matcher string }{
 	{"UserPromptSubmit", "hook-prompt", ""},
 	{"PostToolUse", "hook-tool-after", "Bash|PowerShell"},
 	{"PostToolUseFailure", "hook-tool-after", "Bash|PowerShell"},
+	// The file line, after a read and after an edit, on the channel this
+	// file says is checked.
+	{"PostToolUse", "hook-tool", "Read|Edit|Write|MultiEdit"},
 	{"PreCompact", "hook-precompact", ""},
 	{"SessionEnd", "hook-session-end", ""},
 }

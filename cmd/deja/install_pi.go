@@ -257,15 +257,16 @@ export default function (pi: any) {
       // and pi has no handler that runs earlier whose return the model reads.
       // So the file's own history goes out here: what was decided about it,
       // from the sessions that decided it. deja answers once per session per
-      // fact, so re-reading the same file stays quiet.
-      if (event.toolName === "read") {
+      // fact, so re-reading the same file stays quiet. An edit or a write
+      // without a read before it gets the same line, for the edits after it.
+      if (event.toolName === "read" || event.toolName === "edit" || event.toolName === "write") {
         const path = String((event.input && (event.input.path || event.input.file_path)) || "");
         if (!path) return;
         const parts = Array.isArray(event.content) ? event.content : [];
-        const id = "read:" + String(event.toolCallId || "");
+        const id = "file:" + String(event.toolCallId || "");
         if (!(id in repaired)) {
           repaired[id] = run(["hook-tool", "--plain"], JSON.stringify({
-            tool_name: "read",
+            tool_name: event.toolName,
             tool_input: { file_path: path },
             session_id: sessionID(),
             cwd: process.cwd(),

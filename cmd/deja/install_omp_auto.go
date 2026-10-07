@@ -224,15 +224,19 @@ export default function extension(pi) {
       // and omp has no handler that runs earlier whose return the model reads.
       // So the file's own history goes out here — what past sessions decided
       // about it. deja answers once per session per fact, so re-reading the
-      // same file stays quiet.
-      if (event.toolName === "read") {
-        const path = String((event.input && (event.input.path || event.input.file_path)) || "");
+      // same file stays quiet. An edit or a write without a read before it
+      // gets the same line, for the edits after it.
+      if (event.toolName === "read" || event.toolName === "edit" || event.toolName === "write") {
+        // omp's edit names its file only in the anchor its input opens with,
+        // "[path#HASH]".
+        const anchor = /^\s*\[([^\]#]+)#/.exec(String((event.input && event.input.input) || ""));
+        const path = String((event.input && (event.input.path || event.input.file_path)) || (anchor && anchor[1]) || "");
         if (!path) return;
         const parts = Array.isArray(event.content) ? event.content : [];
-        const id = "read:" + String(event.toolCallId || "");
+        const id = "file:" + String(event.toolCallId || "");
         if (!(id in repaired)) {
           repaired[id] = run(["hook-tool", "--plain"], JSON.stringify({
-            tool_name: "read",
+            tool_name: event.toolName,
             tool_input: { file_path: path },
             session_id: sessionID(),
             cwd: process.cwd(),
