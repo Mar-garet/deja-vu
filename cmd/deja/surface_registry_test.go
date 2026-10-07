@@ -31,13 +31,15 @@ func (c surfaceClaim) claimed() bool { return c.Status == "yes" || c.Status == "
 // says which surfaces it wires without a list kept beside the installers.
 // hook-antigravity is one command for every PreInvocation, and answers the
 // digest, the question, a failed step and a new checkpoint (hook_antigravity.go).
+// hook-codewhale is one command for message_submit, tool_call_before and
+// session_end (hook_codewhale.go).
 var surfaceHooks = map[string][]string{
-	"digest":           {"hook-context", "hook-goose", "hook-antigravity"},
-	"prompt":           {"hook-prompt", "hook-goose-prompt", "hook-antigravity"},
-	"pre_tool":         {"hook-tool"},
+	"digest":           {"hook-context", "hook-goose", "hook-antigravity", "hook-codewhale"},
+	"prompt":           {"hook-prompt", "hook-goose-prompt", "hook-antigravity", "hook-codewhale"},
+	"pre_tool":         {"hook-tool", "hook-codewhale"},
 	"failure":          {"hook-tool-after", "hook-antigravity"},
 	"compaction_reset": {"hook-precompact", "hook-antigravity"},
-	"session_end":      {"hook-session-end"},
+	"session_end":      {"hook-session-end", "hook-codewhale"},
 }
 
 // statusMarks are the calls a generated plugin makes to show something in the

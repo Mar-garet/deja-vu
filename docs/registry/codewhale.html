@@ -77,7 +77,7 @@
 <p><code>$CODEWHALE_HOME</code> is an isolation boundary in CodeWhale&#39;s own resolver — with it</p>
 <p>set, the legacy root is not consulted — and deja does not reach outside it</p>
 <p>either.</p>
-<p><strong>Last verified:</strong> 2026-09-20</p>
+<p><strong>Last verified:</strong> 2026-10-07</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li><strong>No per-message timestamps.</strong> The file stores <code>created_at</code> and <code>updated_at</code></li>
@@ -88,29 +88,60 @@
 <ul>
 <li><strong>Bookkeeping sits beside the transcripts.</strong> <code>offline_queue.json</code>,</li>
 </ul>
-<p><code>session_boot_owners.json</code> and the <code>checkpoints/</code> slot share the sessions directory; they</p>
-<p>are named rather than counted, so drift in the store still shows up as an</p>
-<p>unread file.</p>
+<p><code>session_boot_owners.json</code> and the <code>checkpoints/</code> slot share the sessions</p>
+<p>directory, and 0.10.0 adds a directory per session (approval receipts,</p>
+<p>runtime state), <code>.late-usage/</code> and <code>.work-graph-import-archive/</code>, which keeps</p>
+<p>copies of migrated sessions. A transcript sits directly in the root, so</p>
+<p>everything in a subdirectory is bookkeeping; the files beside the</p>
+<p>transcripts are named rather than counted, so drift there still shows up as</p>
+<p>an unread file.</p>
 <ul>
-<li><strong>The shapes come from the source, not from a running install.</strong> The store</li>
+<li><strong>Checked against a running install.</strong> On a 0.10.0 TUI against a stub</li>
 </ul>
-<p>layout, the role list and the tool names are read out of CodeWhale&#39;s own</p>
-<p>crates — <code>session_manager.rs</code>, <code>core/src/request.rs</code>, <code>core/src/role.rs</code>,</p>
-<p><code>tui/src/tools/registry.rs</code> — and its <code>docs/REBRAND.md</code>. Nothing here has been</p>
-<p>checked against a live CodeWhale on this machine.</p>
+<p>endpoint (#4802), the session files had the shape above. Every user message</p>
+<p>also carries a <code>&lt;turn_meta&gt;</code> text block — the date, the workspace, the</p>
+<p>permission posture — which is the harness talking and is dropped.</p>
 <ul>
-<li><strong>Resume is real, the store shape is not checked live.</strong> <code>codewhale --help</code> on</li>
+<li><strong>Wiring.</strong> <code>deja install codewhale</code> writes the server into</li>
 </ul>
-<p>0.9.13 lists <code>--resume</code>, <code>--session-id</code> and <code>--continue</code>, and <code>--continue</code></p>
-<p>refuses in a directory with no saved session, which is how the per-workspace</p>
-<p>scoping shows. <code>codewhale exec</code> does not persist a session at all — the TUI</p>
-<p>writes them — so the file layout above is still read from the source rather</p>
-<p>than from one the binary wrote here.</p>
+<p><code>$CODEWHALE_HOME/mcp.json</code> under <code>servers</code> (not <code>mcpServers</code>), and adds</p>
+<p><code>mcp_deja_deja</code> to <code>[tools] always_load</code> in <code>config.toml</code>. CodeWhale boots</p>
+<p>servers lazily; without that entry the tool was missing from the request.</p>
+<p>The skill goes in <code>~/.agents/skills</code>, which CodeWhale lists beside its own</p>
+<p><code>skills/</code> and <code>~/.claude/skills</code> and shows each copy it finds.</p>
 <ul>
-<li><strong>Nothing is wired.</strong> deja reads this store and writes nothing into CodeWhale.</li>
+<li><strong>Auto-recall.</strong> <code>deja install codewhale-auto</code> adds three <code>[[hooks.hooks]]</code></li>
 </ul>
-<p>Its MCP server map, its hook block and its plugin marketplace are each a</p>
-<p>channel an install could use; none is written yet.</p>
+<p>entries. Hooks fire only in the TUI; <code>codewhale exec</code>, the ACP and app</p>
+<p>servers fire none. Of the events, only two put text in front of the model:</p>
+<ul>
+<li><code>message_submit</code> may replace the message with <code>{&#34;text&#34;: …}</code>. deja keeps</li>
+</ul>
+<p>the person&#39;s text first and appends the session digest (first message of</p>
+<p>a session only) and the prompt&#39;s recall, framed in <code>&lt;deja-recall&gt;</code>.</p>
+<p><code>session_start</code>&#39;s stdout is discarded, which is why the digest rides here.</p>
+<p>CodeWhale saves the replaced message and shows it in the transcript; the</p>
+<p>framed part is not indexed.</p>
+<ul>
+<li><code>tool_call_before</code> may add <code>additionalContext</code>, appended to the tool&#39;s</li>
+</ul>
+<p>result as <code>[hook context] …</code> and capped at 2,000 characters. deja sends no</p>
+<p><code>decision</code>, which CodeWhale reads as allow. The line arrives only on a</p>
+<p>tool that ran without error: a failed call&#39;s result goes out without it.</p>
+<ul>
+<li><code>session_end</code> (on <code>/quit</code>, not on a kill) ends the live stamp.</li>
+</ul>
+<p><code>tool_call_after</code>, <code>turn_end</code> and <code>session_start</code> output never reaches the</p>
+<p>model, and there is no compaction event, so the fix for a failed command</p>
+<p>and a compaction packet have no channel yet. The hooks&#39; <code>sess_…</code> ids are not</p>
+<p>the store&#39;s file ids, so a session&#39;s live stamp does not keep MCP recall off</p>
+<p>its own transcript.</p>
+<ul>
+<li><strong>Resume.</strong> <code>codewhale --help</code> on 0.9.13 lists <code>--resume</code>, <code>--session-id</code></li>
+</ul>
+<p>and <code>--continue</code>, and <code>--continue</code> refuses in a directory with no saved</p>
+<p>session, which is how the per-workspace scoping shows. <code>codewhale exec</code></p>
+<p>does not persist a session; the TUI writes them.</p>
 
 <hr>
 <p>deja reads this format and thirty-seven others, and turns what it finds into memory your

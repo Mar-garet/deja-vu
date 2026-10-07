@@ -104,6 +104,10 @@ func commandFilePath(harness string) string {
 		return filepath.Join(sources.CodeBuddyConfigDir(), "commands", "deja.md")
 	case "workbuddy":
 		return filepath.Join(sources.WorkBuddyConfigDir(), "commands", "deja.md")
+	case "zcode":
+		// zcode-app-cli 3.14.4: resolveDefaultCustomCommandRoots scans
+		// ~/.zcode/commands, then ~/.agents/commands, and expands $ARGUMENTS.
+		return filepath.Join(sources.ZCodeConfigDir(), "commands", "deja.md")
 	case "omp":
 		// The default profile's agent directory, ~/.omp/agent. A named
 		// profile reads its own and does not get the command.

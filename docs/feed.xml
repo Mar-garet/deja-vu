@@ -74,6 +74,13 @@
     <summary>Kilo Code keeps its tasks in the editor&#39;s global storage and its CLI history in a SQLite store. deja reads both, and adds the sessions from every other agent.</summary>
   </entry>
   <entry>
+    <title>Add memory to Kimchi Coding: past sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-kimchi.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-kimchi.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Kimchi keeps a session log per directory and reads none of it back. deja wires its MCP server, and its Claude-compatible extensions pick up the rest.</summary>
+  </entry>
+  <entry>
     <title>Add memory to Kimi Code: every agent&#39;s sessions — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/guide/memory-for-kimi.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-kimi.html"></link>
@@ -130,11 +137,25 @@
     <summary>How to switch between agents — Claude Code, Codex, Cursor — without re-explaining the project to each one.</summary>
   </entry>
   <entry>
+    <title>Where Claude Code and Codex store sessions — deja-vu</title>
+    <id>https://vshulcz.github.io/deja-vu/guide/where-sessions-are-stored.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/where-sessions-are-stored.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where each coding agent keeps its conversation history file, in thirty-eight formats, and how to read them without the tool that wrote them.</summary>
+  </entry>
+  <entry>
     <title>Where Antigravity stores its history — session format</title>
     <id>https://vshulcz.github.io/deja-vu/registry/antigravity.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/antigravity.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>Where Antigravity writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where Cherry Studio stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/cherrystudio.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/cherrystudio.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where Cherry Studio writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where Cline stores its history — session format</title>
@@ -149,6 +170,13 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/codebuddy.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>Where CodeBuddy Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
+    <title>Where CodeWhale stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/codewhale.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/codewhale.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where CodeWhale writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where Command Code stores its history — session format</title>
@@ -261,33 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/hermes.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>Where Hermes writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Hermes stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/hermes.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/hermes.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Hermes writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Kilo Code stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/kilocode.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kilocode.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Kilo Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Kimi Code stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/kimi.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimi.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Kimi Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
-  </entry>
-  <entry>
-    <title>Where Kimi Code stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/kimi.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/kimi.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Kimi Code writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
 </feed>

@@ -256,6 +256,9 @@ var commands = map[string]command{
 		}
 		return nil
 	},
+	"hook-codewhale": func(dir string, rest []string) error {
+		return runHookCodeWhale(dir, rest, os.Stdin, os.Stdout)
+	},
 	"hook-stop": func(dir string, _ []string) error {
 		return runHookStop(dir, os.Stdin, os.Stdout)
 	},
@@ -4118,6 +4121,7 @@ func wrapTargets(names []string, indent string, width int) string {
 // comparison.
 var helpHidden = map[string]bool{
 	"help":              true,
+	"hook-codewhale":    true,
 	"hook-context":      true,
 	"hook-goose":        true,
 	"hook-goose-prompt": true,

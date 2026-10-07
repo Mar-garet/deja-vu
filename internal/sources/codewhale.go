@@ -106,7 +106,16 @@ func CodeWhaleSidecarFiles() []string {
 				out = append(out, p)
 			}
 		}
-		out = append(out, walkFiles(filepath.Join(root, "checkpoints"), func(string) bool { return true })...)
+		// A transcript sits directly in the root, so everything below it is
+		// bookkeeping: checkpoints/, and since 0.10.0 a directory per session
+		// (approval receipts, runtime state), .late-usage/ and
+		// .work-graph-import-archive/, which keeps copies of migrated sessions.
+		entries, _ := os.ReadDir(root)
+		for _, e := range entries {
+			if e.IsDir() {
+				out = append(out, walkFiles(filepath.Join(root, e.Name()), func(string) bool { return true })...)
+			}
+		}
 	}
 	return out
 }
@@ -229,7 +238,7 @@ func ParseCodeWhaleFile(path string) ([]model.Session, error) {
 		if m.Role == "user" {
 			role = "user"
 		}
-		if text := clineContentText(m.Content); text != "" {
+		if text := stripCodeWhaleTurnMeta(clineContentText(m.Content)); text != "" {
 			s.Touch(ts)
 			s.Messages = append(s.Messages, model.Message{Role: role, Text: text, Time: ts})
 		}
@@ -254,6 +263,24 @@ func ParseCodeWhaleFile(path string) ([]model.Session, error) {
 		return nil, nil
 	}
 	return []model.Session{s}, nil
+}
+
+// stripCodeWhaleTurnMeta drops the <turn_meta> block CodeWhale 0.10.0 saves as
+// a text block of every user message: the date, the workspace, the permission
+// posture and the files it thinks matter. It is the harness talking, and
+// indexed as the person's words it made every turn match every other.
+func stripCodeWhaleTurnMeta(text string) string {
+	for {
+		start := strings.Index(text, "<turn_meta>")
+		if start < 0 {
+			return strings.TrimSpace(text)
+		}
+		end := strings.Index(text[start:], "</turn_meta>")
+		if end < 0 {
+			return strings.TrimSpace(text[:start])
+		}
+		text = text[:start] + text[start+end+len("</turn_meta>"):]
+	}
 }
 
 // codeWhaleExitCode reads a failed bash result: CodeWhale marks it is_error

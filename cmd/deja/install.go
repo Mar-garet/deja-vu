@@ -953,6 +953,8 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return installKilocodeAuto(exe, uninstall)
 	case "cherrystudio":
 		return installCherryStudio(exe, uninstall)
+	case "cherrystudio-auto":
+		return installCherryStudioAuto(exe, uninstall)
 	case "kiro":
 		return installKiro(exe, uninstall)
 	case "kiro-auto":
@@ -963,6 +965,12 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return installSenpiAuto(exe, uninstall)
 	case "kimchi":
 		return installKimchi(exe, uninstall)
+	case "kimchi-auto":
+		return installKimchiAuto(exe, uninstall)
+	case "codewhale":
+		return installCodeWhale(exe, uninstall)
+	case "codewhale-auto":
+		return installCodeWhaleAuto(exe, uninstall)
 	case "gjc":
 		return installGjc(exe, uninstall)
 	case "gjc-auto":
@@ -1532,7 +1540,7 @@ func mentionsDeja(b []byte) bool {
 	// path deja was installed from, which need not end in "deja" at all.
 	for _, marker := range []string{
 		"hook-prompt", "hook-context", "hook-tool", "hook-goose", "hook-plan",
-		"hook-precompact", "hook-antigravity", "deja:", "\"deja\"", "deja-recall",
+		"hook-precompact", "hook-antigravity", "hook-codewhale", "deja:", "\"deja\"", "deja-recall",
 		// The harnesses that do not write the word on its own: zed names the
 		// server, dsh opens a block, codex and grok put the name in a TOML
 		// table header, and aider only points at deja's context file. Without
@@ -2045,8 +2053,17 @@ var claudeHookWiring = []struct{ Event, Sub, Matcher string }{
 }
 
 func installClaudeHook(exe string, uninstall bool) (installResult, error) {
+	var events []string
+	for _, h := range claudeWiring() {
+		events = append(events, h.Event)
+	}
+	return installClaudeHooksAt(filepath.Join(sources.ClaudeConfigDir(), "settings.json"), exe, events, uninstall)
+}
+
+// installClaudeHooksAt writes deja's Claude Code hooks into one settings.json,
+// keeping the events named and taking every other deja hook out.
+func installClaudeHooksAt(path, exe string, events []string, uninstall bool) (installResult, error) {
 	exe = hookExeFor(exe, uninstall)
-	path := filepath.Join(sources.ClaudeConfigDir(), "settings.json")
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -2062,8 +2079,8 @@ func installClaudeHook(exe string, uninstall bool) (installResult, error) {
 	// written: one it does not know fails the whole file (#4488).
 	keep := map[string]bool{}
 	if !uninstall {
-		for _, h := range claudeWiring() {
-			keep[h.Event] = true
+		for _, e := range events {
+			keep[e] = true
 		}
 	}
 	for _, h := range claudeHookWiring {
@@ -2180,6 +2197,7 @@ func retiredDejaHook(existing any) bool {
 // two from drifting, the same arrangement helpHidden uses.
 var hookNames = map[string]bool{
 	"hook-antigravity":  true,
+	"hook-codewhale":    true,
 	"hook-context":      true,
 	"hook-goose":        true,
 	"hook-goose-prompt": true,
@@ -5021,7 +5039,7 @@ func installTargetNames() []string {
 		"cline", "cline-auto",
 		"goose", "goose-auto",
 		"crush", "crush-auto",
-		"grok", "grok-auto", "copilot", "copilot-auto", "roo", "kilocode", "kilocode-auto", "cherrystudio", "kiro", "kiro-auto", "senpi", "senpi-auto", "kimchi", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
+		"grok", "grok-auto", "copilot", "copilot-auto", "roo", "kilocode", "kilocode-auto", "cherrystudio", "cherrystudio-auto", "kiro", "kiro-auto", "senpi", "senpi-auto", "kimchi", "kimchi-auto", "codewhale", "codewhale-auto", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
 		// Continue keeps the server and the slash command in one assistant
 		// config, and its skill in the folder beside it; there is no hook to
 		// wire, so there is nothing an -auto target would add (#3062).
@@ -5173,6 +5191,7 @@ func existingTargetChecks() map[string]string {
 		"kiro":         sources.KiroRoot(),
 		"senpi":        sources.SenpiRoot(),
 		"kimchi":       sources.KimchiRoot(),
+		"codewhale":    sources.CodeWhaleRoot(), // its sessions; deja creates mcp.json
 		"gjc":          sources.GjcRoot(),
 		"zcode":        sources.ZCodeRoot(),
 		"commandcode":  commandCodeFirstRoot(),

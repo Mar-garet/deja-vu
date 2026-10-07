@@ -522,6 +522,11 @@
       "path": "<tmp>/home/.config/kimchi/harness/mcp.json"
     },
     {
+      "name": "codewhale",
+      "state": "config-missing",
+      "path": "<tmp>/home/.codewhale/mcp.json"
+    },
+    {
       "name": "gjc",
       "state": "config-missing",
       "path": "<tmp>/home/.gjc/agent/mcp.json"
@@ -634,6 +639,21 @@
       "path": "<tmp>/home/.gjc/agent/extensions/deja.ts"
     },
     {
+      "name": "cherrystudio",
+      "state": "missing",
+      "path": "<tmp>/home/.config/CherryStudio/Data/Agents/.claude/settings.json"
+    },
+    {
+      "name": "codewhale",
+      "state": "missing",
+      "path": "<tmp>/home/.codewhale/config.toml"
+    },
+    {
+      "name": "kimchi",
+      "state": "missing",
+      "path": "<tmp>/home/.config/kimchi/harness/extensions/deja.ts"
+    },
+    {
       "name": "hermes",
       "state": "missing",
       "path": "<tmp>/home/.hermes/plugins/deja/__init__.py"
@@ -686,7 +706,7 @@
     {
       "name": "kiro",
       "state": "missing",
-      "path": "<tmp>/home/.kiro/agents/deja.json"
+      "path": "<tmp>/home/.kiro/hooks/deja.json"
     },
     {
       "name": "copilot",
@@ -784,6 +804,11 @@
       "name": "workbuddy",
       "state": "missing",
       "path": "<tmp>/home/.workbuddy/commands/deja.md"
+    },
+    {
+      "name": "zcode",
+      "state": "missing",
+      "path": "<tmp>/home/.zcode/commands/deja.md"
     },
     {
       "name": "copilot-chat",

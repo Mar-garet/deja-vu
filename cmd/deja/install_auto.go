@@ -1264,7 +1264,7 @@ func dejaHookEntry(entry map[string]any) bool {
 		// whatever the old binary called.
 		// Both tool subcommands are spelled out: the match wants the whole
 		// token, so "hook-tool" does not find "hook-tool-after".
-		for _, sub := range []string{"hook-context", "hook-prompt", "hook-precompact", "hook-goose", "hook-antigravity",
+		for _, sub := range []string{"hook-context", "hook-prompt", "hook-precompact", "hook-goose", "hook-antigravity", "hook-codewhale",
 			"hook-tool", "hook-tool-after", "hook-spawn", "hook-session-end"} {
 			if isDejaHookCommand(cmd, "deja "+sub) {
 				return true
