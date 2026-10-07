@@ -1192,6 +1192,11 @@ func relevantMetasCounts(dir string, m Manifest, projects, terms []string, n int
 	// session can be ranked by its best single message rather than by the
 	// total it collects across thousands of them.
 	msgIDF := map[uint32]map[int64]float64{}
+	// Counted over the whole store, not the sessions being ranked: the guard
+	// that reads it is telling a typo from a real word, and a word another
+	// project uses is a real word. Counted over the project, a question with
+	// one word this project shares and two it never said read as one known
+	// word among typos, and the project-scoped recall answered nothing (#4789).
 	termsKnown := 0
 	for _, term := range terms {
 		keys := queryKeys(term)
@@ -1286,21 +1291,25 @@ func relevantMetasCounts(dir string, m Manifest, projects, terms []string, n int
 					}
 				}
 			}
+			if len(df) > 0 {
+				termsKnown++
+			}
 			if len(hit) == 0 {
 				noteQuerySubject(term, len(df))
 				continue
 			}
 			minDF, minSess = countDF(df), len(df)
-			termsKnown++
 			// fallthrough to idf/scoring below
 		} else {
+			// Every sub-token of the term is somewhere in the store.
+			inStore := true
 			for _, key := range keys {
 				posts, err := br.postings(key)
 				if err != nil && readErr == nil {
 					readErr = err
 				}
 				if err != nil || len(posts) == 0 {
-					missed = true
+					missed, inStore = true, false
 					break
 				}
 				// Document frequency in sessions, not postings: one marathon
@@ -1348,10 +1357,12 @@ func relevantMetasCounts(dir string, m Manifest, projects, terms []string, n int
 					break
 				}
 			}
+			if inStore {
+				termsKnown++
+			}
 			if missed || len(hit) == 0 {
 				continue
 			}
-			termsKnown++
 		}
 		// Two verdicts on how rare the term is, and they answer two different
 		// questions. Whether the term is worth speaking up about is the rarer

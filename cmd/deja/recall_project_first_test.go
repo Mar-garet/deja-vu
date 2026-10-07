@@ -137,3 +137,45 @@ func TestRecallProjectNamedByAWorktreePath(t *testing.T) {
 		t.Fatalf("project named by path still served another project's session:\n%s", firstLines(text, 12))
 	}
 }
+
+// A question carrying words this project never said, but other projects did,
+// read inside the project as one known word among typos, and the project's own
+// answer went silent behind the rest of the machine (#4789).
+func TestRecallKeepsThisProjectWhenItLacksSomeWords(t *testing.T) {
+	hermeticEnv(t)
+	root := os.Getenv("DEJA_CLAUDE_ROOT")
+	work := t.TempDir()
+	ledgerd := filepath.Join(work, "src", "ledgerd")
+	if err := os.MkdirAll(ledgerd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := func(sid, cwd, role, text string) string {
+		b, _ := json.Marshal(map[string]any{"type": role, "sessionId": sid, "cwd": cwd, "timestamp": "2026-09-14T10:00:00Z",
+			"message": map[string]any{"role": role, "content": text}})
+		return string(b)
+	}
+	writeClaudeFixture(t, filepath.Join(root, sources.ClaudeProjectName(ledgerd), "replay.jsonl"), "replay", []string{
+		line("replay", ledgerd, "user", "how do we know a reconcile change is safe"),
+		line("replay", ledgerd, "assistant", "Rule: every change in cmd/reconcile is checked with the dry-run replay of the August bank file; expect 4117 matched."),
+	})
+	other := filepath.Join(work, "src", "other")
+	for i := range 12 {
+		sid := fmt.Sprintf("k%02d", i)
+		writeClaudeFixture(t, filepath.Join(root, sources.ClaudeProjectName(other), sid+".jsonl"), sid, []string{
+			line(sid, other, "user", fmt.Sprintf("controller %d: raise the retry tolerance setting", i)),
+			line(sid, other, "assistant", fmt.Sprintf("Set the tolerance setting to %d in the controller config and let it reconcile.", i)),
+		})
+	}
+	dir := index.DefaultDir()
+	if err := index.Ensure(dir, "", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(ledgerd)
+	text, err := callMCPTool(dir, "deja", json.RawMessage(`{"mode":"recall","q":"match.go tolerance reconcile setting"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := regexp.MustCompile(`\n1\. \[[^\]]*\] (\S+)`).FindStringSubmatch(text); m == nil || !strings.HasSuffix(m[1], "ledgerd") || !strings.Contains(text, "4117") {
+		t.Fatalf("this project's answer is not first:\n%s", firstLines(text, 14))
+	}
+}
