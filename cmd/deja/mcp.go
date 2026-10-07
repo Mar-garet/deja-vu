@@ -447,6 +447,7 @@ func callMCPTool(dir, name string, raw json.RawMessage) (string, error) {
 		var a struct {
 			Query   string    `json:"query"`
 			Harness string    `json:"harness"`
+			Project string    `json:"project"`
 			Limit   mcpNumber `json:"limit"`
 			Offset  mcpNumber `json:"offset"`
 		}
@@ -467,7 +468,7 @@ func callMCPTool(dir, name string, raw json.RawMessage) (string, error) {
 		// first recall of every session — the one an agent plans against — over
 		// the cap by its own length (#1806).
 		env, deliverEnv := environmentOnce(dir)
-		text, sessions, raw, ids, projects, err := recallTextResultFrom(dir, a.Query, a.Harness, int(a.Limit), int(a.Offset), recallMCPBudget-recallFrameOverhead-len(env))
+		text, sessions, raw, ids, projects, err := recallTextResultIn(dir, a.Query, a.Harness, a.Project, int(a.Limit), int(a.Offset), recallMCPBudget-recallFrameOverhead-len(env))
 		if err == nil {
 			text = frameRecall(text) + env
 			deliverEnv()
@@ -1417,6 +1418,13 @@ func recallTextResult(dir, q, harness string, limit, offset, budget int) (string
 // built from, which the digest log records so a stored digest can be checked
 // against a rule tightened later (#2324).
 func recallTextResultFrom(dir, q, harness string, limit, offset, budget int) (string, int, int64, []string, []string, error) {
+	return recallTextResultIn(dir, q, harness, "", limit, offset, budget)
+}
+
+// recallTextResultIn is recall scoped to a project: project, when the caller
+// names one, keeps only that project's sessions; otherwise the project of the
+// directory the server runs in comes first.
+func recallTextResultIn(dir, q, harness, project string, limit, offset, budget int) (string, int, int64, []string, []string, error) {
 	if limit <= 0 {
 		limit = 5
 	}
@@ -1449,48 +1457,37 @@ func recallTextResultFrom(dir, q, harness string, limit, offset, budget int) (st
 		// current index with an honest note.
 		requestWarmup(dir)
 	}
-	result, err := index.SearchWithRecoveryDetailed(dir, o, mcpProgress())
+	if strings.TrimSpace(project) != "" {
+		// Named by the caller: a filter, the way the tool describes it. It was
+		// accepted and then ignored.
+		o.Projects = []string{project}
+	}
+	result, o2, hits, policyHidden, err := recallRank(dir, q, o)
 	if err != nil {
 		return "", 0, 0, nil, nil, err
 	}
-	ss := withoutLiveSessions(dir, result.Sessions)
-	o.Tier = result.Tier
-	if result.Stemmed {
-		o.Stemmed = true
-		o.FuzzyVariants = result.Variants
-	} else if result.Fuzzy {
-		o.FuzzyVariants = result.Variants
-	}
-	if o.Tier == search.TierClose && o.FuzzyVariants == nil {
-		o.FuzzyVariants = result.Variants
-	}
-	var hits []search.Hit
-	if result.Tier == search.TierError {
-		hits = search.ErrorHits(ss)
-	} else if result.Tier == search.TierRelevance {
-		terms := index.RelevanceMatchTerms(q)
-		if result.Directory != "" {
-			// The directory is what these sessions matched on; without it the
-			// snippet chooser looks for the file's words and shows nothing.
-			terms = append(terms, result.Directory)
+	if project == "" {
+		// The project the agent is working in answers first. The prompt hook
+		// ranks inside it and recall ranked the whole machine, so the same
+		// question found the decision through the hook and buried it here: on
+		// a stand with ~1800 real sessions behind one project, the session
+		// that answered sat at 20-39 for the queries agents sent, or outside
+		// the candidates altogether. The rest of the machine follows.
+		if scope := howScope(howCwd(), "", false); len(scope) > 0 {
+			po := o
+			po.Projects = scope
+			pr, po2, ph, phidden, perr := recallRank(dir, q, po)
+			// The index filter matches names as substrings; kept are the
+			// sessions the hooks call this project's, by the same rule, so a
+			// directory that merely shares the name does not lead (#2333).
+			ph = inProjectHits(ph, scope)
+			if perr == nil && len(ph) > 0 {
+				result, o2, policyHidden = pr, po2, phidden
+				hits = append(ph, hitsNotIn(hits, ph)...)
+			}
 		}
-		hits = markStrictHits(search.RelevanceHitsWeighted(ss, terms, result.TermIDF), result)
-	} else if hits, err = search.Run(ss, o); err != nil {
-		return "", 0, 0, nil, nil, err
 	}
-	hits, policyHidden := policyFilterHitsCounted(policy.ActivationMCP, hits)
-	if os.Getenv("DEJA_EMBED") != "off" {
-		hits = maybeRerank(dir, hits, o, os.Stderr)
-	}
-	var semantic bool
-	hits, semantic = maybeSemantic(dir, hits, o, os.Stderr)
-	if semantic {
-		// The semantic tier reaches the whole sidecar, past the policy scoping
-		// the lexical hits already had; scope its hits too or an imported peer's
-		// content the policy withholds reaches the agent through recall.
-		hits, _ = policyFilterHitsCounted(policy.ActivationMCP, hits)
-	}
-	o.Semantic = semantic
+	o = o2
 	if len(hits) == 0 {
 		return emptyRecallAnswerPolicy(dir, q, policyHidden), 0, 0, nil, nil, nil
 	}
@@ -2541,4 +2538,80 @@ func rememberSavedNote(dir string) string {
 		return line
 	}
 	return "deja is refreshing its index; this note becomes findable when that finishes."
+}
+
+// recallRank runs one recall search and turns its sessions into ranked hits.
+func recallRank(dir, q string, o search.Options) (index.SearchResult, search.Options, []search.Hit, int, error) {
+	result, err := index.SearchWithRecoveryDetailed(dir, o, mcpProgress())
+	if err != nil {
+		return index.SearchResult{}, o, nil, 0, err
+	}
+	ss := withoutLiveSessions(dir, result.Sessions)
+	o.Tier = result.Tier
+	if result.Stemmed {
+		o.Stemmed = true
+		o.FuzzyVariants = result.Variants
+	} else if result.Fuzzy {
+		o.FuzzyVariants = result.Variants
+	}
+	if o.Tier == search.TierClose && o.FuzzyVariants == nil {
+		o.FuzzyVariants = result.Variants
+	}
+	var hits []search.Hit
+	if result.Tier == search.TierError {
+		hits = search.ErrorHits(ss)
+	} else if result.Tier == search.TierRelevance {
+		terms := index.RelevanceMatchTerms(q)
+		if result.Directory != "" {
+			// The directory is what these sessions matched on; without it the
+			// snippet chooser looks for the file's words and shows nothing.
+			terms = append(terms, result.Directory)
+		}
+		hits = markStrictHits(search.RelevanceHitsWeighted(ss, terms, result.TermIDF), result)
+	} else if hits, err = search.Run(ss, o); err != nil {
+		return index.SearchResult{}, o, nil, 0, err
+	}
+	hits, policyHidden := policyFilterHitsCounted(policy.ActivationMCP, hits)
+	if os.Getenv("DEJA_EMBED") != "off" {
+		hits = maybeRerank(dir, hits, o, os.Stderr)
+	}
+	var semantic bool
+	hits, semantic = maybeSemantic(dir, hits, o, os.Stderr)
+	if semantic {
+		// The semantic tier reaches the whole sidecar, past the policy scoping
+		// the lexical hits already had; scope its hits too or an imported peer's
+		// content the policy withholds reaches the agent through recall.
+		hits, _ = policyFilterHitsCounted(policy.ActivationMCP, hits)
+	}
+	o.Semantic = semantic
+	return result, o, hits, policyHidden, nil
+}
+
+// inProjectHits keeps the hits whose session belongs to one of names.
+func inProjectHits(hits []search.Hit, names []string) []search.Hit {
+	out := hits[:0:0]
+	for _, h := range hits {
+		for _, n := range names {
+			if index.ProjectInScope(h.Session.Project, n) {
+				out = append(out, h)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// hitsNotIn is hits without the sessions already in lead.
+func hitsNotIn(hits, lead []search.Hit) []search.Hit {
+	seen := make(map[string]bool, len(lead))
+	for _, h := range lead {
+		seen[h.Session.Harness+":"+h.Session.ID] = true
+	}
+	out := make([]search.Hit, 0, len(hits))
+	for _, h := range hits {
+		if !seen[h.Session.Harness+":"+h.Session.ID] {
+			out = append(out, h)
+		}
+	}
+	return out
 }
