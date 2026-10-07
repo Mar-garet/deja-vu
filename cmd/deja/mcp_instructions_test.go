@@ -71,7 +71,7 @@ func TestMCPInitializeTellsClaudeCodeToLoadTheDeferredTool(t *testing.T) {
 		if strings.Contains(got, "ToolSearch") {
 			t.Errorf("%s: a host without ToolSearch was told to use it: %q", params, got)
 		}
-		if !strings.Contains(got, "Before you change code") {
+		if !strings.Contains(got, "Before your first edit in a task") {
 			t.Errorf("%s: instructions lost the change trigger: %q", params, got)
 		}
 	}

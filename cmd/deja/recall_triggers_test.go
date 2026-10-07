@@ -34,7 +34,10 @@ func TestEverySurfaceCarriesTheQuietTriggers(t *testing.T) {
 // A change is not a question either. "Set the rates timeout to 2s" matched no
 // trigger, so Opus on Claude Code called deja on 0 of 10 such tasks, each with
 // a decision recorded in a past session, and on 10 of 10 with one sentence in
-// the server instructions (#4760). Every text that sits in an agent's context and
+// the server instructions (#4760). On a stand with ~1800 real sessions and
+// 30 other skills that sentence held for questions but not for "patch it and
+// say when it's done": 15 of 33 with MCP, 14 of 33 with the skill. Asked
+// before the first edit and before "done", 28 and 30 of 33 (#4791). Every text that sits in an agent's context and
 // says when to recall carries it, short form included.
 func TestEverySurfaceRecallsBeforeAChange(t *testing.T) {
 	surfaces := map[string]string{
@@ -52,9 +55,14 @@ func TestEverySurfaceRecallsBeforeAChange(t *testing.T) {
 	}
 	for name, text := range surfaces {
 		low := strings.ToLower(text)
-		if !strings.Contains(low, "before you change code, config, a dependency or a schedule") &&
-			!strings.Contains(low, "before changing code, config, a dependency or a schedule") {
+		if !strings.Contains(low, "before your first edit in a task") &&
+			!strings.Contains(low, "before the first edit in a task") {
 			t.Errorf("%s never tells the agent to recall before an ordinary change", name)
+		}
+		// The second moment the bench found agents skip: a change reported as
+		// done without the check a past session made part of done.
+		if !strings.Contains(low, "done") {
+			t.Errorf("%s never tells the agent to recall before calling a change done", name)
 		}
 	}
 }
