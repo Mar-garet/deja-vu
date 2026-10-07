@@ -90,7 +90,8 @@
 <p><code>hooks.internal.enabled</code> set). The plugin puts the session digest in front</p>
 <p>of the first turn at <code>agent_turn_prepare</code>, per-prompt recall at</p>
 <p><code>before_prompt_build</code>, and at <code>before_compaction</code> clears the list of blocks</p>
-<p>already shown so recall can send them again. The hook pack</p>
+<p>already shown so recall can send them again; <code>session_end</code> runs</p>
+<p><code>deja hook-session-end</code>. The hook pack</p>
 <p>adds the digest at <code>agent:bootstrap</code>, which fires only in gateway mode.</p>
 <ul>
 <li><strong>Resume</strong>: <code>openclaw chat --session &lt;key&gt;</code>. OpenClaw addresses a</li>

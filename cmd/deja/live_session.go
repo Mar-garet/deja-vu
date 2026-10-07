@@ -85,8 +85,11 @@ func endSessionLive(dir, id string) {
 }
 
 // runHookSessionEnd is the SessionEnd hook of Claude Code, Codex, Cursor CLI,
-// Gemini CLI and Qwen Code. It says nothing back — none of them reads a reply to it — and it runs even
-// with recall off: clearing a stamp never hands anyone anything.
+// Gemini CLI, Qwen Code, Kimi Code, Grok and goose, and what the plugins of pi,
+// omp, prime-agent, Senpi, gjc, OpenClaw, Hermes, Cline and dsh run when their
+// host says a session is over. It says nothing back — none of them reads a
+// reply to it — and it runs even with recall off: clearing a stamp never hands
+// anyone anything.
 func runHookSessionEnd(dir string, stdin io.Reader) {
 	var input precompactHookInput
 	_ = json.Unmarshal(readHookPayload(stdin, hookStdinWait), &input)

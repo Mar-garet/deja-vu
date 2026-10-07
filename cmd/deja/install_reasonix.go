@@ -67,7 +67,7 @@ func reasonixCommandPath() string {
 // sidecar subscribes to the ones it finds here, so this list is the ceiling.
 var reasonixIntercepts = []string{
 	"input.receive", "tool.after", "compaction.prepare",
-	"session.start", "session.load", "session.rotate",
+	"session.start", "session.load", "session.rotate", "session.end",
 }
 
 func reasonixPackageVersion() string {

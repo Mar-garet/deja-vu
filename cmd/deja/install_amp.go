@@ -259,6 +259,25 @@ export default function (amp: any) {
     }
   })
 
+  // A turn is over when the agent ends: the thread's live stamp goes, so
+  // another thread's MCP recall can answer with it now rather than twenty
+  // minutes from now, and its next agent.start stamps it again. Amp has no
+  // event for a thread ending; a plugin disposed with the process ends the
+  // last one it served. agent.end's answer decides whether the agent goes on,
+  // so this one gives Amp's own default back.
+  const endThread = (id: string) => {
+    if (id) run(["hook-session-end"], JSON.stringify({ session_id: id }), 2000)
+  }
+  amp.on("agent.end", async (event: any) => {
+    try {
+      endThread(threadID(event))
+    } catch {}
+    return { action: "done" }
+  })
+  try {
+    amp.onDispose(() => endThread(thread))
+  } catch {}
+
   // Amp surfaces registered commands in its command palette, which is how
   // someone who never read the docs finds this at all.
   amp.registerCommand(

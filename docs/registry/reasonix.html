@@ -233,6 +233,12 @@
 <p>key of its own. A session event with no name that arrives within two</p>
 <p>seconds of a turn is taken as that turn&#39;s own.</p>
 <ul>
+<li><strong>Session end.</strong> The extension subscribes to <code>session.end</code>, which 2.30</li>
+</ul>
+<p>sends on every exit, and drops the session&#39;s live stamp there, at a</p>
+<p>rotation and when the host closes the pipe, so the session is back in the</p>
+<p>next one&#39;s MCP recall.</p>
+<ul>
 <li><strong>2.x is checked from source only.</strong> Reasonix 2.x (branch <code>studio</code>) has</li>
 </ul>
 <p>the same v2 manifest and extension protocol, so the package is the same</p>

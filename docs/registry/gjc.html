@@ -106,7 +106,8 @@
 <p>directory with an index), and the events in</p>
 <p><code>src/extensibility/extensions/types.ts</code> are pi&#39;s — <code>session_start</code>,</p>
 <p><code>before_agent_start</code>, <code>context</code>, <code>tool_result</code>, <code>session_compact</code> — with the</p>
-<p>same result shapes.</p>
+<p>same result shapes. <code>session_shutdown</code>, which gjc 0.18.7 fires on exit, runs</p>
+<p><code>deja hook-session-end</code>.</p>
 <ul>
 <li>The directory hooks stay unwired, and not for want of a path. gjc&#39;s two</li>
 </ul>

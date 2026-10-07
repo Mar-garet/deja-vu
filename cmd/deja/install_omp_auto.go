@@ -277,6 +277,26 @@ export default function extension(pi) {
       run(["hook-precompact"], JSON.stringify({ session_id: sessionID() }));
     } catch {}
   });
+
+  // A session is over when omp exits or switches to another one (/new,
+  // /resume, a fork). Its live stamp goes with it, so the next session's MCP
+  // recall can answer with it now rather than twenty minutes from now (#4210).
+  // On a switch the id remembered so far is the session left behind.
+  const endSession = () => {
+    const id = sessionID();
+    if (id) run(["hook-session-end"], JSON.stringify({ session_id: id }), 2000);
+  };
+  pi.on("session_switch", async (_event, ctx) => {
+    try {
+      endSession();
+      remember(ctx);
+    } catch {}
+  });
+  pi.on("session_shutdown", async (_event) => {
+    try {
+      endSession();
+    } catch {}
+  });
 }
 `, exe)
 }

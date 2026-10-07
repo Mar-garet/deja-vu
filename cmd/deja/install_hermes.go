@@ -80,6 +80,7 @@ description: Recall your own past coding sessions before answering
 provides_hooks:
   - pre_llm_call
   - transform_tool_result
+  - on_session_finalize
 provides_commands:
   - deja
 `
@@ -197,6 +198,17 @@ def repair(tool_name=None, result=None, session_id=None, **kwargs):
     return result + "\n\n" + line if line else None
 
 
+def finalize(session_id=None, **kwargs):
+    # The session is over: exit, /new, a single query finishing, or the
+    # gateway retiring it. on_session_end is not this — it fires after every
+    # turn. Dropping the live stamp lets the next session's recall answer with
+    # this one now rather than twenty minutes from now (#4210).
+    if not session_id:
+        return None
+    _deja(["hook-session-end"], json.dumps({"session_id": session_id}), timeout=3)
+    return None
+
+
 def search(raw_args):
     """/deja <query> — search past sessions without waiting for a recall."""
     query = (raw_args or "").strip()
@@ -218,6 +230,7 @@ def register(ctx):
     # transform_tool_result arrived after pre_llm_call; an older Hermes logs
     # the unknown name and never calls it.
     ctx.register_hook("transform_tool_result", repair)
+    ctx.register_hook("on_session_finalize", finalize)
     # Hermes surfaces registered commands in every session and gateway, which
     # is the cheapest way to be found by someone who has not read the docs.
     ctx.register_command(

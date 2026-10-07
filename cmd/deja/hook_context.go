@@ -56,12 +56,14 @@ type precompactHookInput struct {
 	Messages json.RawMessage `json:"messages"`
 	// Grok spells all of this in camelCase. See hook_grok.go.
 	grokEnvelope
+	// Antigravity names the conversation in camelCase too.
+	AntigravityConversation string `json:"conversationId"`
 }
 
 // adopt fills in what grok spells differently, so the session this compaction
 // belongs to is the one deja forgets.
 func (i *precompactHookInput) adopt() {
-	i.SessionID = adoptGrok(adoptGrok(i.SessionID, i.grokEnvelope.SessionID), i.ConversationID)
+	i.SessionID = adoptGrok(adoptGrok(adoptGrok(i.SessionID, i.grokEnvelope.SessionID), i.ConversationID), i.AntigravityConversation)
 	i.TranscriptPath = adoptGrok(i.TranscriptPath, i.grokEnvelope.TranscriptPath)
 	i.WorkspaceRoots = adoptGrokRoots(i.WorkspaceRoots, i.WorkspaceRoot)
 }

@@ -189,11 +189,26 @@ function appendRepair(part, line) {
   };
 }
 
+// The session this plugin was set up for. The runtime hooks below are handed
+// no session of their own, so setup records it here.
+let session = "";
+
 export default {
   name: "deja",
-  manifest: { capabilities: ["rules", "commands", "skills"] },
+  manifest: { capabilities: ["rules", "commands", "skills", "hooks"] },
+  hooks: {
+    // A run is one prompt and everything the agent did for it. When it ends,
+    // the session's live stamp goes, so another session's MCP recall can
+    // answer with this one now rather than twenty minutes from now; the next
+    // prompt stamps it again before the model is called. Cline has no hook for
+    // the session itself ending.
+    afterRun: () => {
+      if (session) run(["hook-session-end"], JSON.stringify({ session_id: session }), 2000);
+    },
+  },
   setup(api, ctx) {
     const sessionID = (ctx && ctx.session && ctx.session.sessionId) || "";
+    session = sessionID;
     // build runs more than once for a single prompt — cline calls it again
     // with the message list it is about to send — and only the last return is
     // used. So the answer is cached per prompt rather than skipped after the

@@ -73,7 +73,7 @@
 </ul>
 <p><code>$KIMI_CODE_HOME/config.toml</code>: two <code>UserPromptSubmit</code> hooks</p>
 <p>(<code>deja hook-context --plain --once</code>, <code>deja hook-prompt --plain</code>) and a</p>
-<p><code>PreCompact</code> one. Measured on 0.28.1, <code>UserPromptSubmit</code> is the only event</p>
+<p><code>PreCompact</code> one, and a <code>SessionEnd</code> hook that runs <code>deja hook-session-end</code>. Measured on 0.28.1, <code>UserPromptSubmit</code> is the only event</p>
 <p>whose output reaches the model, and it takes plain stdout, so the session</p>
 <p>digest rides the first prompt rather than a session-start hook.</p>
 <ul>

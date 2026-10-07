@@ -177,6 +177,10 @@ Reasonix takes everything as one plugin package (`reasonix-plugin.json`,
   process was filed under; with none or several it files the session under a
   key of its own. A session event with no name that arrives within two
   seconds of a turn is taken as that turn's own.
+- **Session end.** The extension subscribes to `session.end`, which 2.30
+  sends on every exit, and drops the session's live stamp there, at a
+  rotation and when the host closes the pipe, so the session is back in the
+  next one's MCP recall.
 - **2.x is checked from source only.** Reasonix 2.x (branch `studio`) has
   the same v2 manifest and extension protocol, so the package is the same
   there; it has not been run against a 2.x build.

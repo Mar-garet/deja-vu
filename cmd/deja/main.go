@@ -247,8 +247,13 @@ var commands = map[string]command{
 	"hook-antigravity": func(dir string, _ []string) error {
 		return runHookAntigravity(dir, os.Stdin, os.Stdout)
 	},
-	"hook-session-end": func(dir string, _ []string) error {
+	"hook-session-end": func(dir string, rest []string) error {
 		runHookSessionEnd(dir, os.Stdin)
+		// --json: a host that reads every hook's answer as JSON gets the
+		// empty object that means "nothing to add" (Antigravity's Stop).
+		if len(rest) > 0 && (rest[0] == "--json" || rest[0] == "-json") {
+			fmt.Fprintln(os.Stdout, "{}")
+		}
 		return nil
 	},
 	"hook-mcp-call": func(dir string, _ []string) error {

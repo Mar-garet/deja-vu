@@ -82,5 +82,7 @@ not that something spawned it, so deja records no kind for it (#4585).
   sets `GROK_HOOK_EVENT` on every hook it runs, `hook-context` and
   `hook-prompt` serve nothing and log nothing as arrived; the session-start
   receipt is left to say only what the index is doing (#4588).
+- `SessionEnd` runs `deja hook-session-end`, so the session is back in the
+  next one's MCP recall.
 
 **Last verified:** 2026-08-24 against Grok Build 1.0.5 (macos-aarch64)

@@ -1144,7 +1144,10 @@ func installKimiAuto(exe string, uninstall bool) (installResult, error) {
 			// that stops those blocks repeating has to go with it. Nothing is
 			// read back from this hook: forgetting is a side effect, which is
 			// all a fire-and-forget event can carry.
-			"\n" + kimiHookEntry("PreCompact", hookRun(exe, "hook-precompact"))
+			"\n" + kimiHookEntry("PreCompact", hookRun(exe, "hook-precompact")) +
+			// The session is over, so its live stamp goes: the next session's
+			// MCP recall can answer with it now rather than in twenty minutes.
+			"\n" + kimiHookEntry("SessionEnd", hookRun(exe, "hook-session-end"))
 		if s != "" {
 			s += "\n\n"
 		}

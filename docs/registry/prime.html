@@ -96,7 +96,8 @@
 <p><code>~/.prime/agent/extensions/deja.ts</code>. At <code>before_agent_start</code> it returns the</p>
 <p>session digest on the first turn and per-prompt recall after that;</p>
 <p><code>session_start</code> shows a footer status while the first index builds, and</p>
-<p><code>session_compact</code> runs <code>deja hook-precompact</code>. It registers `/deja</p>
+<p><code>session_compact</code> runs <code>deja hook-precompact</code> and <code>session_shutdown</code></p>
+<p><code>deja hook-session-end</code>. It registers `/deja</p>
 <p>&lt;query&gt;<code>, which runs </code>deja search<code>. </code>tool_result` does not fire in</p>
 <p><code>--print</code> on 0.9.1, so the repair line after a failed command is not wired.</p>
 <ul>

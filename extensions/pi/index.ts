@@ -238,4 +238,14 @@ export default function (pi: any) {
       run(["hook-precompact"], JSON.stringify({ session_id: session }));
     } catch {}
   });
+
+  // The session is over: quit, /new, /resume, /fork or a reload. Its live
+  // stamp goes with it, so the next session's MCP recall can answer with it
+  // now rather than twenty minutes from now. The id is the one held so far;
+  // on a switch ctx may already name the next session.
+  pi.on("session_shutdown", async (_event: any) => {
+    try {
+      if (session) run(["hook-session-end"], JSON.stringify({ session_id: session }), 2000);
+    } catch {}
+  });
 }

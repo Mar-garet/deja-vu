@@ -101,17 +101,19 @@ func (x *rxExt) begin(hostSession, workspace string, generation uint64, ui bool)
 
 // observe handles the session events. A session that starts, loads or
 // rotates is a new reader: its digest, its announcement and its dedupe key
-// start over.
+// start over. One that rotates away or ends is over, and its live stamp goes
+// with it, so the next session's MCP recall can answer with it now rather
+// than twenty minutes from now (#4210).
 //
 // Reasonix names the session in sessionPath where it has one: the new
 // session's id at start (internal/control/session_binding.go), the loaded
-// session at load, and the session that is ending at rotate. Events travel a
-// queue of their own, so the one for a session can land after its first
-// turn; an event with no name that arrives right behind a turn is read as
-// that turn's.
+// session at load, and the session that is ending at rotate and at end.
+// Events travel a queue of their own, so the one for a session can land after
+// its first turn; an event with no name that arrives right behind a turn is
+// read as that turn's.
 func (x *rxExt) observe(p rxEventParams) {
 	switch p.Event {
-	case "session.start", "session.load", "session.rotate":
+	case "session.start", "session.load", "session.rotate", "session.end":
 	default:
 		return
 	}
@@ -123,18 +125,28 @@ func (x *rxExt) observe(p rxEventParams) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	s := x.sess
+	if p.Event == "session.end" {
+		// Another session than the one served is over and this one goes on;
+		// otherwise the one being served is over.
+		if id != "" && s.key != id {
+			x.ended(id)
+			return
+		}
+		x.retire(s, id)
+		return
+	}
 	quiet := s.turns == 0 || (!s.lastTurn.IsZero() && time.Since(s.lastTurn) < rxSessionRaceWindow)
 	if p.Event == "session.rotate" {
 		// The id is the session ending. Serving another one already means
 		// the rotate overtook nothing; serving that one means it is over.
 		switch {
 		case id != "" && s.realKey && s.key != id:
-			x.retired[id] = true
+			x.ended(id)
 			return
 		case id != "" && s.realKey && s.key == id:
 		case quiet:
 			if id != "" {
-				x.retired[id] = true
+				x.ended(id)
 			}
 			return
 		}
@@ -160,13 +172,29 @@ func (x *rxExt) observe(p rxEventParams) {
 	x.retire(s, "")
 }
 
+// endServed drops the live stamp of the session being served.
+func (x *rxExt) endServed() {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	endSessionLive(x.dir, x.sess.key)
+}
+
+// ended records that a session is over: the store lookup never hands it to a
+// later session, and its live stamp goes. x.mu is held.
+func (x *rxExt) ended(id string) {
+	x.retired[id] = true
+	endSessionLive(x.dir, id)
+}
+
 // retire ends the session being served and starts the next one. x.mu is held.
+// A key of the sidecar's own was stamped too, so its stamp goes as well.
 func (x *rxExt) retire(s *rxSession, ended string) {
 	if s.realKey {
 		x.retired[s.key] = true
 	}
+	endSessionLive(x.dir, s.key)
 	if ended != "" {
-		x.retired[ended] = true
+		x.ended(ended)
 	}
 	x.sess = &rxSession{boundary: time.Now()}
 }

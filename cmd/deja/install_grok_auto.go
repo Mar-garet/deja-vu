@@ -78,7 +78,7 @@ func installGrokAuto(exe string, uninstall bool) (installResult, error) {
 		for _, ev := range [][2]string{
 			{"SessionStart", "hook-context"}, {"PreCompact", "hook-precompact"},
 			{"UserPromptSubmit", "hook-prompt"}, {"PreToolUse", "hook-tool"},
-			{"PostToolUse", "hook-tool-after"},
+			{"PostToolUse", "hook-tool-after"}, {"SessionEnd", "hook-session-end"},
 		} {
 			root = updateClaudeHook(root, ev[0], hookRun(exe, ev[1]), "", true)
 		}
@@ -121,6 +121,10 @@ func installGrokAuto(exe string, uninstall bool) (installResult, error) {
 	// and hands the hook's context to the model with the result, so a failure
 	// gets the earlier fix the way claude's does (#4499).
 	root = updateClaudeHook(root, "PostToolUse", hookRun(exe, "hook-tool-after"), "Bash", false)
+	// The session is over, so its live stamp goes: the next session's MCP
+	// recall can answer with it now rather than twenty minutes from now. Grok
+	// bounds a SessionEnd hook at 1.5 s by default, which this fits in.
+	root = updateClaudeHook(root, "SessionEnd", hookRun(exe, "hook-session-end"), "", false)
 	next, err := marshalConfigLike(old, root)
 	if err != nil {
 		return installResult{}, err
