@@ -995,20 +995,9 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 	case "copilot-auto":
 		return installCopilotAuto(exe, uninstall)
 	case "vscode", "copilot-chat":
-		mcp, err := installVSCodeMCP(exe, uninstall)
-		if err != nil {
-			return installResult{}, err
-		}
-		// The prompt file is the only thing that tells Copilot Chat's model to
-		// reach for the tool: it fires no hook, so nothing arrives on its own.
-		prompt, err := installCopilotChatPrompt(exe, uninstall)
-		if err != nil {
-			return installResult{}, err
-		}
-		if prompt.Path == "" {
-			return mcp, nil
-		}
-		return wroteAll(mcp, prompt), nil
+		return installVSCode(exe, uninstall)
+	case "vscode-auto", "copilot-chat-auto":
+		return installVSCodeAuto(exe, uninstall)
 	case "hermes":
 		return installHermesMCP(exe, uninstall)
 	case "hermes-auto":
@@ -5008,9 +4997,9 @@ func installTargetNames() []string {
 		// config, and its skill in the folder beside it; there is no hook to
 		// wire, so there is nothing an -auto target would add (#3062).
 		"continue",
-		// VS Code Copilot Chat takes MCP servers and nothing else an outside CLI
-		// can reach — no hook, no plugin — so there is no -auto pair.
-		"vscode",
+		// VS Code Copilot Chat's hooks are the file Copilot CLI's are in, so
+		// vscode-auto and copilot-auto write the same one.
+		"vscode", "vscode-auto",
 		// Zed's agent takes MCP servers and nothing else: no CLI to hand a
 		// prompt to, so there is no -auto pair to install.
 		"zed",

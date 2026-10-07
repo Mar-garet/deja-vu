@@ -416,6 +416,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// that sent nothing at all (#2161).
 	payload := readHookStdin()
 	unreadable := len(bytes.TrimSpace(payload)) > 0 && json.Unmarshal(payload, &input) != nil
+	adoptCopilotHost(payload)
 	input.SessionID = adoptGrok(adoptGrok(input.SessionID, input.grokEnvelope.SessionID), input.ConversationID)
 	input.WorkspaceRoots = adoptGrokRoots(input.WorkspaceRoots, input.WorkspaceRoot)
 	shape := hookToolClaude

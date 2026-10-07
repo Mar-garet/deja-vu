@@ -32,20 +32,34 @@ already name every file.
 - **Skill**: `~/.copilot/skills/deja-history/SKILL.md` (under `$COPILOT_HOME`
   when set), loaded on demand;
   Copilot invokes a skill by name, so it is also the `/deja-history` command.
-- **Auto-recall**: `deja install copilot-auto` adds a `sessionStart` command
-  hook (`deja hook-context --copilot`) under `hooks` in
-  `~/.copilot/settings.json`. Copilot puts the `additionalContext` it prints in
-  front of the first request as its own message and keeps it for the session;
-  the payload names the session as `sessionId` and sends `source: "resume"`
-  on `copilot --resume`. It also adds `preMcpToolCall` (`deja hook-mcp-call`)
-  and `sessionEnd` (`deja hook-session-end`): the MCP server is told nothing
-  about who is calling, so the first marks the session live before each MCP
-  request and recall leaves it out, and the second clears the mark. A
-  `preMcpToolCall` hook's output becomes the request's `_meta`, so it prints
-  nothing. `postToolUse` (`deja hook-tool-after --copilot`) answers a failed
-  command with what this machine ran after the same error before: a non-zero
-  exit is still a successful tool call in Copilot, and the `additionalContext`
-  is appended to the result the model reads next. `COPILOT_HOME` moves all of
+- **Auto-recall**: `deja install copilot-auto` writes
+  `~/.copilot/hooks/deja.json`, which Copilot loads as user-level hooks and VS
+  Code Copilot Chat reads too. Older installs put the entries in
+  `settings.json` or `config.json`; the install takes them out. Measured on
+  1.0.92 against a stub model, every one of these reaches the model:
+  - `sessionStart` (`deja hook-context --copilot`): the digest, as a message
+    of its own in front of the first request, kept for the session.
+  - `userPromptSubmitted` (`deja hook-prompt --copilot`): per-prompt recall,
+    appended to the user's turn inside `<system_reminder>`.
+  - `preToolUse` (`deja hook-tool --copilot`, matcher `bash|powershell|edit|create`):
+    the file's prior decision before an edit, sent as a message after the
+    tool's result. Copilot honours the matcher, so deja does not run for reads.
+  - `postToolUse` and `postToolUseFailure` (`deja hook-tool-after --copilot`,
+    matcher `bash|powershell`): the fix line after a failed command. A non-zero
+    exit is still a successful tool call, so `postToolUse` carries most of
+    them; a tool that errors fires `postToolUseFailure` with the text in `error`.
+  - `PreCompact` (`deja hook-precompact`): spelled the way VS Code reads it;
+    Copilot runs a PascalCase key too, with snake_case fields. The payload
+    names `events.jsonl` as `transcript_path`; deja captures the session from
+    it and hands the packet back on the next tool call or prompt.
+  - `preMcpToolCall` (`deja hook-mcp-call`) and `sessionEnd`
+    (`deja hook-session-end`): the MCP server is told nothing about who is
+    calling, so the first marks the session live before each MCP request and
+    recall leaves it out, and the second clears the mark. A `preMcpToolCall`
+    hook's output becomes the request's `_meta`, so it prints nothing.
+
+  Every answer is the flat `{"additionalContext": …}`; a nested
+  `hookSpecificOutput` runs and reaches no one. `COPILOT_HOME` moves all of
   these files.
 - **Resume**: `copilot --resume=<sessionId>`.
 - **Handoff**: exec.
@@ -71,4 +85,4 @@ Specified in [#655](https://github.com/vshulcz/deja-vu/issues/655), work
 records added in [#1231](https://github.com/vshulcz/deja-vu/pull/1231),
 auto-recall in [#4231](https://github.com/vshulcz/deja-vu/issues/4231).
 
-**Last verified:** 2026-10-01
+**Last verified:** 2026-10-07

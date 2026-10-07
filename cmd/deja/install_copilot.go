@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/sources"
@@ -18,69 +19,137 @@ import (
 // refusing a file over its comments refused every real one.
 const copilotManagedHeader = "// User settings belong in settings.json.\n// This file is managed automatically.\n"
 
-// copilotHooksPath is the file Copilot will read deja's hook from.
+// copilotHooksPath is deja's own hook file, which two hosts read.
 //
-// Copilot CLI 1.0.79 keeps user settings in settings.json and rewrites
-// config.json as a file it manages. On every start it moves the user keys it
-// finds in config.json into settings.json, and a `hooks` key moves whole: it
-// replaces the one in settings.json rather than merging into it. So while the
-// reader's hooks are still in config.json, an entry deja put in settings.json
-// is gone after one launch; written beside theirs, it moves with them.
+// Copilot CLI loads every *.json under ~/.copilot/hooks as user-level hooks
+// (since 0.0.422), and VS Code Copilot Chat lists the same directory among
+// its hook locations (`copilot-personal` in 1.140's workbench). One file
+// therefore wires both, and Copilot CLI's settings.json is left alone: it
+// rewrote config.json on start and moved a `hooks` key into settings.json
+// whole, which is what deja's entries used to be written around.
+//
+// VS Code reads the literal ~/.copilot/hooks, so under a COPILOT_HOME
+// somewhere else only Copilot CLI finds the file.
 func copilotHooksPath() string {
-	config := filepath.Join(sources.CopilotHome(), "config.json")
-	if b, err := os.ReadFile(config); err == nil {
-		var root map[string]any
-		if json.Unmarshal([]byte(jsoncToJSON(string(bytes.TrimPrefix(b, utf8BOM)))), &root) == nil {
-			if _, ok := root["hooks"]; ok {
-				return config
-			}
-		}
-	}
-	return filepath.Join(sources.CopilotHome(), "settings.json")
+	return filepath.Join(sources.CopilotHome(), "hooks", "deja.json")
 }
 
-// copilotHooks is every event deja wires in Copilot CLI. --copilot makes
-// hook-context answer in the only shape Copilot reads. postToolUse carries
-// the fix line after a failed command. The other two keep recall from
-// answering with the session asking it (#4551):
-// preMcpToolCall restamps it before each MCP request, which a sessionStart
-// stamp alone stops covering twenty minutes in, and sessionEnd takes the
-// stamp back. Both payloads name the session as `sessionId` (1.0.91).
-var copilotHooks = []struct {
-	event string
-	args  []string
-}{
-	{"sessionStart", []string{"hook-context", "--copilot"}},
-	{"postToolUse", []string{"hook-tool-after", "--copilot"}},
-	{"preMcpToolCall", []string{"hook-mcp-call"}},
-	{"sessionEnd", []string{"hook-session-end"}},
+// copilotLegacyHookFiles are where installs before the hook file wrote deja's
+// entries. An install clears them, so an upgrade does not run deja twice.
+func copilotLegacyHookFiles() []string {
+	return []string{filepath.Join(sources.CopilotHome(), "settings.json"), filepath.Join(sources.CopilotHome(), "config.json")}
 }
 
-// installCopilotAuto wires Copilot CLI's sessionStart hook to the digest, with
-// the MCP server beside it (#4231).
+// copilotHooks is every event deja wires in the hook file. Measured on Copilot
+// CLI 1.0.92 against a stub model:
 //
-// The digest goes in on sessionStart. Measured on 1.0.79, what it prints goes in front of the
-// first request as a message of its own, is kept for every later turn of the
-// session, and is not written into the user's message; userPromptSubmitted
-// output is appended to the user's own turn instead. The payload names the
-// session as `sessionId`, and `source` is "resume" when an old one is reopened.
+//   - sessionStart and userPromptSubmitted: a flat additionalContext reaches
+//     the model, the first as a message of its own, the second inside the
+//     user's turn. A nested hookSpecificOutput is dropped by both.
+//   - preToolUse: additionalContext arrives as a message after the tool's
+//     result. The matcher is honored, so deja runs only for a shell command
+//     or a file write.
+//   - postToolUse is appended to the result; a command that exits non-zero
+//     is still a success there. postToolUseFailure fires for a tool that
+//     errors, with the message under `error`.
+//   - PreCompact is the one key spelled VS Code's way: VS Code maps only the
+//     camelCase events it shares with Copilot CLI, and Copilot CLI runs a
+//     PascalCase key too, with snake_case fields, so one entry serves both.
+//     The payload names events.jsonl as transcript_path.
+//
+// preMcpToolCall and sessionEnd keep recall from answering with the session
+// asking it (#4551). VS Code runs sessionStart, userPromptSubmitted,
+// preToolUse and postToolUse from the same entries and ignores the rest; it
+// drops `matcher`, so there deja answers for every tool and stays silent on
+// the ones it has nothing for. --copilot answers flat for Copilot CLI and in
+// VS Code's nested shape when the payload carries hook_event_name.
+var copilotHooks = []struct {
+	event   string
+	args    []string
+	matcher string
+}{
+	{"sessionStart", []string{"hook-context", "--copilot"}, ""},
+	{"userPromptSubmitted", []string{"hook-prompt", "--copilot"}, ""},
+	{"preToolUse", []string{"hook-tool", "--copilot"}, copilotPreToolMatcher},
+	{"postToolUse", []string{"hook-tool-after", "--copilot"}, copilotShellMatcher},
+	{"postToolUseFailure", []string{"hook-tool-after", "--copilot"}, copilotShellMatcher},
+	{"PreCompact", []string{"hook-precompact"}, ""},
+	{"preMcpToolCall", []string{"hook-mcp-call"}, ""},
+	{"sessionEnd", []string{"hook-session-end"}, ""},
+}
+
+// Copilot CLI's own tool names, full-match regexes (1.0.36). The shell is
+// powershell on Windows.
+const (
+	copilotShellMatcher   = "bash|powershell"
+	copilotPreToolMatcher = "bash|powershell|edit|create"
+)
+
+// installCopilotAuto wires Copilot CLI's hooks, and VS Code Copilot Chat's
+// through the same file, with the MCP server beside them (#4231).
 func installCopilotAuto(exe string, uninstall bool) (installResult, error) {
+	return installCopilotHookFile(exe, uninstall, installCopilotMCP, "vscode")
+}
+
+// installVSCodeAuto is the same hook file, reached from the VS Code side: a
+// reader with VS Code and no Copilot CLI gets the hooks Copilot Chat reads.
+func installVSCodeAuto(exe string, uninstall bool) (installResult, error) {
+	return installCopilotHookFile(exe, uninstall, installVSCode, "copilot")
+}
+
+// installVSCode writes Copilot Chat's MCP entry and the prompt file that is
+// its /deja command.
+func installVSCode(exe string, uninstall bool) (installResult, error) {
+	mcp, err := installVSCodeMCP(exe, uninstall)
+	if err != nil {
+		return installResult{}, err
+	}
+	prompt, err := installCopilotChatPrompt(exe, uninstall)
+	if err != nil {
+		return installResult{}, err
+	}
+	if prompt.Path == "" {
+		return mcp, nil
+	}
+	return wroteAll(mcp, prompt), nil
+}
+
+// copilotHookFileWantedBy reports whether the other target sharing the hook
+// file is installed and staying.
+func copilotHookFileWantedBy(other string) bool {
+	if removingTargets[other] {
+		return false
+	}
+	return slices.Contains(readWiringState().Targets, other+"-auto")
+}
+
+// installCopilotHookFile writes deja.json and clears the entries older
+// installs left in settings.json and config.json. Every edit is worked out
+// before anything is written, and the MCP entry after them: a file deja has
+// to refuse used to be found only once mcp-config.json had been written.
+//
+// The file is shared by copilot-auto and vscode-auto, so taking one of them
+// out leaves it while the other is still installed.
+func installCopilotHookFile(exe string, uninstall bool, mcpFor func(string, bool) (installResult, error), other string) (installResult, error) {
 	target := copilotHooksPath()
-	paths := []string{filepath.Join(sources.CopilotHome(), "settings.json"), filepath.Join(sources.CopilotHome(), "config.json")}
-	// Both hook edits are worked out before anything is written, and the MCP
-	// entry after them: a file deja has to refuse used to be found only once
-	// mcp-config.json and settings.json had already been written.
-	plans := make([]copilotHooksPlan, 0, len(paths))
-	for _, path := range paths {
-		// The other file is only ever cleared: an entry left there from an
-		// earlier install would run twice, or be what the move overwrites.
-		plan, err := planCopilotHooks(path, exe, uninstall || path != target)
+	keep := uninstall && copilotHookFileWantedBy(other)
+	plans := make([]copilotHooksPlan, 0, 3)
+	for _, path := range copilotLegacyHookFiles() {
+		plan, err := planCopilotHooks(path, exe, true)
+		if err != nil {
+			return installResult{}, err
+		}
+		plan.clearing = true
+		plans = append(plans, plan)
+	}
+	if !keep {
+		plan, err := planCopilotHooks(target, exe, uninstall)
 		if err != nil {
 			return installResult{}, err
 		}
 		plans = append(plans, plan)
 	}
-	mcp, err := installCopilotMCP(exe, uninstall)
+	mcp, err := mcpFor(exe, uninstall)
 	if err != nil {
 		return installResult{}, err
 	}
@@ -108,7 +177,10 @@ type copilotHooksPlan struct {
 	path       string
 	old, next  []byte
 	addedBlock bool
-	result     installResult
+	// clearing is an older install's file being emptied of deja, which is a
+	// removal even on the install path: a settings.json deja created goes.
+	clearing bool
+	result   installResult
 }
 
 func (p copilotHooksPlan) apply() (installResult, error) {
@@ -117,6 +189,10 @@ func (p copilotHooksPlan) apply() (installResult, error) {
 	}
 	if p.addedBlock {
 		noteBlockAdded(p.path, "hooks")
+	}
+	if p.clearing && !removingWiring {
+		removingWiring = true
+		defer func() { removingWiring = false }()
 	}
 	a, err := writeIfChanged(p.path, p.old, p.next)
 	return installResult{Path: p.path, Action: a}, err
@@ -172,13 +248,13 @@ func planCopilotHooks(path, exe string, uninstall bool) (copilotHooksPlan, error
 		added = true
 	}
 	for _, h := range copilotHooks {
-		setCopilotHook(hooks, h.event, exe, uninstall, h.args...)
+		setCopilotHook(hooks, h.event, h.matcher, exe, uninstall, h.args...)
 	}
 	// The object deja added can be in either file by now: Copilot moves
 	// config.json's hooks into settings.json on start, and the record names
 	// the file deja wrote.
 	if len(hooks) == 0 && !added {
-		for _, p := range []string{filepath.Join(filepath.Dir(path), "settings.json"), filepath.Join(filepath.Dir(path), "config.json")} {
+		for _, p := range append([]string{path}, copilotLegacyHookFiles()...) {
 			if blockWasAdded(p, "hooks") {
 				delete(root, "hooks")
 				forgetBlockAdded(p, "hooks")
@@ -226,8 +302,9 @@ func snapshotIfSame(path string, root map[string]any, next []byte) []byte {
 
 // setCopilotHook keeps one deja entry under an event and leaves every other
 // one alone. Entries are flat — {"type","bash","timeoutSec"} — the same schema
-// as a repository's .github/hooks/*.json.
-func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool, args ...string) {
+// as a repository's .github/hooks/*.json. matcher, when set, is the tool-name
+// regex Copilot CLI runs the entry for.
+func setCopilotHook(hooks map[string]any, event, matcher, exe string, uninstall bool, args ...string) {
 	cmd := hookRun(exe, args...)
 	base := strings.TrimSuffix(cmd, " --copilot")
 	entries, _ := hooks[event].([]any)
@@ -259,11 +336,13 @@ func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool, arg
 			if runtime.GOOS == "windows" {
 				entry["powershell"] = copilotPowerShellCommand(exe, args...)
 			}
+			setHookMatcher(entry, matcher)
 		}
 		kept = append(kept, entryAny)
 	}
 	if !uninstall && !found {
 		entry := map[string]any{"type": "command", "bash": cmd, "timeoutSec": copilotHookTimeoutSec}
+		setHookMatcher(entry, matcher)
 		// On Windows Copilot picks the powershell line when there is one;
 		// `&` is what lets PowerShell run a quoted path.
 		if runtime.GOOS == "windows" {
@@ -276,6 +355,14 @@ func setCopilotHook(hooks map[string]any, event, exe string, uninstall bool, arg
 		return
 	}
 	hooks[event] = kept
+}
+
+func setHookMatcher(entry map[string]any, matcher string) {
+	if matcher == "" {
+		delete(entry, "matcher")
+		return
+	}
+	entry["matcher"] = matcher
 }
 
 // copilotHooksOffIn names the file whose disableAllHooks turns every Copilot

@@ -15,14 +15,14 @@ import (
 // preMcpToolCall before every MCP request with the session in the payload, so
 // the stamp is fresh at the moment it is read; sessionEnd takes it back.
 func TestCopilotAutoStampsTheSessionAtEachMCPCallAndClearsItAtTheEnd(t *testing.T) {
-	home := copilotTestHome(t)
+	copilotTestHome(t)
 	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
 		t.Fatal(err)
 	}
-	got := readFile(t, filepath.Join(home, ".copilot", "settings.json"))
+	got := readFile(t, copilotHooksPath())
 	var cfg copilotHookFile
 	if err := json.Unmarshal([]byte(got), &cfg); err != nil {
-		t.Fatalf("settings.json is not JSON: %v\n%s", err, got)
+		t.Fatalf("the hook file is not JSON: %v\n%s", err, got)
 	}
 	for event, sub := range map[string]string{"preMcpToolCall": " hook-mcp-call", "sessionEnd": " hook-session-end"} {
 		entries := cfg.Hooks[event]

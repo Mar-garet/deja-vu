@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,6 +46,26 @@ func emitHookResponse(resp sessionStartHookResponse) {
 // success, and nothing reaches the model. It has no channel for the receipt
 // line either, so a response carrying only that prints nothing (#4231).
 var copilotHookOutput bool
+
+// adoptCopilotHost picks the answer's shape for the hook file Copilot CLI and
+// VS Code Copilot Chat both read (~/.copilot/hooks/deja.json). Copilot CLI's
+// camelCase events send camelCase payloads and read only the flat shape. VS
+// Code sends hook_event_name and reads Claude's hookSpecificOutput — for
+// SessionStart, PreToolUse and PostToolUse nothing else (Copilot Chat 0.68).
+// It shows systemMessage as a warning, so the receipt line stays out.
+func adoptCopilotHost(payload []byte) {
+	if !copilotHookOutput {
+		return
+	}
+	var p struct {
+		HookEventName string `json:"hook_event_name"`
+	}
+	_ = json.NewDecoder(bytes.NewReader(payload)).Decode(&p)
+	if p.HookEventName != "" {
+		copilotHookOutput = false
+		strictHookOutput = true
+	}
+}
 
 func emitCopilotContext(w io.Writer, context string) {
 	if context == "" {

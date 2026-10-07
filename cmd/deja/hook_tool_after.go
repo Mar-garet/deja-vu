@@ -62,9 +62,11 @@ type toolAfterInput struct {
 	// the command's output under `error` rather than tool_response — measured
 	// on qwen-code 0.20.0. Without this the hook fires at the failure and finds
 	// nothing to look up.
-	Error     json.RawMessage `json:"error"`
-	SessionID string          `json:"session_id"`
-	CWD       string          `json:"cwd"`
+	Error json.RawMessage `json:"error"`
+	// Cursor's postToolUseFailure names the failure here (2026.09.02).
+	ErrorMessage json.RawMessage `json:"error_message"`
+	SessionID    string          `json:"session_id"`
+	CWD          string          `json:"cwd"`
 	// Grok spells the rest in camelCase and puts the result under
 	// toolResult (#4499). See hook_grok.go.
 	grokEnvelope
@@ -84,6 +86,7 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 	_ = json.NewDecoder(bytes.NewReader(raw)).Decode(&input)
 	input.ToolName = adoptGrok(adoptGrok(input.ToolName, input.grokEnvelope.ToolName), input.LLMToolName)
 	input.SessionID = adoptGrok(input.SessionID, input.grokEnvelope.SessionID)
+	adoptCopilotHost(raw)
 	// The kill switch, before anything is read. It reached the session-start
 	// hook and nothing else, so a machine with recall off still had text drawn
 	// from its own indexed sessions injected here (#2701).
@@ -127,6 +130,9 @@ func runHookToolAfterMode(dir string, stdin io.Reader, stdout io.Writer, plain b
 	}
 	if len(bytes.TrimSpace(response)) == 0 {
 		response = input.ToolResult
+	}
+	if len(bytes.TrimSpace(response)) == 0 {
+		response = input.ErrorMessage
 	}
 	out := toolResponseText(response)
 	if out == "" {
@@ -207,7 +213,10 @@ func isCommandTool(name string) bool {
 		// Command Code's payload carries the internal name, not the SHELL its
 		// matcher sees (#4371); that matcher is a case-insensitive regex, so it
 		// fires on powershell too (#4540).
-		"shell_command":
+		"shell_command",
+		// VS Code Copilot Chat's terminal tool; its result ends with
+		// "Command exited with code N" when the command failed.
+		"run_in_terminal":
 		return true
 	}
 	return false
