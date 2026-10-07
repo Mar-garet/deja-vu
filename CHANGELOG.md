@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- recall called by an agent puts the sessions of the project it works in first, the way the prompt hook ranks, then the rest of the machine. On a stand with ~1800 real sessions behind one project, the planted answer reached the recall page for 43 of 56 real agent queries, up from 20 (#4778). A `project` passed to recall now filters it; it was accepted and ignored (#4779).
 - `deja blame` no longer quotes a JSON dump or a long file listing from tool output as a session's excerpt, or counts each path in it as a mention. deja's own `--json` output and web search results were the usual source (#4776).
 - `deja doctor` on Windows says when the CodeBuddy plugin is on but CodeBuddy finds no Git Bash to run its shell scripts, and points at `deja install codebuddy-auto` (#4753).
 - A word with ä, ö, ü or ß is found by its ASCII spelling and the other way round: `mueller` finds `Müller`, `strasse` finds `Straße`. Only `muller` did before (#4690).
