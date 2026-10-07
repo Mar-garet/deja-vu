@@ -152,6 +152,9 @@ func StripClosedHarnessBlocks(text string) string {
 // envelope's field names as the identifying terms (#3156) — and once the block
 // was gone, about the host's own paragraph above it.
 func StripHarnessBlocks(prompt string) string {
+	if strings.Contains(prompt, checkpointOpen) {
+		prompt = checkpointTurn(prompt)
+	}
 	if strings.Contains(prompt, "[") {
 		prompt = stripHostPreamble(prompt)
 	}
@@ -164,6 +167,53 @@ func StripHarnessBlocks(prompt string) string {
 		prompt = stripHookStatusLines(prompt)
 	}
 	return strings.TrimSpace(prompt)
+}
+
+const (
+	checkpointOpen  = "<conversation-checkpoint>"
+	checkpointClose = "</conversation-checkpoint>"
+)
+
+// checkpointEntryRE opens one message of a checkpoint's recent part, as
+// opencode 2.x serialises it (session/compaction.ts messageToText).
+var checkpointEntryRE = regexp.MustCompile(`(?m)^\[(?:User|Assistant[^\]\n]*|Tool [^\]\n]*|Synthetic context|Shell|Skill activated:[^\]\n]*|Attached [^\]\n]*)\]`)
+
+// checkpointTurn replaces opencode 2.x's conversation checkpoint with the last
+// thing the person said in it. After a compaction the next turn opens with the
+// summary and the kept messages folded into one user message, and the prompt
+// hook ranked recall on every word of the summary (#4795). The newest [User]
+// entry of <recent-context> is the turn being asked; a checkpoint with none is
+// the host alone.
+func checkpointTurn(prompt string) string {
+	start := strings.Index(prompt, checkpointOpen)
+	end := len(prompt)
+	if i := strings.Index(prompt[start:], checkpointClose); i >= 0 {
+		end = start + i + len(checkpointClose)
+	}
+	block := prompt[start:end]
+	recent := ""
+	if _, rest, ok := strings.Cut(block, "<recent-context>"); ok {
+		recent, _, _ = strings.Cut(rest, "</recent-context>")
+	}
+	turn := ""
+	marks := checkpointEntryRE.FindAllStringIndex(recent, -1)
+	for i := len(marks) - 1; i >= 0; i-- {
+		if recent[marks[i][0]:marks[i][1]] != "[User]" {
+			continue
+		}
+		to := len(recent)
+		if i+1 < len(marks) {
+			to = marks[i+1][0]
+		}
+		text := strings.TrimSpace(strings.TrimPrefix(recent[marks[i][1]:to], ":"))
+		// A directory switch is serialised as a [User] line the person never typed.
+		if strings.HasPrefix(text, "The working directory has been changed to ") {
+			continue
+		}
+		turn = text
+		break
+	}
+	return prompt[:start] + turn + prompt[end:]
 }
 
 // stripHookStatusLines drops the lines that are a hook's status bar pasted
