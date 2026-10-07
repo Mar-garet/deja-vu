@@ -226,17 +226,15 @@
 <p>1.39.1). A <code>session.start</code> or <code>session.load</code> event names the session in</p>
 <p><code>sessionPath</code> where Reasonix has one — a bare id on the 1.x binding, a</p>
 <p>session directory or a JSONL path elsewhere — and that is the key; a</p>
-<p><code>session.rotate</code> names the session that is ending. Without a name, deja</p>
-<p>takes the one <code>sessions-v4</code> directory in the workspace whose manifest</p>
-<p><code>createdAt</code> is after the session began and that no earlier session in the</p>
-<p>process was filed under; with none or several it files the session under a</p>
-<p>key of its own. A session event with no name that arrives within two</p>
-<p>seconds of a turn is taken as that turn&#39;s own.</p>
+<p><code>session.rotate</code> names the session that is ending. Until an event names</p>
+<p>it, deja files the session under a key of its own. A session event with no</p>
+<p>name that arrives within two seconds of a turn is taken as that turn&#39;s own.</p>
 <ul>
-<li><strong>2.x is checked from source only.</strong> Reasonix 2.x (branch <code>studio</code>) has</li>
+<li><strong>2.x.</strong> Reasonix 2.30 speaks the same v2 protocol and was run live: it</li>
 </ul>
-<p>the same v2 manifest and extension protocol, so the package is the same</p>
-<p>there; it has not been run against a 2.x build.</p>
+<p>sends <code>session.start</code> or <code>session.load</code> with the JSONL path ahead of every</p>
+<p><code>input.receive</code>, and keeps sessions in <code>projects/&lt;slug&gt;/sessions/</code>, with no</p>
+<p><code>sessions-v4</code>.</p>
 
 <hr>
 <p>deja reads this format and thirty-seven others, and turns what it finds into memory your

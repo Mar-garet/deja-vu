@@ -7,90 +7,27 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
 // Which session the sidecar is serving, and what it tells the person about it.
 
 // sessionKey is the id deja files this session's injections under: the one a
-// session event named, else the one sessions-v4 directory in this workspace
-// whose manifest says it was created after this session began and that no
-// earlier session in this process was filed under. With none or several, a
-// key of the sidecar's own stands in — still one reader, just not one deja
-// can match to the transcript it will later index.
+// session event named, else a key of the sidecar's own until one does.
+//
+// It used to look for the session in the workspace's sessions-v4 store first,
+// for a 1.x host whose session event could land after the first turn. Reasonix
+// 2.x keeps no sessions-v4 (projects/<slug>/sessions/<id>.jsonl instead) and
+// sends session.start or session.load, naming the transcript, ahead of every
+// input.receive; on a 2.30 stand every injection went in under the real id, so
+// the scan only ever read a directory that is not there (#4795).
 func (x *rxExt) sessionKey() string {
 	x.mu.Lock()
-	s, workspace := x.sess, x.workspace
-	if s.realKey {
-		defer x.mu.Unlock()
-		return s.key
-	}
-	since := s.boundary
-	exclude := make(map[string]bool, len(x.retired))
-	for k := range x.retired {
-		exclude[k] = true
-	}
-	x.mu.Unlock()
-	id := reasonixLiveSession(sources.ReasonixWorkspaceStore(workspace), since, exclude)
-	x.mu.Lock()
 	defer x.mu.Unlock()
-	if x.sess != s {
-		return s.key
-	}
-	if s.realKey {
-		return s.key
-	}
-	if id != "" {
-		s.key, s.realKey = id, true
-		return s.key
-	}
+	s := x.sess
 	if s.key == "" {
 		s.key = "reasonix-" + strconv.Itoa(os.Getppid()) + "-" + strconv.FormatInt(s.boundary.UnixNano(), 36)
 	}
 	return s.key
-}
-
-// reasonixLiveSession is the id of the one session directory in store whose
-// manifest records a creation at or after since, leaving out the ids in
-// exclude, or "" when there is not exactly one. A write time says nothing
-// here: the session a /new replaced is saved as it ends, and a parallel
-// Reasonix in the same workspace writes whenever it likes.
-func reasonixLiveSession(store string, since time.Time, exclude map[string]bool) string {
-	if store == "" {
-		return ""
-	}
-	entries, err := os.ReadDir(store)
-	if err != nil {
-		return ""
-	}
-	found := ""
-	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		var m struct {
-			SessionID string    `json:"sessionId"`
-			CreatedAt time.Time `json:"createdAt"`
-		}
-		b, err := os.ReadFile(filepath.Join(store, e.Name(), "manifest.json"))
-		if err != nil || json.Unmarshal(b, &m) != nil || m.CreatedAt.IsZero() || m.CreatedAt.Before(since) {
-			continue
-		}
-		id := m.SessionID
-		if id == "" {
-			id = e.Name()
-		}
-		if exclude[id] {
-			continue
-		}
-		if found != "" {
-			return ""
-		}
-		found = id
-	}
-	return found
 }
 
 // reasonixSessionIDFrom reads a session event's sessionPath: a bare session
