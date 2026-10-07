@@ -11,9 +11,9 @@ import {
   cliPluginPath,
   contextText,
   contributions,
-  lastUserText,
   mcpWired,
   stripJSONComments,
+  userTurns,
 } from "../lib.js"
 import { DejaPlugin } from "../index.js"
 
@@ -30,21 +30,16 @@ test("contextText falls back to bare text", () => {
   assert.deepEqual(contextText(""), { context: "", receipt: "" })
 })
 
-test("lastUserText joins the newest user message, ignoring the assistant's", () => {
+test("userTurns joins each user message's text, oldest first, skipping the assistant's", () => {
   const messages = [
     { info: { role: "user" }, parts: [{ type: "text", text: "old" }] },
     { info: { role: "assistant" }, parts: [{ type: "text", text: "reply" }] },
     { info: { role: "user" }, parts: [{ type: "text", text: "why" }, { type: "text", text: "this" }] },
   ]
-  const { prompt, parts } = lastUserText(messages)
-  assert.equal(prompt, "why\nthis")
-  assert.equal(parts.length, 2)
-})
-
-test("lastUserText is empty when there is nothing to rank against", () => {
-  assert.equal(lastUserText([]).prompt, "")
-  assert.equal(lastUserText(undefined).prompt, "")
-  assert.equal(lastUserText([{ info: { role: "user" }, parts: [{ type: "file" }] }]).prompt, "")
+  const turns = userTurns(messages)
+  assert.deepEqual(turns.map((u) => u.prompt), ["old", "why\nthis"])
+  assert.equal(turns[1].parts.length, 2)
+  assert.deepEqual(userTurns(undefined), [])
 })
 
 test("clampLimit keeps the window small", () => {
@@ -417,4 +412,48 @@ test("a prompt with no text still stamps the session live", async () => {
     assert.equal(JSON.parse(line.slice("hook-prompt ".length)).session_id, "ses_I")
     assert.deepEqual(output.messages[0].parts, [image], "the image part was changed")
   })
+})
+
+// opencode builds every model call afresh from its store, so recall added to
+// the user's message lasted one call: after the agent's first tool call it was
+// gone, and deja, having shown it once, would not send it again (#4786).
+test("a question keeps its recall in every call after the first", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "deja-oc-"))
+  const bin = join(dir, "deja")
+  const calls = join(dir, "calls")
+  const shown = join(dir, "shown")
+  writeFileSync(
+    bin,
+    `#!/bin/sh\nif [ "$1" = version ]; then echo 0.0.0; exit 0; fi\nin=$(cat)\nprintf '%s %s\\n' "$1" "$in" >> ${calls}\n` +
+      `if [ "$1" = hook-prompt ] && [ ! -e ${shown} ]; then touch ${shown}; echo '{"hookSpecificOutput":{"additionalContext":"RECALL-DANA"}}'; fi\n`,
+    { mode: 0o755 },
+  )
+  await withConfigHome(dir, async () => {
+    const hooks = await DejaPlugin({ client: quietClient(), directory: dir }, { bin })
+    const user = (id, text) => ({ info: { id, role: "user", sessionID: "ses_P" }, parts: [{ type: "text", text }] })
+    const reply = { info: { id: "m2", role: "assistant", sessionID: "ses_P" }, parts: [{ type: "text", text: "reading go.mod" }] }
+    const call = async (messages) => {
+      await hooks["experimental.chat.messages.transform"]({ sessionID: "ses_P" }, { messages })
+      return messages
+    }
+    const first = await call([user("m1", "who reviews the pgx PR?")])
+    const afterTool = await call([user("m1", "who reviews the pgx PR?"), reply])
+    const nextTurn = await call([user("m1", "who reviews the pgx PR?"), reply, user("m3", "and the bulk import?")])
+    for (const [when, msgs] of [["first call", first], ["after a tool", afterTool], ["next turn", nextTurn]]) {
+      assert.equal(msgs[0].parts[0].text.split("RECALL-DANA").length - 1, 1, `${when}: the question lost its recall`)
+    }
+    assert.ok(!nextTurn[2].parts[0].text.includes("RECALL-DANA"), "the next question got the first one's recall")
+    const asked = readFileSync(calls, "utf8").split("\n").filter((l) => l.startsWith("hook-prompt "))
+    assert.equal(asked.length, 2, "deja was asked again for a question it already answered")
+  })
+})
+
+test("userTurns keys a message by its id, and by its place where it has none", () => {
+  const turns = userTurns([
+    { info: { id: "m1", role: "user", sessionID: "s" }, parts: [{ type: "text", text: "a" }] },
+    { info: { role: "assistant" }, parts: [] },
+    { info: { role: "user", sessionID: "s" }, parts: [{ type: "file" }] },
+  ])
+  assert.deepEqual(turns.map((u) => u.key), ["m1", "s#1#"])
+  assert.equal(turns[1].parts.length, 0)
 })

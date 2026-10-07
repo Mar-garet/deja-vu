@@ -322,6 +322,12 @@ export default {
     // for twenty minutes (#4571).
     const live = new Set()
     const endSession = (id) => runHook("hook-session-end", JSON.stringify({ session_id: id }), cwd)
+    // The per-prompt recall each user message was given, by message.
+    const recalled = new Map()
+    const remember = (key, extra) => {
+      recalled.set(key, extra)
+      if (recalled.size > 1000) recalled.delete(recalled.keys().next().value)
+    }
 
     // Session digest: fold into the first system block rather than
     // appending a second one. An OpenAI-compatible endpoint that requires
@@ -367,24 +373,35 @@ export default {
     // re-injects the same block.
     await ctx.session.hook("context", async (event) => {
       try {
-        const msgs = event.messages || []
-        let last
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          if (msgs[i]?.role === "user") { last = msgs[i]; break }
+        const sid = event.sessionID || ""
+        const users = []
+        for (const m of event.messages || []) {
+          if (m?.role !== "user") continue
+          const parts = (m.content || []).filter((p) => p?.type === "text" && p.text)
+          const prompt = parts.map((p) => p.text).join("\n").trim()
+          users.push({ key: m.id || sid + "#" + users.length + "#" + prompt, parts, prompt })
         }
+        const last = users[users.length - 1]
         if (!last) return
-        const parts = (last.content || []).filter((p) => p?.type === "text" && p.text)
-        const prompt = parts.map((p) => p.text).join("\n").trim()
-        // A turn with no text, an image alone, still goes to hook-prompt:
-        // that call is what stamps the session live again after its last
-        // turn ended it (#4573).
-        if (event.sessionID) live.add(event.sessionID)
-        const payload = { prompt, session_id: event.sessionID || "", cwd }
-        const raw = await runHook("hook-prompt", JSON.stringify(payload))
-        if (!prompt || !raw.trim()) return
-        const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
-        if (!extra) return
-        parts[parts.length - 1].text += "\n\n" + extra
+        // Asked once per message. opencode builds every model call afresh
+        // from its store, so text added to a message here lasts one call:
+        // once the agent ran a tool the recall was gone, and deja, having
+        // shown it, would not send it again (#4786).
+        if (!recalled.has(last.key)) {
+          // A turn with no text, an image alone, still goes to hook-prompt:
+          // that call is what stamps the session live again after its last
+          // turn ended it (#4573).
+          if (sid) live.add(sid)
+          const raw = await runHook("hook-prompt", JSON.stringify({ prompt: last.prompt, session_id: sid, cwd }))
+          remember(last.key, last.prompt && raw.trim() ? JSON.parse(raw)?.hookSpecificOutput?.additionalContext || "" : "")
+        }
+        // Every message gets back what it was given, in every call, the way
+        // Claude Code keeps a prompt hook's text in its transcript.
+        for (const u of users) {
+          const extra = recalled.get(u.key)
+          const tail = u.parts[u.parts.length - 1]
+          if (extra && tail && !tail.text.endsWith(extra)) tail.text += "\n\n" + extra
+        }
       } catch {
         // memory is optional: never break the session over it
       }
@@ -613,6 +630,12 @@ func legacyPluginJSFor(target, exe string) string {
   // the next session's MCP recall left a finished one out (#4546).
   const live = new Set()
   const endSession = (id) => $%secho ${JSON.stringify({ session_id: id })} | %q hook-session-end%s.quiet()
+  // The per-prompt recall each user message was given, by message.
+  const recalled = new Map()
+  const remember = (key, extra) => {
+    recalled.set(key, extra)
+    if (recalled.size > 1000) recalled.delete(recalled.keys().next().value)
+  }
   // The session that spawned each one, asked of opencode once. A task
   // sub-agent's digest and recall led with its parent, which is live and
   // asking through it (#4548).
@@ -714,27 +737,41 @@ func legacyPluginJSFor(target, exe string) string {
         // and the packet would count as delivered to a turn that never saw it.
         const owner = msgs.find((m) => m?.info?.sessionID)?.info?.sessionID
         if (owner && compacting.has(owner)) return
-        let last
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          if (msgs[i]?.info?.role === "user") { last = msgs[i]; break }
+        const users = []
+        for (const m of msgs) {
+          if (m?.info?.role !== "user") continue
+          const parts = (m.parts || []).filter((p) => p?.type === "text" && p.text)
+          const prompt = parts.map((p) => p.text).join("\n").trim()
+          users.push({ key: m.info?.id || (m.info?.sessionID || "") + "#" + users.length + "#" + prompt, parts, prompt, sessionID: m.info?.sessionID || "" })
         }
+        const last = users[users.length - 1]
         if (!last) return
-        const parts = (last.parts || []).filter((p) => p?.type === "text" && p.text)
-        const prompt = parts.map((p) => p.text).join("\n").trim()
-        // A turn with no text, an image alone, still goes to hook-prompt:
-        // that call is what stamps the session live again after session.idle
-        // ended it (#4573).
-        // The session id travels with the payload so recall can skip what it
-        // already showed this session. Without it every message re-injects the
-        // same block: measured on a real store, half of all injections were a
-        // word-for-word repeat, and all but five of those came within a minute.
-        const sessionID = input?.sessionID || last?.info?.sessionID || ""
-        if (sessionID) live.add(sessionID)
-        const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, parent_session_id: await parentOf(sessionID), cwd })} | %s%q hook-prompt%s.text()
-        if (!prompt || !raw.trim()) return
-        const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
-        if (!extra) return
-        parts[parts.length - 1].text += "\n\n" + extra
+        // Asked once per message. opencode builds every model call afresh
+        // from its store, so text added to a message here lasts one call:
+        // once the agent ran a tool the recall was gone, and deja, having
+        // shown it, would not send it again (#4786).
+        if (!recalled.has(last.key)) {
+          // A turn with no text, an image alone, still goes to hook-prompt:
+          // that call is what stamps the session live again after
+          // session.idle ended it (#4573).
+          // The session id travels with the payload so recall can skip what
+          // it already showed this session. Without it every message
+          // re-injects the same block: measured on a real store, half of all
+          // injections were a word-for-word repeat, and all but five of those
+          // came within a minute.
+          const sessionID = input?.sessionID || last.sessionID
+          if (sessionID) live.add(sessionID)
+          const prompt = last.prompt
+          const raw = await $%secho ${JSON.stringify({ prompt, session_id: sessionID, parent_session_id: await parentOf(sessionID), cwd })} | %s%q hook-prompt%s.text()
+          remember(last.key, prompt && raw.trim() ? JSON.parse(raw)?.hookSpecificOutput?.additionalContext || "" : "")
+        }
+        // Every message gets back what it was given, in every call, the way
+        // Claude Code keeps a prompt hook's text in its transcript.
+        for (const u of users) {
+          const extra = recalled.get(u.key)
+          const tail = u.parts[u.parts.length - 1]
+          if (extra && tail && !tail.text.endsWith(extra)) tail.text += "\n\n" + extra
+        }
       } catch {
         // memory is optional: never break the session over it
       }

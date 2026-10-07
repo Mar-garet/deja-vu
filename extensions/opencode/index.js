@@ -23,9 +23,9 @@ import {
   configPaths,
   contextText,
   contributions,
-  lastUserText,
   mcpWired,
   TOOL_SPECS,
+  userTurns,
   zodTools,
 } from "./lib.js"
 
@@ -172,6 +172,12 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
   // session ended, so without ending them here the stamp sat out its whole
   // window and the next session's MCP recall left a finished one out (#4546).
   const live = new Set()
+  // The per-prompt recall each user message was given, by message.
+  const recalled = new Map()
+  const remember = (key, extra) => {
+    recalled.set(key, extra)
+    if (recalled.size > 1000) recalled.delete(recalled.keys().next().value)
+  }
   const endSession = (id) => ask(["hook-session-end"], JSON.stringify({ session_id: id }), 5000)
   // The session that spawned each one, asked of opencode once. A task
   // sub-agent's digest and recall led with its parent, which is live and
@@ -348,22 +354,34 @@ export const DejaPlugin = async ({ client, directory }, options = {}) => {
       // the recovery packet would count as delivered to a turn that never saw it.
       const owner = (output?.messages || []).find((m) => m?.info?.sessionID)?.info?.sessionID
       if (owner && compacting.has(owner)) return
-      const { parts, prompt, sessionID } = lastUserText(output?.messages)
-      // A turn with no text, an image alone, still goes to hook-prompt: that
-      // call is what stamps the session live again after session.idle ended
-      // it, and without it the turn's MCP recall could return the session to
-      // itself (#4573). sessionID is empty when there is no user message.
-      if (!prompt && !sessionID) return
-      // The session id lets recall skip what it already showed this session.
-      // Without it every message re-injects the same block — measured on a real
-      // store, half of all injections were a word-for-word repeat.
-      const key = input?.sessionID || sessionID || ""
-      if (key) live.add(key)
-      const raw = await ask(["hook-prompt"], JSON.stringify({ prompt, session_id: key, parent_session_id: await parentOf(key), cwd }))
-      if (!prompt || !raw) return
-      const extra = JSON.parse(raw)?.hookSpecificOutput?.additionalContext
-      if (!extra) return
-      parts[parts.length - 1].text += "\n\n" + extra
+      const users = userTurns(output?.messages)
+      const last = users[users.length - 1]
+      if (!last) return
+      // Asked once per message. opencode builds every model call afresh from
+      // its store, so text added to a message here lasts one call: once the
+      // agent ran a tool the recall was gone, and deja, having shown it, would
+      // not send it again (#4786).
+      if (!recalled.has(last.key)) {
+        // A turn with no text, an image alone, still goes to hook-prompt: that
+        // call is what stamps the session live again after session.idle ended
+        // it, and without it the turn's MCP recall could return the session
+        // to itself (#4573).
+        // The session id lets recall skip what it already showed this
+        // session. Without it every message re-injects the same block —
+        // measured on a real store, half of all injections were a
+        // word-for-word repeat.
+        const key = input?.sessionID || last.sessionID || ""
+        if (key) live.add(key)
+        const raw = await ask(["hook-prompt"], JSON.stringify({ prompt: last.prompt, session_id: key, parent_session_id: await parentOf(key), cwd }))
+        remember(last.key, last.prompt && raw ? JSON.parse(raw)?.hookSpecificOutput?.additionalContext || "" : "")
+      }
+      // Every message gets back what it was given, in every call, the way
+      // Claude Code keeps a prompt hook's text in its transcript.
+      for (const u of users) {
+        const extra = recalled.get(u.key)
+        const tail = u.parts[u.parts.length - 1]
+        if (extra && tail && !tail.text.endsWith(extra)) tail.text += "\n\n" + extra
+      }
     } catch {
       // memory is optional: never break the session over it
     }
