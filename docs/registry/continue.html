@@ -47,7 +47,11 @@
 <p>write the same file. The session document holds <code>history[]</code>, each item a</p>
 <p><code>message</code> with a <code>role</code> and a <code>content</code> that is either a string or an array of</p>
 <p><code>{type, text}</code> parts; an assistant item that called tools carries them in</p>
-<p><code>toolCallStates[]</code>. <code>system</code> and <code>tool</code> roles are skipped — the first is</p>
+<p><code>toolCallStates[]</code>. A compaction rewrites the file to the system message and</p>
+<p>one assistant item carrying <code>conversationSummary</code>: that item is indexed under</p>
+<p>the summary role, and since the turns before it are gone from disk, the index</p>
+<p>keeps the records it already held for them when the file comes back opening</p>
+<p>with a summary, through a rebuild too (#4795). <code>system</code> and <code>tool</code> roles are skipped — the first is</p>
 <p>configuration, and a tool&#39;s result arrives under the assistant item that asked</p>
 <p>for it. Each call in <code>toolCallStates[]</code> is read off its <code>parsedArgs</code>: <code>Bash</code></p>
 <p>and <code>run_terminal_command</code> give a command, the file tools their <code>filepath</code></p>

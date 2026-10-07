@@ -30,10 +30,12 @@ func besideSidecar(name string) func(string) (int64, int64) {
 
 // clineSDKSidecar is the <id>.json manifest a Cline CLI rename rewrites alone
 // (#4319), named after the session directory, the one the reader opens for
-// every transcript in it, not after the transcript.
+// every transcript in it, not after the transcript. The compaction file beside
+// it holds the summary the reader takes (#4795).
 func clineSDKSidecar(p string) (int64, int64) {
 	dir := filepath.Dir(p)
-	return sidecarStat(filepath.Join(dir, filepath.Base(dir)+".json"))
+	id := filepath.Base(dir)
+	return sidecarStat(filepath.Join(dir, id+".json"), filepath.Join(dir, id+".compaction.json"))
 }
 
 func reasonixSidecar(p string) (int64, int64) {

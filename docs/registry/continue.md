@@ -9,7 +9,11 @@ Continue runs in VS Code and JetBrains, and its chat, agent and plan modes all
 write the same file. The session document holds `history[]`, each item a
 `message` with a `role` and a `content` that is either a string or an array of
 `{type, text}` parts; an assistant item that called tools carries them in
-`toolCallStates[]`. `system` and `tool` roles are skipped — the first is
+`toolCallStates[]`. A compaction rewrites the file to the system message and
+one assistant item carrying `conversationSummary`: that item is indexed under
+the summary role, and since the turns before it are gone from disk, the index
+keeps the records it already held for them when the file comes back opening
+with a summary, through a rebuild too (#4795). `system` and `tool` roles are skipped — the first is
 configuration, and a tool's result arrives under the assistant item that asked
 for it. Each call in `toolCallStates[]` is read off its `parsedArgs`: `Bash`
 and `run_terminal_command` give a command, the file tools their `filepath`

@@ -9,15 +9,16 @@ import (
 	"github.com/vshulcz/deja-vu/internal/index"
 )
 
-// The prompt hook returned immediately unless MOIM was set, because the file it
-// wrote was read once when the session started. That is not true of where the
-// recall lives now: measured against goose 1.48 with a stub endpoint, a change
-// to AGENTS.md between two turns of one session arrives on the second — the
-// file is re-read every turn. So the guard was the only thing keeping per-turn
-// recall to the wrapper.
-func TestTheGoosePromptHookRefreshesWithoutTheWrapper(t *testing.T) {
-	goose := gooseHomeForTest(t)
-	path := filepath.Join(goose, "AGENTS.md")
+// Plain goose has one global AGENTS.md for every session on the machine, and
+// it re-reads it every turn. Per-prompt recall written there reached every
+// other running session: on a stand, B's recall arrived in A's next request
+// (#4795). So without the wrapper's own MOIM file the prompt hook leaves the
+// file alone, the session-start digest and the reader's lines included.
+func TestThePlainGoosePromptHookLeavesTheSharedFileAlone(t *testing.T) {
+	hermeticEnv(t)
+	dir := gooseRecallFixture(t)
+	t.Setenv("GOOSE_MOIM_MESSAGE_FILE", "")
+	path := gooseHintsPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -25,19 +26,15 @@ func TestTheGoosePromptHookRefreshesWithoutTheWrapper(t *testing.T) {
 	if err := os.WriteFile(path, []byte(mine), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	// No MOIM in the environment: this is plain `goose`.
-	if err := refreshGooseForPrompt(t.TempDir(), []byte(`{"prompt":"pgbouncer pool"}`)); err != nil {
+	if err := refreshGooseForPrompt(dir, []byte(`{"prompt":"pgbouncer timing out","cwd":"/app"}`)); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Whatever the store answered — including nothing — the reader's own lines
-	// have to survive. The prompt path wrote the file raw and erased them.
-	if !strings.Contains(string(b), "always use pgx") {
-		t.Errorf("the prompt refresh overwrote the reader's file:\n%s", b)
+	if string(b) != mine {
+		t.Errorf("a prompt's recall went into the file every goose session reads:\n%s", b)
 	}
 }
 
@@ -77,11 +74,38 @@ func TestGooseRecallWritesAMarkedBlockOnlyInTheReadersFile(t *testing.T) {
 	}
 }
 
-// And it has to actually write: a test that only checks the reader's lines
-// survive passes just as well when the hook returns without doing anything,
-// which is what it did before the guard came off.
+// And under the wrapper it has to actually write: a test that only checks the
+// shared file is untouched passes just as well when the hook does nothing.
 func TestTheGoosePromptHookWritesWhatItFound(t *testing.T) {
 	hermeticEnv(t)
+	dir := gooseRecallFixture(t)
+	moim := filepath.Join(t.TempDir(), "deja-recall-1.md")
+	t.Setenv("GOOSE_MOIM_MESSAGE_FILE", moim)
+
+	if err := refreshGooseForPrompt(dir, []byte(`{"prompt":"pgbouncer timing out","cwd":"/app"}`)); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(moim)
+	if err != nil {
+		t.Fatalf("the prompt hook wrote nothing: %v", err)
+	}
+	if !strings.Contains(string(b), "pgbouncer") {
+		t.Errorf("the block does not carry what was asked about:\n%s", b)
+	}
+	// A second write replaces the first without a backup: the wrapper removes
+	// its file on exit, and a .bak beside it would stay behind every run.
+	if err := refreshGooseForPrompt(dir, []byte(`{"prompt":"default_pool_size raised","cwd":"/app"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if entries, _ := os.ReadDir(filepath.Dir(moim)); len(entries) != 1 {
+		t.Errorf("the recall file left company behind: %v", entries)
+	}
+}
+
+// gooseRecallFixture indexes one session the prompt "pgbouncer timing out"
+// recalls, and returns the index.
+func gooseRecallFixture(t *testing.T) string {
+	t.Helper()
 	claude := os.Getenv("DEJA_CLAUDE_ROOT")
 	proj := filepath.Join(claude, "-app")
 	if err := os.MkdirAll(proj, 0o755); err != nil {
@@ -100,19 +124,5 @@ func TestTheGoosePromptHookWritesWhatItFound(t *testing.T) {
 	if err := index.Ensure(dir, "", true, nil); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GOOSE_MOIM_MESSAGE_FILE", "")
-
-	if err := refreshGooseForPrompt(dir, []byte(`{"prompt":"pgbouncer timing out","cwd":"/app"}`)); err != nil {
-		t.Fatal(err)
-	}
-	b, err := os.ReadFile(gooseHintsPath())
-	if err != nil {
-		t.Fatalf("the prompt hook wrote nothing: %v", err)
-	}
-	if !strings.Contains(string(b), gooseRecallStart) {
-		t.Errorf("no recall block was written:\n%s", b)
-	}
-	if !strings.Contains(string(b), "pgbouncer") {
-		t.Errorf("the block does not carry what was asked about:\n%s", b)
-	}
+	return dir
 }

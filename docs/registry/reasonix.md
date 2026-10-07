@@ -171,16 +171,10 @@ Reasonix takes everything as one plugin package (`reasonix-plugin.json`,
   1.39.1). A `session.start` or `session.load` event names the session in
   `sessionPath` where Reasonix has one — a bare id on the 1.x binding, a
   session directory or a JSONL path elsewhere — and that is the key; a
-  `session.rotate` names the session that is ending. Without a name, deja
-  takes the one `sessions-v4` directory in the workspace whose manifest
-  `createdAt` is after the session began and that no earlier session in the
-  process was filed under; with none or several it files the session under a
-  key of its own. A session event with no name that arrives within two
-  seconds of a turn is taken as that turn's own.
-- **Session end.** The extension subscribes to `session.end`, which 2.30
-  sends on every exit, and drops the session's live stamp there, at a
-  rotation and when the host closes the pipe, so the session is back in the
-  next one's MCP recall.
-- **2.x is checked from source only.** Reasonix 2.x (branch `studio`) has
-  the same v2 manifest and extension protocol, so the package is the same
-  there; it has not been run against a 2.x build.
+  `session.rotate` names the session that is ending. Until an event names
+  it, deja files the session under a key of its own. A session event with no
+  name that arrives within two seconds of a turn is taken as that turn's own.
+- **2.x.** Reasonix 2.30 speaks the same v2 protocol and was run live: it
+  sends `session.start` or `session.load` with the JSONL path ahead of every
+  `input.receive`, and keeps sessions in `projects/<slug>/sessions/`, with no
+  `sessions-v4`.

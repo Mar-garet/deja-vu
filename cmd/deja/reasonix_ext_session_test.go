@@ -111,36 +111,6 @@ func TestReasonixExtShowsTheFirstBuildOnTheStatusLine(t *testing.T) {
 	}
 }
 
-func TestReasonixLiveSessionNeedsExactlyOneNewSession(t *testing.T) {
-	store := t.TempDir()
-	write := func(dir, manifest string) {
-		p := filepath.Join(store, dir, "manifest.json")
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(manifest), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	boundary := time.Now().Add(-time.Minute)
-	at := func(d time.Duration) string { return boundary.Add(d).UTC().Format(time.RFC3339Nano) }
-	write("old", `{"sessionId":"old","createdAt":"`+at(-time.Hour)+`"}`)
-	write("s1", `{"sessionId":"sess-real-1","createdAt":"`+at(time.Second)+`"}`)
-	if got := reasonixLiveSession(store, boundary, nil); got != "sess-real-1" {
-		t.Errorf("one new session = %q, want its manifest id", got)
-	}
-	if got := reasonixLiveSession(store, boundary, map[string]bool{"sess-real-1": true}); got != "" {
-		t.Errorf("a retired session was handed out again: %q", got)
-	}
-	write("s2", `{"sessionId":"s2","createdAt":"`+at(2*time.Second)+`"}`)
-	if got := reasonixLiveSession(store, boundary, nil); got != "" {
-		t.Errorf("two new sessions = %q, want none: the sidecar cannot tell them apart", got)
-	}
-	if got := reasonixLiveSession("", boundary, nil); got != "" {
-		t.Errorf("no store = %q", got)
-	}
-}
-
 // promptSessions is the session_id each hook-prompt run was filed under, by
 // the prompt it ran for.
 func promptSessions(calls []fakeHookCall) map[string]string {
@@ -200,17 +170,24 @@ func TestReasonixExtDoesNotAdoptAParallelSession(t *testing.T) {
 	}
 }
 
-// The session this sidecar serves is the one created after it started.
-func TestReasonixExtAdoptsTheSessionCreatedAfterItStarted(t *testing.T) {
+// Reasonix 2.x names the session in session.start ahead of the first turn and
+// keeps no sessions-v4 store. The sidecar no longer scans that store, so a
+// session directory there is nobody's key, whatever its manifest says (#4795).
+func TestReasonixExtDoesNotScanTheRetiredStore(t *testing.T) {
 	calls := fakeRxHooks(t, func(string, map[string]any) (string, error) { return "", nil })
 	h := startFakeRxHost(t)
 	ws := t.TempDir()
 	h.handshakeAt(ws)
-	writeRxSessionDir(t, ws, "b", `{"sessionId":"OLDER","createdAt":"`+time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)+`"}`)
-	writeRxSessionDir(t, ws, "c", `{"sessionId":"MINE","createdAt":"`+time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)+`"}`)
+	writeRxSessionDir(t, ws, "c", `{"sessionId":"FROM-THE-STORE","createdAt":"`+time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)+`"}`)
 	h.intercept("input.receive", map[string]any{"text": "one"})
-	if got := promptSessions(calls())["one"]; got != "MINE" {
-		t.Errorf("session id = %q, want the one created after the sidecar started", got)
+	h.notify("extension/event", map[string]any{"event": "session.start", "payload": map[string]any{"phase": "start", "sessionPath": filepath.Join(t.TempDir(), "sessions", "20261007-102239.159219000-stub-model.jsonl")}})
+	h.intercept("input.receive", map[string]any{"text": "two"})
+	keys := promptSessions(calls())
+	if keys["one"] == "FROM-THE-STORE" {
+		t.Errorf("the first turn was filed under a sessions-v4 directory")
+	}
+	if keys["two"] != "20261007-102239.159219000-stub-model" {
+		t.Errorf("the turn after session.start = %q, want the session the event named", keys["two"])
 	}
 }
 
@@ -224,7 +201,7 @@ func TestReasonixExtNewSessionDoesNotAdoptTheOneItReplaced(t *testing.T) {
 	h := startFakeRxHost(t)
 	ws := t.TempDir()
 	h.handshakeAt(ws)
-	writeRxSessionDir(t, ws, "old", `{"sessionId":"OLD","createdAt":"`+time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)+`"}`)
+	h.notify("extension/event", map[string]any{"event": "session.start", "payload": map[string]any{"phase": "start", "sessionPath": "OLD"}})
 	h.intercept("input.receive", map[string]any{"text": "one"})
 	time.Sleep(400 * time.Millisecond)
 	h.notify("extension/event", map[string]any{"event": "session.rotate", "payload": map[string]any{"phase": "rotate", "sessionPath": "OLD"}})

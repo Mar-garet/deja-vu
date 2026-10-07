@@ -289,7 +289,7 @@ aider &middot; Amp &middot; Antigravity &middot; Claude Code &middot; Cline &mid
 | Command Code | ✅ | ✅ | ✅ | ✅ | ✅ | paste | none |
 | ZCode | ✅ | ✅ | ? | ? | ✅ | paste | sqlite3 for the CLI database |
 | Kiro | ✅ | ⚠ | ✕ | ? | ✅ | paste | sqlite3 for the CLI database |
-| Kilo Code | ✅ | ⚠ | ✅ | ✅ | ✅ | paste | sqlite3 for the CLI store |
+| Kilo Code | ✅ | ✅ | ✅ | ✅ | ✅ | paste | sqlite3 for the CLI store |
 | Roo Code | ✅ | ⚠ | ✅ | ✅ | ✅ | paste | roo CLI (editor tasks reopen in the editor) |
 | Zed | ✅ | ✕ | ✅ | ✅ | ✕ | paste | sqlite3 + zstd |
 | CodeWhale | — | — | ? | ? | ✅ | paste | none |

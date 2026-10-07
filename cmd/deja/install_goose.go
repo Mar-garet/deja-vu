@@ -625,23 +625,20 @@ func cmdGooseHook(_ string, _ []string) error {
 	return refreshGooseHintsFor(input.CWD)
 }
 
-// refreshGooseForPrompt writes prompt-scoped recall where goose will read it.
-//
-// Only the MOIM file is re-read per turn; .goosehints is read once when the
-// session opens. Overwriting the hints file mid-session would therefore
-// replace the recall that is already in front of the model with nothing the
-// model will ever see, so without MOIM this leaves the session as it is.
 // refreshGooseForPrompt rewrites the recall for what was just typed, so the
 // block follows the conversation instead of staying on whatever the session
 // opened with.
 //
-// It used to return here unless MOIM was set, because the file it wrote was
-// read once when the session started and refreshing it mid-session reached
-// nobody. That is no longer true of where the recall lives: measured against
-// goose 1.48 with a stub endpoint, a change to `AGENTS.md` between two turns of
-// one session arrives on the second — the file is re-read every turn. So the
-// guard was the only thing keeping per-turn recall to the wrapper.
+// Only under the wrapper, whose MOIM file belongs to one process. goose re-reads
+// the global AGENTS.md every turn, but every session on the machine reads that
+// same file: with plain goose a prompt in one project put its recall in front
+// of every other running session, and on a stand B's recall reached A's next
+// request (#4795). The session-start digest stays there; per-prompt recall
+// needs a channel that is the session's own.
 func refreshGooseForPrompt(dir string, payload []byte) error {
+	if gooseRecallPath() == gooseHintsPath() {
+		return nil
+	}
 	var input struct {
 		// Goose calls it message; matcher_context carries the same text.
 		Message   string `json:"message"`
@@ -708,9 +705,15 @@ func writeGooseRecall(body string) error {
 		return err
 	}
 	next := []byte(body)
-	if path == gooseHintsPath() {
-		next = []byte(gooseRecallBlock(string(old), body))
+	if path != gooseHintsPath() {
+		// deja's own file, one per wrapper: written plainly, since a config
+		// writer's backup would outlive the session beside it.
+		if bytes.Equal(old, next) {
+			return nil
+		}
+		return os.WriteFile(path, next, 0o600)
 	}
+	next = []byte(gooseRecallBlock(string(old), body))
 	if _, err := writeIfChanged(path, old, next); err != nil {
 		return err
 	}
@@ -846,15 +849,23 @@ const gooseLead = "The sessions below are from this project's recent history. " 
 // cmdGoose turns MOIM on for the session it starts: recall is then re-read
 // every turn rather than pinned to whatever the session began with, and it
 // survives compaction.
+//
+// The file is this process's own. goose reads it by path and ignores the
+// session id (platform_extensions/tom.rs get_moim), so one path for every
+// wrapper handed each running session the recall the last prompt anywhere
+// wrote: on a stand with two sessions in two projects, A's next request
+// carried B's recall (#4795). The hooks inherit the variable, so the
+// session's own hooks write the session's own file.
 func cmdGoose(dir string, rest []string, sourceInstance string) error {
 	if len(rest) == 0 {
 		return cmdSearch(dir, []string{"goose"}, sourceInstance)
 	}
-	moim := filepath.Join(gooseConfigDir(), "deja-recall.md")
 	if os.Getenv("GOOSE_MOIM_MESSAGE_FILE") == "" {
+		moim := gooseWrapperMOIMPath(os.Getpid())
 		if err := os.Setenv("GOOSE_MOIM_MESSAGE_FILE", moim); err != nil {
 			return err
 		}
+		defer func() { _ = os.Remove(moim) }()
 	}
 	if err := refreshGooseHints(); err != nil {
 		fmt.Fprintf(os.Stderr, "deja: could not refresh recall: %v\n", err)
@@ -867,7 +878,13 @@ func cmdGoose(dir string, rest []string, sourceInstance string) error {
 	}
 	cmd := exec.Command(bin, rest...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
+	// Waited for through Ctrl-C, so the file goes with the session.
+	return runOutlivingSignals(cmd)
+}
+
+// gooseWrapperMOIMPath is the recall file of one `deja goose` process.
+func gooseWrapperMOIMPath(pid int) string {
+	return filepath.Join(gooseConfigDir(), fmt.Sprintf("deja-recall-%d.md", pid))
 }
 
 func gooseRecallCount() int {
