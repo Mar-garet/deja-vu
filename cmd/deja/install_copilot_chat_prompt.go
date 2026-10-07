@@ -14,10 +14,9 @@ import (
 // That is the same `User` directory the reader already walks for
 // workspaceStorage, so one file per host it finds.
 //
-// This is the one surface deja had left there: Copilot Chat fires no
-// session-start or per-prompt hook, so recall cannot arrive on its own, and
-// until now the only way in was the MCP tool with nothing telling the model to
-// reach for it (#3651).
+// Before this the only way in was the MCP tool with nothing telling the model
+// to reach for it (#3651). Recall that arrives on its own is vscode-auto's
+// hook file.
 func copilotChatPromptPaths() []string {
 	var out []string
 	for _, user := range sources.CopilotChatRoots() {

@@ -691,7 +691,12 @@
     {
       "name": "copilot",
       "state": "missing",
-      "path": "<tmp>/home/.copilot/settings.json"
+      "path": "<tmp>/home/.copilot/hooks/deja.json"
+    },
+    {
+      "name": "vscode",
+      "state": "missing",
+      "path": "<tmp>/home/.copilot/hooks/deja.json"
     },
     {
       "name": "zcode",

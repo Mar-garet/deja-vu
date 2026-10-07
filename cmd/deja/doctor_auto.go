@@ -87,11 +87,12 @@ func autoWirings() []autoWiring {
 		// kiro-cli runs hooks from the agent a chat starts in; deja's is its
 		// own agent file (#4304).
 		{"kiro", func() string { return kiroAgentPath() }, "hook-context", ""},
-		// Copilot CLI keeps hooks with the rest of its user settings; the row
-		// follows them to config.json while they have not moved yet. The flag
-		// is part of the marker: a plain hook-context line answers in Claude's
-		// envelope, which Copilot runs and drops.
-		{"copilot", func() string { return copilotHooksPath() }, "hook-context --copilot", ""},
+		// Copilot CLI and VS Code Copilot Chat read deja's one hook file. The
+		// marker is the per-prompt line with its flag: a plain line answers in
+		// Claude's envelope, which Copilot CLI runs and drops, and an install
+		// from before the file wired no per-prompt hook at all.
+		{"copilot", func() string { return copilotHooksPath() }, "hook-prompt --copilot", ""},
+		{"vscode", func() string { return copilotHooksPath() }, "hook-prompt --copilot", ""},
 		// ZCode keeps its hooks in the same file as its server map, and the
 		// line deja writes ends in `--strict` — its schema discards a whole
 		// response over one key it does not know.
@@ -120,7 +121,6 @@ func autoWirings() []autoWiring {
 // them or not, so the file being there says nothing about deja (#4275).
 var autoInClientConfig = map[string]bool{
 	"cursor": true, "qwen": true, "codebuddy": true, "workbuddy": true, "trae": true, "trae-ide": true, "muse": true, "kimi": true, "crush": true, "zcode": true, "commandcode": true,
-	"copilot": true,
 }
 
 // autoUnwired reports whether a row's file holds no deja wiring at all: it is

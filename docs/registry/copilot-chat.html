@@ -57,15 +57,34 @@
 <p>directory this reader walks for workspaceStorage — and the chat box lists it</p>
 <p>as <code>/deja</code>. The frontmatter carries the description shown beside it and an</p>
 <p>argument hint, and the body tells the model to call the recall tool, with the</p>
-<p>CLI as the fallback when the tool is not in that window. This is the only way</p>
-<p>in here: Copilot Chat fires no session-start or per-prompt hook, so nothing</p>
-<p>arrives unasked.</p>
+<p>CLI as the fallback when the tool is not in that window.</p>
 <ul>
-<li><strong>Auto-recall</strong>: none in the hook sense — Copilot Chat has no session-start or per-prompt event. The instructions file is what makes recall arrive without being asked for.</li>
+<li><strong>Auto-recall</strong>: <code>deja install vscode-auto</code> (or <code>copilot-auto</code>; both write the</li>
+</ul>
+<p>same file) puts deja&#39;s hooks in <code>~/.copilot/hooks/deja.json</code>. VS Code 1.140</p>
+<p>lists that directory among its hook locations, <code>chat.useHooks</code> is on by</p>
+<p>default, and Copilot Chat 0.68 runs <code>SessionStart</code>, <code>UserPromptSubmit</code>,</p>
+<p><code>PreToolUse</code>, <code>PostToolUse</code> and <code>PreCompact</code>. It maps the camelCase events</p>
+<p>it shares with Copilot CLI (<code>sessionStart</code>, <code>userPromptSubmitted</code>,</p>
+<p><code>preToolUse</code>, <code>postToolUse</code>) and reads <code>PreCompact</code> under that name, so one</p>
+<p>file serves both hosts. The payload carries <code>hook_event_name</code>, <code>session_id</code></p>
+<p>and <code>transcript_path</code> (the <code>GitHub.copilot-chat/transcripts</code> file above), and</p>
+<p>deja answers in the nested <code>hookSpecificOutput</code> shape, the only one VS Code</p>
+<p>reads for <code>SessionStart</code>, <code>PreToolUse</code> and <code>PostToolUse</code>. VS Code drops</p>
+<p><code>matcher</code>, so the pre-tool hook runs for every tool and speaks for</p>
+<p><code>replace_string_in_file</code>, <code>create_file</code>, <code>insert_edit_into_file</code> and</p>
+<p><code>run_in_terminal</code>; a failed terminal command reaches <code>PostToolUse</code> with</p>
+<p><code>Command exited with code N</code> in the result text. <code>PreCompact</code> output is</p>
+<p>ignored by VS Code; deja captures the transcript there and hands the packet</p>
+<p>back on the next prompt or tool call. Copilot Chat never runs a</p>
+<p><code>SessionEnd</code> hook (no call site in 0.68), so the live stamp expires on its</p>
+<p>own. Checked against the workbench and extension source; not yet run</p>
+<p>against a live VS Code.</p>
+<ul>
 <li><strong>Resume</strong>: Chat: Show Chats… in the editor, not a command. The list holds only the open workspace’s chats; <code>deja resume &lt;id&gt;</code> names the folder to open first.</li>
 <li><strong>Handoff</strong>: paste.</li>
 </ul>
-<p><strong>Last verified:</strong> 2026-09-20</p>
+<p><strong>Last verified:</strong> 2026-10-07</p>
 
 <hr>
 <p>deja reads this format and thirty-seven others, and turns what it finds into memory your

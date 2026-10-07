@@ -56,6 +56,9 @@ func compactionSource(input precompactHookInput, workspace string) (sources.Comp
 		err        error
 	)
 	switch {
+	case input.TranscriptPath != "" && sources.IsCopilotTranscript(input.TranscriptPath):
+		// Copilot CLI and VS Code Copilot Chat name their own event logs.
+		transcript, err = sources.ReadCompactionCopilot(input.TranscriptPath, input.SessionID)
 	case input.TranscriptPath != "":
 		transcript, err = sources.ReadCompactionTranscript(input.TranscriptPath, input.SessionID)
 	case len(input.Messages) > 0:

@@ -22,11 +22,28 @@ Edits are `textEditGroup` parts: a `uri` and a list of lists of `{text, range}`,
   directory this reader walks for workspaceStorage — and the chat box lists it
   as `/deja`. The frontmatter carries the description shown beside it and an
   argument hint, and the body tells the model to call the recall tool, with the
-  CLI as the fallback when the tool is not in that window. This is the only way
-  in here: Copilot Chat fires no session-start or per-prompt hook, so nothing
-  arrives unasked.
-- **Auto-recall**: none in the hook sense — Copilot Chat has no session-start or per-prompt event. The instructions file is what makes recall arrive without being asked for.
+  CLI as the fallback when the tool is not in that window.
+- **Auto-recall**: `deja install vscode-auto` (or `copilot-auto`; both write the
+  same file) puts deja's hooks in `~/.copilot/hooks/deja.json`. VS Code 1.140
+  lists that directory among its hook locations, `chat.useHooks` is on by
+  default, and Copilot Chat 0.68 runs `SessionStart`, `UserPromptSubmit`,
+  `PreToolUse`, `PostToolUse` and `PreCompact`. It maps the camelCase events
+  it shares with Copilot CLI (`sessionStart`, `userPromptSubmitted`,
+  `preToolUse`, `postToolUse`) and reads `PreCompact` under that name, so one
+  file serves both hosts. The payload carries `hook_event_name`, `session_id`
+  and `transcript_path` (the `GitHub.copilot-chat/transcripts` file above), and
+  deja answers in the nested `hookSpecificOutput` shape, the only one VS Code
+  reads for `SessionStart`, `PreToolUse` and `PostToolUse`. VS Code drops
+  `matcher`, so the pre-tool hook runs for every tool and speaks for
+  `replace_string_in_file`, `create_file`, `insert_edit_into_file` and
+  `run_in_terminal`; a failed terminal command reaches `PostToolUse` with
+  `Command exited with code N` in the result text. `PreCompact` output is
+  ignored by VS Code; deja captures the transcript there and hands the packet
+  back on the next prompt or tool call. Copilot Chat never runs a
+  `SessionEnd` hook (no call site in 0.68), so the live stamp expires on its
+  own. Checked against the workbench and extension source; not yet run
+  against a live VS Code.
 - **Resume**: Chat: Show Chats… in the editor, not a command. The list holds only the open workspace’s chats; `deja resume <id>` names the folder to open first.
 - **Handoff**: paste.
 
-**Last verified:** 2026-09-20
+**Last verified:** 2026-10-07

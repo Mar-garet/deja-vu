@@ -159,10 +159,10 @@ func guidancePath(harness string) string {
 		// skill written alongside it, which the same command lists.
 		return filepath.Join(sources.GrokHome(), "GROK.md")
 	case "vscode":
-		// VS Code's custom instructions, in the profile's prompts folder. This
-		// is the one place a block can sit in front of Copilot Chat before it
-		// reads the question — it has no session-start or per-prompt hook — and
-		// it tells the agent to call the MCP server `deja install vscode` wires.
+		// VS Code's custom instructions, in the profile's prompts folder. It is
+		// in front of Copilot Chat on every chat, hooks or not (vscode-auto
+		// wires those), and it tells the agent to call the MCP server
+		// `deja install vscode` wires.
 		//
 		// One file by contract, so the first User folder present gets it, while
 		// the MCP entry goes to every host on the machine.
@@ -216,9 +216,9 @@ func guidanceText(harness string) string {
 		// what every agent on the machine was told (#3688).
 		body := skillBody
 		if harness == "vscode" {
-			// Copilot Chat has no hook, so this file is the only thing that is
-			// in front of the model before it reads the question. It says to
-			// call the tool; the tool is what carries the history. The rules
+			// Without vscode-auto this file is the only thing in front of the
+			// model before it reads the question. It says to call the tool;
+			// the tool is what carries the history. The rules
 			// section stays out: this file is in every chat, and a procedure
 			// the user asks for a few times a year is not worth that.
 			return instructionsFile(strings.TrimSuffix(body, "\n\n"+rulesSkillSection))

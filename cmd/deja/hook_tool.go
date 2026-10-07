@@ -80,12 +80,17 @@ type toolHookInput struct {
 		// Command Code's shell_command runs command with these after it
 		// (#4540).
 		Args any `json:"args"`
+		// VS Code Copilot Chat's replace_string_in_file and create_file.
+		FilePathCamel string `json:"filePath"`
 	} `json:"tool_input"`
-	SessionID      string `json:"session_id"`
-	ConversationID string `json:"conversation_id"`
-	TranscriptPath string `json:"transcript_path"`
-	ToolUseID      string `json:"tool_use_id"`
-	CWD            string `json:"cwd"`
+	// Copilot CLI sends the tool's arguments as toolArgs: {command} for bash,
+	// {path} for edit and create (1.0.92).
+	ToolArgs       json.RawMessage `json:"toolArgs"`
+	SessionID      string          `json:"session_id"`
+	ConversationID string          `json:"conversation_id"`
+	TranscriptPath string          `json:"transcript_path"`
+	ToolUseID      string          `json:"tool_use_id"`
+	CWD            string          `json:"cwd"`
 	// Cursor leaves cwd empty and names the project here instead.
 	WorkspaceRoots []string `json:"workspace_roots"`
 	// Grok spells all of this in camelCase. See hook_grok.go.
@@ -108,9 +113,37 @@ func (i *toolHookInput) adopt() {
 	if i.ToolInput.FilePath == "" {
 		i.ToolInput.FilePath = i.ToolInput.Path
 	}
+	if i.ToolInput.FilePath == "" {
+		i.ToolInput.FilePath = i.ToolInput.FilePathCamel
+	}
+	if args := copilotToolArgs(i.ToolArgs); args != nil {
+		if i.ToolInput.Command == "" {
+			i.ToolInput.Command, _ = args["command"].(string)
+		}
+		if i.ToolInput.FilePath == "" {
+			i.ToolInput.FilePath, _ = args["path"].(string)
+		}
+	}
 	if isCommandTool(i.ToolName) && strings.TrimSpace(i.ToolInput.Command) != "" {
 		i.ToolInput.Command += sources.CommandArgs(i.ToolInput.Args)
 	}
+}
+
+// copilotToolArgs reads toolArgs as an object, or as the JSON string older
+// Copilot CLI builds sent in its place.
+func copilotToolArgs(raw json.RawMessage) map[string]any {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		raw = json.RawMessage(s)
+	}
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return nil
+	}
+	return m
 }
 
 // hookToolShape is how the answer is framed on the way out. Claude Code's hook
@@ -137,6 +170,8 @@ func hookToolShapeOf(rest []string) hookToolShape {
 		return hookToolPlain
 	case "--crush", "-crush":
 		return hookToolCrush
+	case "--copilot", "-copilot":
+		return hookToolCopilot
 	}
 	return hookToolClaude
 }
@@ -166,6 +201,11 @@ func runHookToolMode(dir string, stdin io.Reader, stdout io.Writer, shape hookTo
 	var input toolHookInput
 	_ = json.NewDecoder(bytes.NewReader(raw)).Decode(&input)
 	input.adopt()
+	// The Copilot hook file is VS Code's too, and VS Code reads only the
+	// nested shape here. See adoptCopilotHost.
+	if shape == hookToolCopilot && input.HookEventName != "" {
+		shape = hookToolClaude
+	}
 	// The kill switch, before anything is read. It reached the session-start
 	// hook and nothing else, so a machine with recall off still had text drawn
 	// from its own indexed sessions injected here (#2701).
@@ -265,6 +305,9 @@ func runHookToolMode(dir string, stdin io.Reader, stdout io.Writer, shape hookTo
 		}
 		fmt.Fprintln(stdout, string(b))
 		return nil
+	case hookToolCopilot:
+		emitCopilotContext(stdout, out)
+		return nil
 	}
 	var resp sessionStartHookResponse
 	resp.HookSpecificOutput.HookEventName = "PreToolUse"
@@ -313,6 +356,9 @@ func toolHookLineSkipping(dir, cwd string, input toolHookInput, used func(string
 		// Command Code sends its internal names; EDIT and WRITE are only what
 		// its matcher sees (#4371).
 		"edit_file", "write_file",
+		// Copilot CLI writes a new file with create (path in toolArgs), and
+		// VS Code Copilot Chat edits with these, the path under filePath.
+		"create", "replace_string_in_file", "create_file", "insert_edit_into_file",
 		// pi and omp have no pre-tool seam: the only handler whose return the
 		// model reads is the one holding a finished tool result. An edit there
 		// is already made, so the file's history goes out on their lowercase

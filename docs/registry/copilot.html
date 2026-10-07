@@ -75,21 +75,46 @@
 <p>when set), loaded on demand;</p>
 <p>Copilot invokes a skill by name, so it is also the <code>/deja-history</code> command.</p>
 <ul>
-<li><strong>Auto-recall</strong>: <code>deja install copilot-auto</code> adds a <code>sessionStart</code> command</li>
+<li><strong>Auto-recall</strong>: <code>deja install copilot-auto</code> writes</li>
 </ul>
-<p>hook (<code>deja hook-context --copilot</code>) under <code>hooks</code> in</p>
-<p><code>~/.copilot/settings.json</code>. Copilot puts the <code>additionalContext</code> it prints in</p>
-<p>front of the first request as its own message and keeps it for the session;</p>
-<p>the payload names the session as <code>sessionId</code> and sends <code>source: &#34;resume&#34;</code></p>
-<p>on <code>copilot --resume</code>. It also adds <code>preMcpToolCall</code> (<code>deja hook-mcp-call</code>)</p>
-<p>and <code>sessionEnd</code> (<code>deja hook-session-end</code>): the MCP server is told nothing</p>
-<p>about who is calling, so the first marks the session live before each MCP</p>
-<p>request and recall leaves it out, and the second clears the mark. A</p>
-<p><code>preMcpToolCall</code> hook&#39;s output becomes the request&#39;s <code>_meta</code>, so it prints</p>
-<p>nothing. <code>postToolUse</code> (<code>deja hook-tool-after --copilot</code>) answers a failed</p>
-<p>command with what this machine ran after the same error before: a non-zero</p>
-<p>exit is still a successful tool call in Copilot, and the <code>additionalContext</code></p>
-<p>is appended to the result the model reads next. <code>COPILOT_HOME</code> moves all of</p>
+<p><code>~/.copilot/hooks/deja.json</code>, which Copilot loads as user-level hooks and VS</p>
+<p>Code Copilot Chat reads too. Older installs put the entries in</p>
+<p><code>settings.json</code> or <code>config.json</code>; the install takes them out. Measured on</p>
+<p>1.0.92 against a stub model, every one of these reaches the model:</p>
+<ul>
+<li><code>sessionStart</code> (<code>deja hook-context --copilot</code>): the digest, as a message</li>
+</ul>
+<p>of its own in front of the first request, kept for the session.</p>
+<ul>
+<li><code>userPromptSubmitted</code> (<code>deja hook-prompt --copilot</code>): per-prompt recall,</li>
+</ul>
+<p>appended to the user&#39;s turn inside <code>&lt;system_reminder&gt;</code>.</p>
+<ul>
+<li><code>preToolUse</code> (<code>deja hook-tool --copilot</code>, matcher <code>bash|powershell|edit|create</code>):</li>
+</ul>
+<p>the file&#39;s prior decision before an edit, sent as a message after the</p>
+<p>tool&#39;s result. Copilot honours the matcher, so deja does not run for reads.</p>
+<ul>
+<li><code>postToolUse</code> and <code>postToolUseFailure</code> (<code>deja hook-tool-after --copilot</code>,</li>
+</ul>
+<p>matcher <code>bash|powershell</code>): the fix line after a failed command. A non-zero</p>
+<p>exit is still a successful tool call, so <code>postToolUse</code> carries most of</p>
+<p>them; a tool that errors fires <code>postToolUseFailure</code> with the text in <code>error</code>.</p>
+<ul>
+<li><code>PreCompact</code> (<code>deja hook-precompact</code>): spelled the way VS Code reads it;</li>
+</ul>
+<p>Copilot runs a PascalCase key too, with snake_case fields. The payload</p>
+<p>names <code>events.jsonl</code> as <code>transcript_path</code>; deja captures the session from</p>
+<p>it and hands the packet back on the next tool call or prompt.</p>
+<ul>
+<li><code>preMcpToolCall</code> (<code>deja hook-mcp-call</code>) and <code>sessionEnd</code></li>
+</ul>
+<p>(<code>deja hook-session-end</code>): the MCP server is told nothing about who is</p>
+<p>calling, so the first marks the session live before each MCP request and</p>
+<p>recall leaves it out, and the second clears the mark. A <code>preMcpToolCall</code></p>
+<p>hook&#39;s output becomes the request&#39;s <code>_meta</code>, so it prints nothing.</p>
+<p>Every answer is the flat <code>{&#34;additionalContext&#34;: …}</code>; a nested</p>
+<p><code>hookSpecificOutput</code> runs and reaches no one. <code>COPILOT_HOME</code> moves all of</p>
 <p>these files.</p>
 <ul>
 <li><strong>Resume</strong>: <code>copilot --resume=&lt;sessionId&gt;</code>.</li>
@@ -123,7 +148,7 @@
 <p>Specified in <a href="https://github.com/vshulcz/deja-vu/issues/655">#655</a>, work</p>
 <p>records added in <a href="https://github.com/vshulcz/deja-vu/pull/1231">#1231</a>,</p>
 <p>auto-recall in <a href="https://github.com/vshulcz/deja-vu/issues/4231">#4231</a>.</p>
-<p><strong>Last verified:</strong> 2026-10-01</p>
+<p><strong>Last verified:</strong> 2026-10-07</p>
 
 <hr>
 <p>deja reads this format and thirty-seven others, and turns what it finds into memory your

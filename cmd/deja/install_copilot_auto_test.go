@@ -14,14 +14,14 @@ import (
 	"github.com/vshulcz/deja-vu/internal/sources"
 )
 
-// Copilot CLI 1.0.79 runs command hooks from the `hooks` key of its user
-// settings and puts what a sessionStart hook prints as `additionalContext` in
-// front of the model (#4231).
+// deja's hook file under ~/.copilot/hooks, which Copilot CLI and VS Code
+// Copilot Chat both read.
 type copilotHookFile struct {
 	Hooks map[string][]struct {
 		Type       string `json:"type"`
 		Bash       string `json:"bash"`
 		TimeoutSec int    `json:"timeoutSec"`
+		Matcher    string `json:"matcher"`
 	} `json:"hooks"`
 }
 
@@ -36,99 +36,157 @@ func copilotTestHome(t *testing.T) string {
 	return home
 }
 
-func TestInstallCopilotAutoWiresSessionStartAndKeepsTheirs(t *testing.T) {
-	home := copilotTestHome(t)
-	path := filepath.Join(home, ".copilot", "settings.json")
-	before := "{\n  \"model\": \"gpt-5.4\",\n  \"hooks\": {\n    \"sessionStart\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"/usr/bin/theirs start\",\n        \"timeoutSec\": 5\n      }\n    ],\n    \"userPromptSubmitted\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"/usr/bin/theirs prompt\"\n      }\n    ]\n  }\n}\n"
-	if err := os.WriteFile(path, []byte(before), 0o600); err != nil {
-		t.Fatal(err)
+func readCopilotHookFile(t *testing.T) (copilotHookFile, string) {
+	t.Helper()
+	got := readFile(t, copilotHooksPath())
+	var cfg copilotHookFile
+	if err := json.Unmarshal([]byte(got), &cfg); err != nil {
+		t.Fatalf("the hook file is not JSON: %v\n%s", err, got)
 	}
+	return cfg, got
+}
+
+// Every surface deja has, on the events a stand against Copilot CLI 1.0.92
+// showed reach the model, and PreCompact spelled the way VS Code reads it.
+func TestInstallCopilotAutoWiresEverySurfaceInItsOwnFile(t *testing.T) {
+	home := copilotTestHome(t)
 	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
 		t.Fatal(err)
 	}
-	first := readFile(t, path)
-	var cfg copilotHookFile
-	if err := json.Unmarshal([]byte(first), &cfg); err != nil {
-		t.Fatalf("settings.json is not JSON after install: %v\n%s", err, first)
+	if want := filepath.Join(home, ".copilot", "hooks", "deja.json"); copilotHooksPath() != want {
+		t.Fatalf("hook file at %s, want %s", copilotHooksPath(), want)
 	}
-	start := cfg.Hooks["sessionStart"]
-	if len(start) != 2 || start[0].Bash != "/usr/bin/theirs start" {
-		t.Fatalf("their sessionStart hook did not survive, or deja's is missing:\n%s", first)
+	cfg, first := readCopilotHookFile(t)
+	for event, want := range map[string]struct{ cmd, matcher string }{
+		"sessionStart":        {" hook-context --copilot", ""},
+		"userPromptSubmitted": {" hook-prompt --copilot", ""},
+		"preToolUse":          {" hook-tool --copilot", "bash|powershell|edit|create"},
+		"postToolUse":         {" hook-tool-after --copilot", "bash|powershell"},
+		"postToolUseFailure":  {" hook-tool-after --copilot", "bash|powershell"},
+		"PreCompact":          {" hook-precompact", ""},
+		"preMcpToolCall":      {" hook-mcp-call", ""},
+		"sessionEnd":          {" hook-session-end", ""},
+	} {
+		entries := cfg.Hooks[event]
+		if len(entries) != 1 {
+			t.Errorf("%s: %d entries, want 1:\n%s", event, len(entries), first)
+			continue
+		}
+		e := entries[0]
+		if e.Type != "command" || !strings.HasSuffix(e.Bash, want.cmd) || e.Matcher != want.matcher {
+			t.Errorf("%s = %+v, want %q matcher %q", event, e, want.cmd, want.matcher)
+		}
+		// Copilot waits on a hook before the request it belongs to, so a slow
+		// deja must not hold the prompt for the default minute.
+		if e.TimeoutSec <= 0 || e.TimeoutSec > 10 {
+			t.Errorf("%s timeoutSec = %d, want a few seconds", event, e.TimeoutSec)
+		}
 	}
-	ours := start[1]
-	if ours.Type != "command" || !strings.HasSuffix(ours.Bash, " hook-context --copilot") {
-		t.Errorf("deja's entry is not a command hook running hook-context --copilot: %+v", ours)
+	if len(cfg.Hooks) != 8 {
+		t.Errorf("hook file carries %d events, want 8:\n%s", len(cfg.Hooks), first)
 	}
-	// Copilot waits on a session-start hook before the first request, so a
-	// slow deja must not hold the prompt for the default minute.
-	if ours.TimeoutSec <= 0 || ours.TimeoutSec > 10 {
-		t.Errorf("timeoutSec = %d, want a few seconds", ours.TimeoutSec)
-	}
-	if len(cfg.Hooks["userPromptSubmitted"]) != 1 || !strings.Contains(first, `"model": "gpt-5.4"`) {
-		t.Errorf("install touched what was not deja's:\n%s", first)
+	for _, name := range []string{"settings.json", "config.json"} {
+		if _, err := os.Stat(filepath.Join(home, ".copilot", name)); err == nil {
+			t.Errorf("install wrote Copilot's own %s", name)
+		}
 	}
 
 	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
 		t.Fatal(err)
 	}
-	if again := readFile(t, path); again != first {
+	if again := readFile(t, copilotHooksPath()); again != first {
 		t.Errorf("a second install changed the file:\nfirst:\n%s\nsecond:\n%s", first, again)
 	}
-
 	if _, err := captureRun(t, "uninstall", "copilot-auto"); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile(t, path); got != before {
-		t.Errorf("uninstall did not give settings.json back byte for byte:\nbefore:\n%s\nafter:\n%s", before, got)
+	if b, err := os.ReadFile(copilotHooksPath()); err == nil {
+		t.Errorf("uninstall left the hook file deja created:\n%s", b)
 	}
 }
 
-// A settings.json deja created holds nothing of the reader's, so uninstall
-// takes the file away rather than leaving `{}` behind.
-func TestUninstallCopilotAutoRemovesTheSettingsFileItCreated(t *testing.T) {
+// An install from before the hook file left deja's entries in settings.json,
+// or in a config.json Copilot had not moved yet. The new install takes them
+// out, so an upgrade does not run deja twice, and leaves the reader's own.
+func TestInstallCopilotAutoClearsTheEntriesOlderInstallsWrote(t *testing.T) {
 	home := copilotTestHome(t)
-	path := filepath.Join(home, ".copilot", "settings.json")
+	settings := filepath.Join(home, ".copilot", "settings.json")
+	config := filepath.Join(home, ".copilot", "config.json")
+	deja := hookExeInConfigs("/usr/local/bin/deja")
+	legacy := func(extra string) string {
+		return `{"model":"gpt-5.4","hooks":{"sessionStart":[{"type":"command","bash":"/usr/bin/theirs start","timeoutSec":5},{"type":"command","bash":"` + deja + ` hook-context --copilot","timeoutSec":10}],"postToolUse":[{"type":"command","bash":"` + deja + ` hook-tool-after --copilot","timeoutSec":10}]` + extra + `}}` + "\n"
+	}
+	if err := os.WriteFile(settings, []byte(legacy("")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte(copilotManagedConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(readFile(t, path), "hook-context --copilot") {
-		t.Fatalf("install wrote no hook:\n%s", readFile(t, path))
+	got := readFile(t, settings)
+	if strings.Contains(got, "hook-context") || strings.Contains(got, "hook-tool-after") {
+		t.Errorf("deja's old entries are still in settings.json:\n%s", got)
 	}
-	if _, err := captureRun(t, "uninstall", "copilot-auto"); err != nil {
-		t.Fatal(err)
+	if !strings.Contains(got, "/usr/bin/theirs start") || !strings.Contains(got, `"model"`) {
+		t.Errorf("install took what was not deja's:\n%s", got)
 	}
-	if b, err := os.ReadFile(path); err == nil {
-		t.Errorf("uninstall left the settings.json deja created:\n%s", b)
+	if got := readFile(t, config); got != copilotManagedConfig {
+		t.Errorf("install rewrote Copilot's own config.json:\n%s", got)
+	}
+	if cfg, _ := readCopilotHookFile(t); len(cfg.Hooks["sessionStart"]) != 1 {
+		t.Errorf("the hook file does not carry the digest")
 	}
 }
 
-// Copilot moves a `hooks` key it finds in config.json over the one in
-// settings.json on its next start, replacing it whole. An entry written to
-// settings.json beside a config.json that still holds hooks would be gone after
-// one launch, so deja writes where the reader's hooks are.
-func TestCopilotAutoWritesBesideHooksStillInConfigJSON(t *testing.T) {
+// A comment deja cannot keep is a refusal, and a refusal writes nothing: the
+// MCP entry and the hook file used to be written first, leaving half a target.
+func TestCopilotAutoRefusesBeforeWritingAnything(t *testing.T) {
 	home := copilotTestHome(t)
 	config := filepath.Join(home, ".copilot", "config.json")
-	settings := filepath.Join(home, ".copilot", "settings.json")
-	before := `{"banner":"never","hooks":{"userPromptSubmitted":[{"type":"command","bash":"/usr/bin/theirs","timeoutSec":10}]}}` + "\n"
+	before := "{\n  // mine\n  \"hooks\": {\"sessionStart\": [{\"type\": \"command\", \"bash\": \"" + hookExeInConfigs("/usr/local/bin/deja") + " hook-context --copilot\"}]}\n}\n"
 	if err := os.WriteFile(config, []byte(before), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err == nil {
+		t.Fatal("install edited hooks in a file whose comments it cannot keep")
+	}
+	for _, name := range []string{"mcp-config.json", "settings.json", filepath.Join("hooks", "deja.json"), filepath.Join("skills", "deja-history", "SKILL.md")} {
+		if _, err := os.Stat(filepath.Join(home, ".copilot", name)); err == nil {
+			t.Errorf("a refused install still wrote %s", name)
+		}
+	}
+	if got := readFile(t, config); got != before {
+		t.Errorf("a refused install changed config.json:\n%s", got)
+	}
+}
+
+// The file is shared: vscode-auto writes the same one, and taking either
+// target out leaves it while the other is installed.
+func TestCopilotAndVSCodeAutoShareTheHookFile(t *testing.T) {
+	copilotTestHome(t)
+	if _, err := captureRun(t, "install", "vscode-auto", "--no-index"); err != nil {
+		t.Fatal(err)
+	}
+	_, first := readCopilotHookFile(t)
 	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
 		t.Fatal(err)
 	}
-	got := readFile(t, config)
-	if !strings.Contains(got, "hook-context --copilot") || !strings.Contains(got, "/usr/bin/theirs") {
-		t.Fatalf("deja's hook did not go beside theirs in config.json:\n%s", got)
-	}
-	if b, err := os.ReadFile(settings); err == nil && strings.Contains(string(b), "hook-context") {
-		t.Errorf("deja also wrote settings.json, which the move overwrites:\n%s", b)
+	if again := readFile(t, copilotHooksPath()); again != first {
+		t.Errorf("copilot-auto rewrote the file vscode-auto wrote:\nfirst:\n%s\nsecond:\n%s", first, again)
 	}
 	if _, err := captureRun(t, "uninstall", "copilot-auto"); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile(t, config); got != before {
-		t.Errorf("uninstall did not give config.json back byte for byte:\nbefore:\n%s\nafter:\n%s", before, got)
+	if _, err := os.Stat(copilotHooksPath()); err != nil {
+		t.Fatalf("uninstalling copilot-auto took the file vscode-auto still needs: %v", err)
+	}
+	if _, err := captureRun(t, "uninstall", "vscode-auto"); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(copilotHooksPath()); err == nil {
+		t.Errorf("the last target out left the hook file:\n%s", b)
 	}
 }
 
@@ -175,7 +233,6 @@ func TestHookContextCopilotAnswersInCopilotsShape(t *testing.T) {
 
 func TestDoctorReportsCopilotAutoRecall(t *testing.T) {
 	home := copilotTestHome(t)
-	path := filepath.Join(home, ".copilot", "settings.json")
 	row := func() string {
 		var out bytes.Buffer
 		doctorAutoRecall(&out)
@@ -207,25 +264,22 @@ func TestDoctorReportsCopilotAutoRecall(t *testing.T) {
 	}
 
 	// The switch that turns every hook off leaves the entry looking installed.
-	b := readFile(t, path)
-	var root map[string]any
-	if err := json.Unmarshal([]byte(b), &root); err != nil {
-		t.Fatal(err)
-	}
-	root["disableAllHooks"] = true
-	next, _ := json.Marshal(root)
-	if err := os.WriteFile(path, next, 0o600); err != nil {
+	settings := filepath.Join(home, ".copilot", "settings.json")
+	if err := os.WriteFile(settings, []byte(`{"disableAllHooks":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := row(); !strings.Contains(got, "switched off") || !strings.Contains(got, "disableAllHooks") {
 		t.Errorf("disableAllHooks is on and the row does not say so:\n%s", got)
 	}
+	if err := os.Remove(settings); err != nil {
+		t.Fatal(err)
+	}
 
 	// An entry naming a binary that is gone is a hook that exits 127. Absolute
 	// the way this platform spells it: "/gone/deja" is relative on Windows.
 	gone := filepath.Join(t.TempDir(), "gone", "deja")
-	dead := `{"hooks":{"sessionStart":[{"type":"command","bash":"` + jsonEscaped(t, gone) + ` hook-context --copilot","timeoutSec":10}]}}`
-	if err := os.WriteFile(path, []byte(dead), 0o600); err != nil {
+	dead := `{"hooks":{"userPromptSubmitted":[{"type":"command","bash":"` + jsonEscaped(t, gone) + ` hook-prompt --copilot","timeoutSec":10}]}}`
+	if err := os.WriteFile(copilotHooksPath(), []byte(dead), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := row(); !strings.Contains(got, gone) || !strings.Contains(got, "copilot-auto") {
@@ -237,163 +291,29 @@ func TestDoctorReportsCopilotAutoRecall(t *testing.T) {
 // settings into settings.json: two comment lines of its own, then JSON.
 const copilotManagedConfig = "// User settings belong in settings.json.\n// This file is managed automatically.\n{\n  \"firstLaunchAt\": \"2026-03-11T00:00:00.000Z\"\n}\n"
 
-// Every config.json a 1.0.79 has touched carries that header. With no hooks in
-// it the hook goes to settings.json and config.json is not touched.
-func TestCopilotAutoLeavesTheManagedConfigJSONAlone(t *testing.T) {
-	home := copilotTestHome(t)
-	config := filepath.Join(home, ".copilot", "config.json")
-	if err := os.WriteFile(config, []byte(copilotManagedConfig), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(readFile(t, filepath.Join(home, ".copilot", "settings.json")), "hook-context --copilot") {
-		t.Error("the hook is not in settings.json")
-	}
-	if got := readFile(t, config); got != copilotManagedConfig {
-		t.Errorf("install rewrote Copilot's own config.json:\n%s", got)
-	}
-}
-
-// Hooks added by hand to a config.json that already carries Copilot's header
-// still move to settings.json on the next start, so deja's entry goes beside
-// them, and the header goes back as it was.
-func TestCopilotAutoWritesBesideHooksUnderCopilotsHeader(t *testing.T) {
-	home := copilotTestHome(t)
-	config := filepath.Join(home, ".copilot", "config.json")
-	before := strings.Replace(copilotManagedConfig, "\"firstLaunchAt\": \"2026-03-11T00:00:00.000Z\"",
-		"\"firstLaunchAt\": \"2026-03-11T00:00:00.000Z\",\n  \"hooks\": {\n    \"userPromptSubmitted\": [\n      {\n        \"type\": \"command\",\n        \"bash\": \"/usr/bin/theirs\",\n        \"timeoutSec\": 10\n      }\n    ]\n  }", 1)
-	if err := os.WriteFile(config, []byte(before), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
-		t.Fatal(err)
-	}
-	got := readFile(t, config)
-	if !strings.HasPrefix(got, "// User settings belong in settings.json.\n// This file is managed automatically.\n{") {
-		t.Errorf("the header did not survive:\n%s", got)
-	}
-	if !strings.Contains(got, "hook-context --copilot") || !strings.Contains(got, "/usr/bin/theirs") {
-		t.Fatalf("deja's hook did not go beside theirs:\n%s", got)
-	}
-	if _, err := captureRun(t, "uninstall", "copilot-auto"); err != nil {
-		t.Fatal(err)
-	}
-	if got := readFile(t, config); got != before {
-		t.Errorf("uninstall did not give config.json back byte for byte:\nbefore:\n%s\nafter:\n%s", before, got)
-	}
-}
-
-// A comment deja cannot keep is a refusal, and a refusal writes nothing: the
-// MCP entry and settings.json used to be written first, leaving half a target.
-func TestCopilotAutoRefusesBeforeWritingAnything(t *testing.T) {
-	home := copilotTestHome(t)
-	config := filepath.Join(home, ".copilot", "config.json")
-	before := "{\n  // mine\n  \"hooks\": {\"userPromptSubmitted\": [{\"type\": \"command\", \"bash\": \"/usr/bin/theirs\"}]}\n}\n"
-	if err := os.WriteFile(config, []byte(before), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err == nil {
-		t.Fatal("install wrote a hook into a file whose comments it cannot keep")
-	}
-	for _, name := range []string{"mcp-config.json", "settings.json", filepath.Join("skills", "deja-history", "SKILL.md")} {
-		if _, err := os.Stat(filepath.Join(home, ".copilot", name)); err == nil {
-			t.Errorf("a refused install still wrote %s", name)
-		}
-	}
-	if got := readFile(t, config); got != before {
-		t.Errorf("a refused install changed config.json:\n%s", got)
-	}
-}
-
-// Copilot moves config.json's hooks into settings.json on start. The uninstall
-// after that takes deja's entry out of settings.json and names the snapshot of
-// the old config.json it took on the way in, rather than leaving it unsaid.
-func TestUninstallCopilotAutoAfterCopilotMovedTheHooks(t *testing.T) {
-	home := copilotTestHome(t)
-	config := filepath.Join(home, ".copilot", "config.json")
-	settings := filepath.Join(home, ".copilot", "settings.json")
-	if err := os.WriteFile(config, []byte(`{"model":"gpt-5.4","hooks":{"userPromptSubmitted":[{"type":"command","bash":"/usr/bin/theirs","timeoutSec":5}]}}`+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
-		t.Fatal(err)
-	}
-	// What 1.0.79 does on its next start.
-	var moved map[string]any
-	if err := json.Unmarshal([]byte(readFile(t, config)), &moved); err != nil {
-		t.Fatal(err)
-	}
-	b, _ := json.MarshalIndent(moved, "", "  ")
-	if err := os.WriteFile(settings, append(b, '\n'), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(config, []byte(copilotManagedConfig), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	stderr, err := captureRunStderr(t, "uninstall", "copilot-auto")
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := readFile(t, settings)
-	if strings.Contains(got, "hook-context") || !strings.Contains(got, "/usr/bin/theirs") {
-		t.Errorf("uninstall left deja's hook or took theirs:\n%s", got)
-	}
-	if !strings.Contains(stderr, "config.json.bak") {
-		t.Errorf("the snapshot of config.json was kept without a word:\n%s", stderr)
-	}
-}
-
-// deja created the hooks object in settings.json. Whichever file it sits in by
-// the time of the uninstall, an object deja added and emptied goes with it.
-func TestUninstallCopilotAutoTakesTheHooksObjectItAdded(t *testing.T) {
-	home := copilotTestHome(t)
-	settings := filepath.Join(home, ".copilot", "settings.json")
-	if err := os.WriteFile(settings, []byte("{\n  \"model\": \"gpt-5.4\"\n}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
-		t.Fatal(err)
-	}
-	// Copilot rewrites settings.json in its own key order.
-	var root map[string]any
-	if err := json.Unmarshal([]byte(readFile(t, settings)), &root); err != nil {
-		t.Fatal(err)
-	}
-	b, _ := json.MarshalIndent(root, "", "  ")
-	if err := os.WriteFile(settings, append(b, '\n'), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := captureRun(t, "uninstall", "copilot-auto"); err != nil {
-		t.Fatal(err)
-	}
-	if got := readFile(t, settings); strings.Contains(got, "hooks") {
-		t.Errorf("uninstall left the hooks object deja added:\n%s", got)
-	}
-}
-
 // Uninstalling the base target takes the hook with it, the way claude-code
 // takes claude-auto's: a hook calling a server that is gone is half a target.
 func TestUninstallCopilotTakesTheAutoHookToo(t *testing.T) {
-	home := copilotTestHome(t)
+	copilotTestHome(t)
 	if _, err := captureRun(t, "install", "copilot-auto", "--no-index"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := captureRun(t, "uninstall", "copilot"); err != nil {
 		t.Fatal(err)
 	}
-	if b, err := os.ReadFile(filepath.Join(home, ".copilot", "settings.json")); err == nil && strings.Contains(string(b), "hook-context") {
+	if b, err := os.ReadFile(copilotHooksPath()); err == nil && strings.Contains(string(b), "hook-context") {
 		t.Errorf("`deja uninstall copilot` left the hook:\n%s", b)
 	}
 }
 
-// A hook-context line without --copilot answers in Claude's envelope, which
-// Copilot runs and drops: installed-looking, delivering nothing.
-func TestDoctorCallsAPlainHookContextEntryStale(t *testing.T) {
-	home := copilotTestHome(t)
-	path := filepath.Join(home, ".copilot", "settings.json")
-	if err := os.WriteFile(path, []byte(`{"hooks":{"sessionStart":[{"type":"command","bash":"deja hook-context","timeoutSec":10}]}}`), 0o600); err != nil {
+// A hook-prompt line without --copilot answers in Claude's envelope, which
+// Copilot CLI runs and drops: installed-looking, delivering nothing.
+func TestDoctorCallsAPlainHookPromptEntryStale(t *testing.T) {
+	copilotTestHome(t)
+	if err := os.MkdirAll(filepath.Dir(copilotHooksPath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(copilotHooksPath(), []byte(`{"hooks":{"userPromptSubmitted":[{"type":"command","bash":"deja hook-prompt","timeoutSec":10}]}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range autoWirings() {
@@ -450,8 +370,7 @@ func TestCopilotPowerShellLineQuotesThePath(t *testing.T) {
 }
 
 // Copilot writes settings.json itself, so the file being there says nothing
-// about deja: a machine that never ran copilot-auto read stale, and counted as
-// wired for the brief.
+// about deja: a machine that never ran copilot-auto reads missing.
 func TestDoctorCallsCopilotsOwnSettingsMissing(t *testing.T) {
 	home := copilotTestHome(t)
 	if err := os.WriteFile(filepath.Join(home, ".copilot", "settings.json"), []byte(`{"model":"gpt-5.4"}`), 0o600); err != nil {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -81,10 +80,6 @@ func emitNudgeOnly(stdout io.Writer, plain bool, nudge string) error {
 	var resp sessionStartHookResponse
 	resp.HookSpecificOutput.HookEventName = "UserPromptSubmit"
 	resp.HookSpecificOutput.AdditionalContext = out
-	b, err := json.Marshal(resp)
-	if err != nil {
-		return nil
-	}
-	fmt.Fprintln(stdout, string(b))
+	writePromptResponse(stdout, resp)
 	return nil
 }

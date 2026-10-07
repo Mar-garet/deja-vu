@@ -29,24 +29,31 @@ func TestInstallCursorWiresTheMomentOfTheAction(t *testing.T) {
 	var root struct {
 		Hooks map[string][]struct {
 			Command string `json:"command"`
+			Matcher string `json:"matcher"`
 		} `json:"hooks"`
 	}
 	if err := json.Unmarshal(b, &root); err != nil {
 		t.Fatal(err)
 	}
-	for event, sub := range map[string]string{
-		"sessionStart":       "hook-context",
-		"beforeSubmitPrompt": "hook-prompt",
-		"preToolUse":         "hook-tool",
-		"postToolUse":        "hook-tool-after",
-		"preCompact":         "hook-precompact",
+	// The tool events carry a matcher, which cursor tests against tool_name,
+	// so deja does not start on every read and grep.
+	for event, want := range map[string]struct{ sub, matcher string }{
+		"sessionStart":       {"hook-context", ""},
+		"beforeSubmitPrompt": {"hook-prompt", ""},
+		"preToolUse":         {"hook-tool", "^(Shell|Write|Task)$"},
+		"postToolUse":        {"hook-tool-after", "^Shell$"},
+		"postToolUseFailure": {"hook-tool-after", "^Shell$"},
+		"preCompact":         {"hook-precompact", ""},
 	} {
 		entries := root.Hooks[event]
 		if len(entries) != 1 {
 			t.Fatalf("%s entries = %d, want 1: %s", event, len(entries), b)
 		}
-		if got := entries[0].Command; !strings.HasSuffix(got, sub) {
-			t.Errorf("%s runs %q, want %s", event, got, sub)
+		if got := entries[0].Command; !strings.HasSuffix(got, want.sub) {
+			t.Errorf("%s runs %q, want %s", event, got, want.sub)
+		}
+		if got := entries[0].Matcher; got != want.matcher {
+			t.Errorf("%s matcher = %q, want %q", event, got, want.matcher)
 		}
 	}
 	// The command string is what cursor dedupes on against ~/.claude, so it has

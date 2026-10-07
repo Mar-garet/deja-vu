@@ -46,7 +46,7 @@ Each chat also has a `meta.json` beside its `store.db` holding the `cwd` it ran 
 
 ## Wiring
 
-`deja install cursor` adds the server to `${CURSOR_CONFIG_DIR:-~/.cursor}/mcp.json`, writes the shared skill `~/.agents/skills/deja-history/SKILL.md` and the `/deja` command in `commands/deja.md` beside it. `deja install cursor-auto` adds the same plus `hooks.json` entries: `sessionStart` (`deja hook-context`), `beforeSubmitPrompt` (`hook-prompt`, interactive TUI only — headless `-p` skips it), `preToolUse`, `postToolUse`, `preCompact` and `sessionEnd` (`hook-session-end`, so the session you closed is back in the next one's MCP recall). Cursor also runs the hooks in `~/.claude/settings.json` and dedupes them against its own by exact command string, so a machine with both wired gets one injection.
+`deja install cursor` adds the server to `${CURSOR_CONFIG_DIR:-~/.cursor}/mcp.json`, writes the shared skill `~/.agents/skills/deja-history/SKILL.md` and the `/deja` command in `commands/deja.md` beside it. `deja install cursor-auto` adds the same plus `hooks.json` entries: `sessionStart` (`deja hook-context`), `beforeSubmitPrompt` (`hook-prompt`, interactive TUI only — headless `-p` skips it), `preToolUse` (matcher `^(Shell|Write|Task)$`), `postToolUse` and `postToolUseFailure` (matcher `^Shell$`; the second fires for a tool that errors, with the text in `error_message`), `preCompact` and `sessionEnd` (`hook-session-end`, so the session you closed is back in the next one's MCP recall). Cursor also runs the hooks in `~/.claude/settings.json` and dedupes them against its own by exact command string, so a machine with both wired gets one injection. Cursor tests a matcher as a regex against `tool_name` for the three tool events (2026.09.02), so deja does not start on every read and grep.
 
 ## Resume
 
@@ -71,4 +71,4 @@ take, so those still reopen only in the editor.
 - A parsed message is capped at 1 MiB. CLI subagent transcripts are opt-in.
 - Both CLI layouts are written by `cursor-agent 2026.09.02-c22c1a3`, minutes apart in the same session.
 
-**Last verified:** 2026-10-01
+**Last verified:** 2026-10-07

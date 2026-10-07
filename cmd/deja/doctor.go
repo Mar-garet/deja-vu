@@ -2299,8 +2299,7 @@ func doctorFileWired(path string) bool {
 }
 
 // doctorVSCodeMCPPath is the mcp.json in the first VS Code User folder present.
-// VS Code Copilot Chat is wired through MCP alone — no hook, no plugin — and
-// the config key is `servers`, not the common `mcpServers`.
+// Copilot Chat's config key is `servers`, not the common `mcpServers`.
 func doctorVSCodeMCPPath() string {
 	dirs := vsCodeUserDirs()
 	if len(dirs) == 0 {

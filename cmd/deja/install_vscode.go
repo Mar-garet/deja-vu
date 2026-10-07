@@ -33,8 +33,7 @@ func vsCodeDefaultUserDir() string {
 	}
 }
 
-// VS Code Copilot Chat has no hook and no plugin channel an outside CLI can
-// reach: recall arrives as MCP tools instead. Agent mode reads them from
+// VS Code Copilot Chat takes deja's MCP tools from
 // mcp.json in the profile's User folder, and the config shape is VS Code's own
 // — a top-level `servers` map (not `mcpServers`) whose entries carry a `type`.
 // Verified against VS Code 1.134.0 (serversKey "servers", type "stdio").

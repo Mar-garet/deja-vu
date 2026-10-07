@@ -238,6 +238,10 @@ var commands = map[string]command{
 			return nil
 		}
 		plain := len(rest) > 0 && (rest[0] == "--plain" || rest[0] == "-plain")
+		// --copilot: the flat answer Copilot CLI reads (see hook_strict.go).
+		if len(rest) > 0 && (rest[0] == "--copilot" || rest[0] == "-copilot") {
+			copilotHookOutput = true
+		}
 		return runHookPromptMode(dir, os.Stdin, os.Stdout, plain)
 	},
 	"hook-antigravity": func(dir string, _ []string) error {

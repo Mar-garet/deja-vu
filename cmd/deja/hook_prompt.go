@@ -169,6 +169,7 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	// payload it cannot read at all injects nothing and this never fires.
 	unreadable := json.NewDecoder(bytes.NewReader(payload)).Decode(&input) != nil
 	input.adopt()
+	adoptCopilotHost(payload)
 	// The kill switch. It reached the session-start hook and nothing else, so
 	// this hook — every user message, and the wiring for seven harnesses —
 	// kept injecting on a machine with recall off (#2701).
@@ -183,6 +184,8 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	shape := hookToolClaude
 	if plain {
 		shape = hookToolPlain
+	} else if copilotHookOutput {
+		shape = hookToolCopilot
 	}
 	// Written down for the surfaces that are told no session id: this hook drops
 	// the caller's own session by hand below, and the MCP tool cannot (#3945).
@@ -625,22 +628,28 @@ func runHookPromptMode(dir string, stdin io.Reader, stdout io.Writer, plain bool
 	if showLine {
 		resp.SystemMessage = dejaVuLine(ss[0], viaTerms(out, terms)...)
 	}
-	if resp.SystemMessage == "" {
-		// No presentable topic — inject the context silently rather than
-		// flashing harness plumbing at the user.
-		b, err := json.Marshal(resp)
-		if err != nil {
-			return nil
-		}
-		fmt.Fprintln(stdout, string(b))
-		return nil
+	// No presentable topic leaves SystemMessage empty, and the context goes in
+	// silently rather than flashing harness plumbing at the user.
+	writePromptResponse(stdout, resp)
+	return nil
+}
+
+// writePromptResponse prints the per-prompt answer in the shape the host
+// reads: Copilot CLI's flat one under --copilot, Claude's envelope otherwise.
+// A strict host gets no receipt line.
+func writePromptResponse(stdout io.Writer, resp sessionStartHookResponse) {
+	if copilotHookOutput {
+		emitCopilotContext(stdout, resp.HookSpecificOutput.AdditionalContext)
+		return
+	}
+	if strictHookOutput {
+		resp.SystemMessage = ""
 	}
 	b, err := json.Marshal(resp)
 	if err != nil {
-		return nil
+		return
 	}
 	fmt.Fprintln(stdout, string(b))
-	return nil
 }
 
 // askedBeforeWhen dates the earlier question, so the reader can weigh a decision

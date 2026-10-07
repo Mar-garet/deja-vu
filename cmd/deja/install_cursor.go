@@ -39,21 +39,29 @@ func installCursorHooks(exe string, uninstall bool) (installResult, error) {
 	}
 	// sessionStart carries the digest. beforeSubmitPrompt only fires in the
 	// interactive TUI — headless `-p` skips it — but costs nothing there.
-	setCursorHook(hooks, "sessionStart", hookRun(exe, "hook-context"), uninstall)
-	setCursorHook(hooks, "beforeSubmitPrompt", hookRun(exe, "hook-prompt"), uninstall)
+	setCursorHook(hooks, "sessionStart", hookRun(exe, "hook-context"), "", uninstall)
+	setCursorHook(hooks, "beforeSubmitPrompt", hookRun(exe, "hook-prompt"), "", uninstall)
 	// And the same three cursor already runs for anyone who also has Claude
 	// Code: it reads ~/.claude/settings.json and maps the names onto its own —
 	// PreToolUse→preToolUse, PostToolUse→postToolUse, PreCompact→preCompact
 	// (the table is in its own bundle, 2026.07.23). A cursor-only user got none
 	// of them. The dedupe is by exact command string, so a user with both still
 	// gets one hook, not two.
-	setCursorHook(hooks, "preToolUse", hookRun(exe, "hook-tool"), uninstall)
-	setCursorHook(hooks, "postToolUse", hookRun(exe, "hook-tool-after"), uninstall)
-	setCursorHook(hooks, "preCompact", hookRun(exe, "hook-precompact"), uninstall)
+	//
+	// The matchers keep deja from starting on every read and grep: cursor
+	// tests an entry's matcher as a regex against tool_name (Shell, Write,
+	// Read, Grep, Task, …) for the three tool events, 2026.09.02.
+	setCursorHook(hooks, "preToolUse", hookRun(exe, "hook-tool"), cursorPreToolMatcher, uninstall)
+	setCursorHook(hooks, "postToolUse", hookRun(exe, "hook-tool-after"), cursorShellMatcher, uninstall)
+	// A tool that errors rather than returns fires this instead, with the
+	// failure under error_message, and its additional_context reaches the
+	// model the same way.
+	setCursorHook(hooks, "postToolUseFailure", hookRun(exe, "hook-tool-after"), cursorShellMatcher, uninstall)
+	setCursorHook(hooks, "preCompact", hookRun(exe, "hook-precompact"), "", uninstall)
 	// cursor-agent 2026.09.02 runs sessionEnd with conversation_id, which is
 	// what clears the live stamp so the next session's MCP recall can answer
 	// with this one (#4545).
-	setCursorHook(hooks, "sessionEnd", hookRun(exe, "hook-session-end"), uninstall)
+	setCursorHook(hooks, "sessionEnd", hookRun(exe, "hook-session-end"), "", uninstall)
 	if len(hooks) == 0 {
 		delete(root, "hooks")
 		delete(root, "version")
@@ -70,7 +78,14 @@ func installCursorHooks(exe string, uninstall bool) (installResult, error) {
 	return installResult{Path: path, Action: a}, err
 }
 
-func setCursorHook(hooks map[string]any, event, cmd string, uninstall bool) {
+// Cursor's tool names for a command, a file write (Edit maps onto Write) and
+// a subagent spawn.
+const (
+	cursorPreToolMatcher = "^(Shell|Write|Task)$"
+	cursorShellMatcher   = "^Shell$"
+)
+
+func setCursorHook(hooks map[string]any, event, cmd, matcher string, uninstall bool) {
 	entries, _ := hooks[event].([]any)
 	var kept []any
 	found := false
@@ -106,11 +121,14 @@ func setCursorHook(hooks map[string]any, event, cmd string, uninstall bool) {
 			}
 			found = true
 			entry["command"] = cmd
+			setHookMatcher(entry, matcher)
 		}
 		kept = append(kept, entryAny)
 	}
 	if !uninstall && !found {
-		kept = append(kept, map[string]any{"command": cmd})
+		entry := map[string]any{"command": cmd}
+		setHookMatcher(entry, matcher)
+		kept = append(kept, entry)
 	}
 	if len(kept) == 0 {
 		delete(hooks, event)
