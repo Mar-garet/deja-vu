@@ -3692,6 +3692,7 @@ func stemMatches(term string, catalog map[string]bool) []string {
 				forms = append(forms, form)
 			}
 		}
+		forms = append(forms, doubledForms(term)...)
 	} else {
 		forms = suffixForms(term)
 	}
@@ -3914,6 +3915,7 @@ func oneSuffixStep(word string) []string {
 		base := strings.TrimSuffix(word, "ing")
 		add(base)
 		add(base + "e")
+		add(undoubled(base))
 	case strings.HasSuffix(word, "ies"):
 		// retries -> retry. Ahead of the "es" and "s" cases, which reduce it
 		// to "retri" and stop there: neither a consonant+y word nor its
@@ -3931,6 +3933,7 @@ func oneSuffixStep(word string) []string {
 		base := strings.TrimSuffix(word, "ed")
 		add(base)
 		add(base + "e")
+		add(undoubled(base))
 	case strings.HasSuffix(word, "ment"):
 		base := strings.TrimSuffix(word, "ment")
 		add(base)
@@ -3968,8 +3971,41 @@ func oneSuffixStep(word string) []string {
 	if !strings.HasSuffix(word, "e") && !strings.HasSuffix(word, "ing") && !strings.HasSuffix(word, "ed") {
 		add(word + "ing")
 		add(word + "ed")
+		// commit -> committing, committed. Forms no transcript holds fall out
+		// at the catalog.
+		for _, form := range doubledForms(word) {
+			add(form)
+		}
 	}
 	return out
+}
+
+// undoubled is base without the consonant English doubles before -ing and -ed
+// (logg -> log, pinn -> pin). Not -er: logger is log's, but letter, matter and
+// summer are not let's, mat's and sum's, and the spelling cannot tell them apart, or "" when base does not end in one. Asked
+// about "structured logging", recall missed the session that only says "log"
+// and "logs": logging stripped to logg and stopped there (#4785).
+func undoubled(base string) string {
+	n := len(base)
+	if n < 4 || base[n-1] != base[n-2] || !isConsonant(base[n-1]) {
+		return ""
+	}
+	return base[:n-1]
+}
+
+// doubledForms is the other direction for a word ending
+// consonant-vowel-consonant: log -> logging, logged.
+func doubledForms(word string) []string {
+	n := len(word)
+	if n < 3 || !isConsonant(word[n-1]) || isConsonant(word[n-2]) || !isConsonant(word[n-3]) || strings.ContainsRune("wxy", rune(word[n-1])) {
+		return nil
+	}
+	d := word + word[n-1:]
+	return []string{d + "ing", d + "ed"}
+}
+
+func isConsonant(c byte) bool {
+	return c >= 'a' && c <= 'z' && !strings.ContainsRune("aeiou", rune(c))
 }
 
 // anyNonASCII reports whether any term could carry or shed a combining mark.
