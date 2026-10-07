@@ -186,6 +186,10 @@ $ deja "jwt refresh token"
 | `deja fix <error>` | What this machine ran after that same error before, when the error did not come back. Never a merge, a force push or a deletion. |
 | `deja friction` | Errors that hit three or more separate sessions, with the harnesses named. |
 
+The bare query form suggests a command before searching when its first word
+has at least four characters and is one edit from a command name. Use
+`deja search <query>` to search for that word explicitly.
+
 <details>
 <summary>Using what it finds, and moving it between machines</summary>
 

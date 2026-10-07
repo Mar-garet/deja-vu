@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -57,5 +60,79 @@ func TestTheHintStillAnswersTheGuessesItAlreadyKnew(t *testing.T) {
 		if got := commandHint(q); got != "" {
 			t.Errorf("%q got a command hint it did not need: %q", q, got)
 		}
+	}
+}
+
+func TestOneEditCommandTypoStopsBeforeSearch(t *testing.T) {
+	for _, indexed := range []bool{false, true} {
+		for _, tc := range []struct {
+			name string
+			args []string
+			want string
+		}{
+			{"deletion", []string{"serch", "pool"}, "search"},
+			{"insertion", []string{"statsx"}, "stats"},
+			{"substitution", []string{"statz"}, "stats"},
+			{"prefix with flags", []string{"searc", "--json", "pool"}, "search"},
+			{"case insensitive", []string{"SERCH", "pool"}, "search"},
+		} {
+			name := tc.name + "/fresh"
+			if indexed {
+				name = tc.name + "/indexed"
+			}
+			t.Run(name, func(t *testing.T) {
+				tmp := hermeticEnv(t)
+				t.Setenv("DEJA_STORES", "claude")
+				writeClaudeFixture(t, filepath.Join(os.Getenv("DEJA_CLAUDE_ROOT"), "app", "one.jsonl"), "s1", []string{
+					`{"type":"user","sessionId":"s1","timestamp":"2026-10-01T10:00:00Z","message":{"role":"user","content":"serch pool statsx statz searc"}}`,
+				})
+				if indexed {
+					if _, err := captureRunStderr(t, "index"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				var out string
+				var err error
+				said := captureStderr(t, func() { out, err = captureRun(t, tc.args...) })
+				if !errors.Is(err, errAlreadySaid) {
+					t.Errorf("err = %v, want a mistyped command refusal", err)
+				}
+				if !strings.Contains(said, "did you mean `deja "+tc.want+"`?") {
+					t.Errorf("missing command suggestion: %q", said)
+				}
+				if out != "" || strings.Contains(said, "indexing sessions") || strings.Contains(said, "no matches") {
+					t.Errorf("the typo ran a search: stdout %q, stderr %q", out, said)
+				}
+				if !indexed {
+					if _, err := os.Stat(filepath.Join(tmp, "index.db")); !errors.Is(err, os.ErrNotExist) {
+						t.Errorf("the typo touched the index: %v", err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestExplicitAndQuotedQueriesStillSearch(t *testing.T) {
+	for _, args := range [][]string{
+		{"search", "serch", "pool"},
+		{"serch pool"},
+		{"--json", "serch", "pool"},
+		{"pool"},
+		{"a", "pool"},
+		{"-stats", "pool"},
+		{"STATS"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			hermeticEnv(t)
+			t.Setenv("DEJA_STORES", "claude")
+			writeClaudeFixture(t, filepath.Join(os.Getenv("DEJA_CLAUDE_ROOT"), "app", "one.jsonl"), "s1", []string{
+				`{"type":"user","sessionId":"s1","timestamp":"2026-10-01T10:00:00Z","message":{"role":"user","content":"a serch pool stats"}}`,
+			})
+			out, err := captureRun(t, args...)
+			if err != nil || !strings.Contains(out, "serch pool") {
+				t.Fatalf("query did not search: stdout %q, err %v", out, err)
+			}
+		})
 	}
 }

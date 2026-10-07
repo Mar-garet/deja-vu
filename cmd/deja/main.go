@@ -1421,7 +1421,29 @@ func ensureForCLISearch(dir string, o search.Options, force bool, progress io.Wr
 // command name goes. That is the only form the mistyped-command hint is about:
 // `deja search doctro` is someone searching for the word (#2197).
 func runBareSearch(dir string, args []string, sourceInstance string) error {
+	if len(args) > 0 {
+		if near := oneEditCommand(args[0]); near != "" {
+			fmt.Fprintf(os.Stderr, "deja: %q is not a command — did you mean `deja %s`?\n", args[0], near)
+			return errAlreadySaid
+		}
+	}
 	return searchWithOptions(dir, args, sourceInstance, true)
+}
+
+// oneEditCommand catches a likely command typo before a bare search can build
+// the index or return history (#4628). Keep the broader prefix and two-edit
+// hints for after the search; a quoted multi-word query is still a query.
+func oneEditCommand(first string) string {
+	low := strings.ToLower(first)
+	if len([]rune(low)) < 4 || strings.HasPrefix(low, "-") || strings.ContainsAny(low, " \t\r\n") || dispatchKnows(low) {
+		return ""
+	}
+	for _, name := range commandHintNames() {
+		if editDistance(low, name) == 1 {
+			return name
+		}
+	}
+	return ""
 }
 
 func runSearch(dir string, args []string, sourceInstance string) error {
@@ -2164,16 +2186,7 @@ func commandHint(q string) string {
 	if strings.EqualFold(first, "unpromote") || strings.EqualFold(first, "demote") {
 		return "deja: \"" + first + "\" is not a command — `deja promote <id> --state rejected` takes a decision back, and `deja forget --session deja-note-<harness>-<id>` removes the note itself\n"
 	}
-	names := []string{"search", "show", "last", "aider", "goose"}
-	for name := range commands {
-		// Hidden plumbing is not something anyone means to type.
-		if strings.HasPrefix(name, "-") || strings.HasPrefix(name, "hook-") {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	near := nearestTarget(first, names)
+	near := nearestTarget(first, commandHintNames())
 	if near == "" {
 		return ""
 	}
@@ -2184,6 +2197,19 @@ func commandHint(q string) string {
 		return "deja: \"unforget\" is not a command — `deja forget --unforget <id>` is, and `deja forget --list` names the ids\n"
 	}
 	return fmt.Sprintf("deja: %q is not a command — did you mean `deja %s`?\n", first, near)
+}
+
+func commandHintNames() []string {
+	names := []string{"search", "show", "last", "aider", "goose"}
+	for name := range commands {
+		// Hidden plumbing is not something anyone means to type.
+		if strings.HasPrefix(name, "-") || strings.HasPrefix(name, "hook-") {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // hyphenatedCommandHint answers the guess that spelled a hyphenated command
