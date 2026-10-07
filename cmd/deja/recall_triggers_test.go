@@ -76,3 +76,27 @@ func TestBundledCLISkillMatchesInstaller(t *testing.T) {
 		t.Fatalf("skills/deja-search/SKILL.md has drifted from cliSkillRegistryFile:\n--- file ---\n%s\n--- installer ---\n%s", got, want)
 	}
 }
+
+// A skill's description is an unquoted YAML scalar. A ": " or " #" inside it
+// ends the scalar, and a strict loader drops the whole skill: the description
+// that added "never wrote into the repo: naming rules, ..." failed to parse.
+func TestSkillDescriptionsParseAsPlainYAML(t *testing.T) {
+	for name, file := range map[string]string{
+		"skill":          skillFile(""),
+		"cli skill":      cliSkillFile(),
+		"registry skill": cliSkillRegistryFile(),
+	} {
+		var desc string
+		for _, line := range strings.Split(file, "\n") {
+			if strings.HasPrefix(line, "description: ") {
+				desc = strings.TrimPrefix(line, "description: ")
+			}
+		}
+		if desc == "" {
+			t.Fatalf("%s has no description line", name)
+		}
+		if strings.Contains(desc, ": ") || strings.Contains(desc, " #") || strings.ContainsAny(desc[:1], "'\"[]{}>|*&!%@`,?:-#") {
+			t.Errorf("%s description is not a plain YAML scalar: %q", name, desc)
+		}
+	}
+}
