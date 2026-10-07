@@ -15,7 +15,7 @@ import (
 // not go looking for it, so it gets one more sentence saying how (#4760).
 func mcpInstructions(dir, client string) string {
 	var b strings.Builder
-	b.WriteString("deja indexes this user's past sessions across every AI coding tool they use. ")
+	b.WriteString("deja indexes this user's past sessions across every AI coding tool they use: what they already settled and never wrote into the repo, such as naming rules, banned or already-tried tools, required checks before merge, preferred values and who owns what. ")
 	b.WriteString("Call the deja tool with mode recall before debugging an error or re-implementing anything that might already exist, ")
 	// Every example used to be a question, so a user stating that something of
 	// theirs exists — the same signal, with a stronger presumption behind it —
@@ -50,7 +50,7 @@ func mcpInstructions(dir, client string) string {
 
 // recallBeforeChange is the trigger for an ordinary change. The server
 // instructions, the guidance block and the skill all carry it word for word.
-const recallBeforeChange = "Before you change code, config, a dependency or a schedule, call deja once with mode recall and the task's key nouns (file, package, table, setting). If a result bears on the change, say so in one line before you act."
+const recallBeforeChange = "Before your first edit in a task, and again before you call a change done, ready or safe to merge, call deja with mode recall and the task's key nouns (file, package, feature, setting). A rule, a rejected option or a check it returns outranks your defaults: follow it and say so in one line."
 
 // claudeCodeToolSearchHint names both spellings of the tool: `deja install`
 // registers the server as deja, the Claude plugin as plugin:deja-vu:deja.
