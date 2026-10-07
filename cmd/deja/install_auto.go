@@ -935,6 +935,9 @@ var qwenHookWiring = []struct{ Event, Sub, Matcher string }{
 	// The fix pair, at the failure. Matched on the tool that runs a command so
 	// it never spawns on a read.
 	{"PostToolUseFailure", "hook-tool-after", "run_shell_command"},
+	// The file line, after a read or an edit: PreToolUse is not read, and
+	// what PostToolUse returns goes in beside the tool's result.
+	{"PostToolUse", "hook-tool", "read_file|edit|write_file"},
 	// Compaction throws away the blocks this session was shown while the list
 	// that stops them repeating outlives them, so without this the memory qwen
 	// just lost is the memory recall refuses to send again.
@@ -946,11 +949,12 @@ var qwenHookWiring = []struct{ Event, Sub, Matcher string }{
 	{"SessionEnd", "hook-session-end", ""},
 }
 
-// qwenRetiredEvents are events deja used to write for qwen and no longer does.
-// The PostToolUse entry fired only after a tool that succeeded, so it looked
-// up a repair for commands that did not need one and stayed quiet for the ones
-// that did; leaving it behind would keep that cost on every green command.
-var qwenRetiredEvents = map[string]bool{"PostToolUse": true}
+// qwenRetiredEvents are hooks deja used to write for qwen and no longer does,
+// by event and subcommand. The PostToolUse fix pair fired only after a tool
+// that succeeded, so it looked up a repair for commands that did not need one
+// and stayed quiet for the ones that did; leaving it behind would keep that
+// cost on every green command.
+var qwenRetiredEvents = map[string]string{"PostToolUse": "hook-tool-after"}
 
 func installQwenAuto(exe string, uninstall bool) (installResult, error) {
 	exe = hookExeFor(exe, uninstall)
@@ -981,10 +985,12 @@ func installSettingsHookCmd(path, event, matcher string, timeout int, cmd string
 	return installSettingsHookRetiring(path, event, matcher, timeout, cmd, uninstall, nil)
 }
 
-// installSettingsHookRetiring also drops deja hooks under events this harness
-// no longer uses. Without it a generator fix ships and the old, dead entry
-// keeps firing next to the new one for everyone who installed before.
-func installSettingsHookRetiring(path, event, matcher string, timeout int, cmd string, uninstall bool, retire map[string]bool) (installResult, error) {
+// installSettingsHookRetiring also drops deja hooks this harness no longer
+// uses: under each event in retire, the entries running that subcommand, or
+// every deja entry when it is "". Without it a generator fix ships and the
+// old, dead entry keeps firing next to the new one for everyone who installed
+// before.
+func installSettingsHookRetiring(path, event, matcher string, timeout int, cmd string, uninstall bool, retire map[string]string) (installResult, error) {
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -1019,15 +1025,18 @@ func installSettingsHookRetiring(path, event, matcher string, timeout int, cmd s
 		hooks = map[string]any{}
 		root["hooks"] = hooks
 	}
-	for name := range retire {
-		if name == event {
+	for name, sub := range retire {
+		if name == event && sub == "" {
 			continue
 		}
 		old, _ := hooks[name].([]any)
 		var survivors []any
 		for _, entryAny := range old {
 			entry, _ := entryAny.(map[string]any)
-			if entry != nil && dejaHookEntry(entry) {
+			if entry != nil && sub == "" && dejaHookEntry(entry) {
+				continue
+			}
+			if entry != nil && sub != "" && entryHasCommand(entry, "deja "+sub) {
 				continue
 			}
 			survivors = append(survivors, entryAny)
