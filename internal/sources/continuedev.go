@@ -24,6 +24,10 @@ import (
 // mtime is the update — the same reading `sessions.json` gives Continue's own
 // history view. Shape from core/index.d.ts (Session, ChatHistoryItem,
 // ChatMessage) and core/util/paths.ts (#3062).
+//
+// A compaction rewrites the session file to the summary alone, so the turns
+// before it exist only in what the index already read; the index keeps those
+// when the file comes back opening with a summary (#4795).
 
 // ContinueRoot is where Continue keeps its state.
 func ContinueRoot() string {
@@ -132,6 +136,10 @@ type continueSession struct {
 type continueHistoryIt struct {
 	Message        continueMessage      `json:"message"`
 	ToolCallStates []continueToolCallSt `json:"toolCallStates"`
+	// ConversationSummary marks the item a compaction left: Continue rewrites
+	// the history to the system message and this one assistant item, whose
+	// content is the same summary (cn 1.5.47, compactChatHistory).
+	ConversationSummary *string `json:"conversationSummary"`
 }
 
 type continueToolCallSt struct {
@@ -212,6 +220,17 @@ func ParseContinueFile(path string) ([]model.Session, error) {
 	}
 	for i, it := range doc.History {
 		role := it.Message.Role
+		if it.ConversationSummary != nil {
+			// The summary of the turns the compaction erased from this file,
+			// not something the assistant said: filed under the summary role,
+			// as Claude's is (#4795).
+			if text := strings.TrimSpace(*it.ConversationSummary); text != "" {
+				at := base.Add(time.Duration(i) * step)
+				s.Touch(at)
+				s.Messages = append(s.Messages, model.Message{Role: RoleSummary, Text: text, Time: at})
+			}
+			continue
+		}
 		if role != "user" && role != "assistant" {
 			// system prompts are configuration and tool results arrive under
 			// the assistant item that called them.

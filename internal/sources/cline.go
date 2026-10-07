@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,9 +29,10 @@ import (
 //
 // Both transcript formats are whole-file JSON rewritten on change, not
 // append-only logs, so there is no incremental ParseFrom. Only user and
-// assistant text blocks are indexed; tool payloads, thinking, files, images,
-// subagents and compaction artifacts are skipped by design. Modern messages
-// files are indexed only for the lead agent.
+// assistant text blocks are indexed, with the compaction summary from
+// <sessionId>.compaction.json under the summary role; tool payloads, thinking,
+// files, images and subagents are skipped by design. Modern messages files are
+// indexed only for the lead agent.
 
 // ClineConfigDir is the native modern data root (~/.cline/data by default),
 // following Cline's own precedence chain.
@@ -141,10 +143,11 @@ func ClineSessionFiles() []string {
 // session as a transcript it could not read, the same shape as #3297 (#3360).
 func ClineSidecarFiles() []string {
 	return walkFiles(ClineSessionsDir(), func(p string) bool {
-		// The manifest is named after the directory it sits in, which is what
-		// the reader opens; anything else under a session is a file deja has
-		// no account of and the row should say so.
-		return filepath.Base(p) == filepath.Base(filepath.Dir(p))+".json"
+		// The manifest and the compaction file are named after the directory
+		// they sit in, which is what the reader opens; anything else under a
+		// session is a file deja has no account of and the row should say so.
+		id := filepath.Base(filepath.Dir(p))
+		return filepath.Base(p) == id+".json" || filepath.Base(p) == id+".compaction.json"
 	})
 }
 
@@ -278,10 +281,66 @@ func parseClineModernSession(path string) ([]model.Session, error) {
 		}
 		clineJoinExits(s.Messages, from, m.Content, clineDialect, exits)
 	}
+	for _, sum := range clineCompactionSummaries(filepath.Join(sessionDir, id+".compaction.json"), s.Started) {
+		s.Touch(sum.Time)
+		s.Messages = insertByTime(s.Messages, sum)
+	}
 	if len(s.Messages) == 0 {
 		return nil, nil
 	}
 	return []model.Session{s}, nil
+}
+
+// clineCompactionSummaries reads the summary a compaction left beside the
+// transcript. messages.json keeps every turn, so the summary is the one thing
+// only <id>.compaction.json holds: its messages are the compacted view the
+// model sees next, and the summary is the one marked
+// metadata.kind "compaction_summary" (@cline/core, observed on CLI 3.0.69 and
+// extension 4.1.23). Filed under the summary role, as Claude's is (#4795).
+func clineCompactionSummaries(path string, fallback time.Time) []model.Message {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		UpdatedAt string `json:"updated_at"`
+		Messages  []struct {
+			Metadata struct {
+				Kind        string `json:"kind"`
+				Summary     string `json:"summary"`
+				GeneratedAt int64  `json:"generatedAt"`
+			} `json:"metadata"`
+		} `json:"messages"`
+	}
+	if json.Unmarshal(b, &doc) != nil {
+		return nil
+	}
+	var out []model.Message
+	for _, m := range doc.Messages {
+		text := strings.TrimSpace(m.Metadata.Summary)
+		if m.Metadata.Kind != "compaction_summary" || text == "" {
+			continue
+		}
+		at := fallback
+		if t := parseTimeAny(doc.UpdatedAt); !t.IsZero() {
+			at = t
+		}
+		if m.Metadata.GeneratedAt > 0 {
+			at = time.UnixMilli(m.Metadata.GeneratedAt)
+		}
+		out = append(out, model.Message{Role: RoleSummary, Text: text, Time: at})
+	}
+	return out
+}
+
+// insertByTime puts m after every message no later than it, so a record read
+// from a sidecar lands where it happened rather than at the end.
+func insertByTime(ms []model.Message, m model.Message) []model.Message {
+	i := len(ms)
+	for i > 0 && ms[i-1].Time.After(m.Time) {
+		i--
+	}
+	return slices.Insert(ms, i, m)
 }
 
 // --- legacy VS Code extension store ---

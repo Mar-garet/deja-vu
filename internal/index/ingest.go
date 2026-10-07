@@ -576,6 +576,9 @@ func rebuildWithTombstones(dir string, harness string, scope string, files map[s
 	}
 	reportPhase("reading sessions", total)
 	ss := sources.FilterSessions(filterTombstonedSet(loadProgress(harness, progress), dead))
+	// A transcript its harness rewrote to a summary keeps the turns the last
+	// build held for it (#4795).
+	ss = carryCompactedAway(dir, ss)
 	forgetUnreadStores(files)
 	// Imported sessions are filtered too: excluding a project must also drop
 	// what a peer already pushed, not only what arrives next.
@@ -4161,6 +4164,8 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 	// metaForSession hashing unredacted text, so the friction signatures a
 	// session carried depended on which build path had touched it last.
 	preRedactSessions(&m, replacements)
+	// After the redaction, so the texts compare with what the records hold.
+	compacted := compactedInPlace(replacements, false)
 	buckets := bucketPostings{}
 	addRec := func(r Record) error {
 		if r.SourcePath == "" {
@@ -4219,7 +4224,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 		// And only when the pass read that store whole: a store read from its
 		// watermark hands back the new turns alone, so dropping the rest by key
 		// would take the earlier turns of every continued session (#2033).
-		if removed[r.SourcePath] || (changed[r.SourcePath].Path != "" && !fromStore && !leftItsFile(r, replaceKeys, old.Sessions[r.Key], aiderHeld)) || (fromStore && readWholeThisPass(r) && storeKeys[r.Key]) {
+		if removed[r.SourcePath] || (changed[r.SourcePath].Path != "" && !fromStore && !leftItsFile(r, replaceKeys, old.Sessions[r.Key], aiderHeld) && !keptThroughCompaction(r, compacted)) || (fromStore && readWholeThisPass(r) && storeKeys[r.Key]) {
 			dropped[r.Key] = true
 			return
 		}

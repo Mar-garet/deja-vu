@@ -8,8 +8,11 @@
 - **Format**: whole-file JSON rewritten on change (not append-only) — full re-parse after atomic replacement, no incremental offsets. A change to the manifest alone, as `cline history update --title` makes, re-reads the session too (#4319), and so does a change to the task's own entry in `state/taskHistory.json` (#4446)
 
 `user`/`assistant` turns are indexed for their text, from string content or
-`type:"text"` blocks; thinking, images, compaction artifacts and non-lead agents
-are skipped by design. Tool calls are read as well: `run_commands` becomes a
+`type:"text"` blocks; thinking, images and non-lead agents are skipped by
+design. A compaction leaves `messages.json` whole and writes its summary to
+`<sessionId>.compaction.json` beside it, as the message whose `metadata.kind`
+is `compaction_summary`; `metadata.summary` is indexed under the summary role,
+and a change to that file re-reads the session (#4795). Tool calls are read as well: `run_commands` becomes a
 command record, the file tools a files record, and the editor's two sides
 (`old_text`, `new_text`) the replaced span and the hashed written lines; an
 `editor` call with only `new_text` creates or inserts, and gives the written

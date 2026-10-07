@@ -683,7 +683,10 @@ import (
 // 67 files a session recorded in a WorkBuddy chat folder,
 // <root>/<yyyy-mm-dd-hh-mm-ss>, under the root rather than one project per
 // chat (#4735). Projects are set when a transcript is read, so a rebuild.
-const version = 67
+//
+// 68 reads the compaction summaries Zed, Cline and Continue write, under the
+// summary role, and Continue's no longer as the assistant's words (#4795).
+const version = 68
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an
