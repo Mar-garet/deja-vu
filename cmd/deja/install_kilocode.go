@@ -20,9 +20,12 @@ import (
 // glob is in the same paths.ts — so the shared manual reaches it without a
 // per-project file.
 //
-// The extension has no hooks: it is a Roo fork whose hooks are still in flight
-// upstream. The CLI does, because it kept opencode's plugin loader — see
-// installKilocodeAuto.
+// Hooks come from the CLI, which kept opencode's plugin loader (see
+// installKilocodeAuto), and that covers the extension too: Kilo 7.x's VS Code
+// extension runs its bundled `kilo serve` with the user's XDG_CONFIG_HOME, so
+// the same `<config>/kilo/plugins/deja.js` loads there. Measured on VSIX
+// 7.8.7: the digest and per-prompt recall reached the model from a session the
+// extension's own server ran (#4795).
 func kilocodeMCPSettingsPaths() []string {
 	var out []string
 	for _, root := range sources.KiloRoots() {

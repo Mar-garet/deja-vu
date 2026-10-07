@@ -891,23 +891,16 @@
         "fixtures/registry/kilocode/kilo.sql"
       ],
       "parser_source": "internal/sources/kilo.go",
-      "last_verified": "2026-10-02",
+      "last_verified": "2026-10-07",
       "display_name": "Kilo Code",
       "capabilities": {
         "mcp": true,
-        "auto": false,
+        "auto": true,
         "skill": true,
         "command": true,
         "resume": true,
         "handoff": "paste",
         "prereq": "sqlite3 for the CLI store"
-      },
-      "gaps": {
-        "auto": {
-          "state": "blocked",
-          "why": "Half of it: the CLI gets the session digest from `deja install kilocode-auto`, which writes opencode's plugin into `~/.config/kilo/plugins` (#4398). The extension has no hook surface: it is a Roo fork whose hooks are still in flight upstream (Roo PRs #10785, #11128, #11663), so in the editor recall arrives when the model calls the tool.",
-          "source": "https://github.com/RooCodeInc/Roo-Code/pull/11663"
-        }
       }
     },
     {
