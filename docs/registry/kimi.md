@@ -33,7 +33,7 @@ Media is out of scope.
 - **Auto-recall**: `deja install kimi-auto` adds marked `[[hooks]]` entries to
   `$KIMI_CODE_HOME/config.toml`: two `UserPromptSubmit` hooks
   (`deja hook-context --plain --once`, `deja hook-prompt --plain`) and a
-  `PreCompact` one. Measured on 0.28.1, `UserPromptSubmit` is the only event
+  `PreCompact` one, and a `SessionEnd` hook that runs `deja hook-session-end`. Measured on 0.28.1, `UserPromptSubmit` is the only event
   whose output reaches the model, and it takes plain stdout, so the session
   digest rides the first prompt rather than a session-start hook.
 - **Resume**: `kimi --session <sessionId>`, run in the `workDir` from the

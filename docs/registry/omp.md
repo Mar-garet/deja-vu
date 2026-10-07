@@ -142,7 +142,9 @@ were watched with a probe extension against omp 17.4.1. The session digest
 goes out once, as a message of its own from `before_agent_start`; a file's history
 after a `read`, or a failed command's earlier fix, is added to the
 `tool_result`, `session_compact` runs
-`deja hook-precompact`, and the module also registers `/deja`.
+`deja hook-precompact`, `session_shutdown` and `session_switch` run
+`deja hook-session-end` for the session that ended, and the module also
+registers `/deja`.
 
 ## Known quirks and drift
 

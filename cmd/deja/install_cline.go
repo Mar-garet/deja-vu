@@ -213,6 +213,14 @@ export default {
       compacted = true;
       run(["hook-precompact"], JSON.stringify({ session_id: session, cwd: process.cwd(), harness: "cline" }));
     },
+    // A run is one prompt and everything the agent did for it. When it ends,
+    // the session's live stamp goes, so another session's MCP recall can
+    // answer with this one now rather than twenty minutes from now; the next
+    // prompt stamps it again before the model is called. Cline has no hook for
+    // the session itself ending.
+    afterRun: () => {
+      if (session) run(["hook-session-end"], JSON.stringify({ session_id: session }), 2000);
+    },
   },
   setup(api, ctx) {
     const sessionID = (ctx && ctx.session && ctx.session.sessionId) || "";

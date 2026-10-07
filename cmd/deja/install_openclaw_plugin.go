@@ -482,6 +482,19 @@ export default {
       },
       { timeoutMs: 15000 },
     );
+    // A session ends on /new and /reset, on idle expiry, when a compaction
+    // rotates it to a new id, and when the gateway shuts down. Its live stamp
+    // goes with it, so the next session's MCP recall can answer with it now
+    // rather than twenty minutes from now (#4210). The event names the session
+    // that ended, by the id the hooks above stamped it under.
+    api.on(
+      "session_end",
+      async (event, ctx) => {
+        const id = event?.sessionId || ctx?.sessionId || event?.sessionKey || ctx?.sessionKey || "";
+        if (id) ask(["hook-session-end"], { session_id: id });
+      },
+      { timeoutMs: 5000 },
+    );
   },
 };
 `, exe, openclawPluginID)

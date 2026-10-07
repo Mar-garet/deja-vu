@@ -149,7 +149,9 @@
 <p>goes out once, as a message of its own from <code>before_agent_start</code>; a file&#39;s history</p>
 <p>after a <code>read</code>, or a failed command&#39;s earlier fix, is added to the</p>
 <p><code>tool_result</code>, <code>session_compact</code> runs</p>
-<p><code>deja hook-precompact</code>, and the module also registers <code>/deja</code>.</p>
+<p><code>deja hook-precompact</code>, <code>session_shutdown</code> and <code>session_switch</code> run</p>
+<p><code>deja hook-session-end</code> for the session that ended, and the module also</p>
+<p>registers <code>/deja</code>.</p>
 <h2 id="known-quirks-and-drift">Known quirks and drift</h2>
 <ul>
 <li>Project directory encoding uses Claude Code&#39;s single <code>-</code> prefix (e.g.</li>

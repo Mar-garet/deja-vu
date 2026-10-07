@@ -68,7 +68,8 @@ Sessions are indexed and searchable like any other harness.
   `~/.prime/agent/extensions/deja.ts`. At `before_agent_start` it returns the
   session digest on the first turn and per-prompt recall after that;
   `session_start` shows a footer status while the first index builds, and
-  `session_compact` runs `deja hook-precompact`. It registers `/deja
+  `session_compact` runs `deja hook-precompact` and `session_shutdown`
+  `deja hook-session-end`. It registers `/deja
   <query>`, which runs `deja search`. `tool_result` does not fire in
   `--print` on 0.9.1, so the repair line after a failed command is not wired.
 - **Resume**: `cd <cwd> && prime-agent --resume <id>`, with the `cwd` from the

@@ -82,7 +82,9 @@ harness falls back to the first prompt.
   0.1.1-rc.2: a bash that failed with an error two earlier sessions had fixed
   was followed, in the next request, by a `<deja-recall>` message naming the
   command that fixed it. `tools/execute`, the seam before the call, has no
-  channel to the model (#4293).
+  channel to the model (#4293). A session the plugin saw created is ended
+  with `deja hook-session-end` at `session/disposed`, or at process exit,
+  since headless 0.1.1-rc.2 exits without disposing it.
   The workspace deja is asked about is the session's, read from the session
   header (`agent.session.header.cwd`). One `dsh web` process serves sessions
   from every workspace and never changes directory, so `process.cwd()` is only

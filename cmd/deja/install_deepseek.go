@@ -340,6 +340,27 @@ function apply(ctx) {
   // (#4293). The before-seam, tools/execute, has no channel to the model.
   if (typeof ctx.on !== "function") return;
   watchCompaction(ctx, capturing, compacted);
+  // A session is over when dsh disposes of it, or when the process goes:
+  // measured on 0.1.1-rc.2, the headless profile exits without disposing
+  // anything, and only process "exit" runs. The digest and the tool notes
+  // stamp a session live, which keeps it out of its own MCP recall; dropping
+  // the stamp lets the next session be answered with it now rather than
+  // twenty minutes from now.
+  const live = new Set();
+  const end = (sid) => {
+    if (!sid || !live.has(sid)) return;
+    live.delete(sid);
+    ask(["hook-session-end"], { session_id: sid });
+  };
+  try {
+    ctx.on("session/created", (session) => {
+      if (session && session.id) live.add(String(session.id));
+    });
+    ctx.on("session/disposed", (session) => end(session && session.id ? String(session.id) : ""));
+    process.on("exit", () => {
+      for (const sid of [...live]) end(sid);
+    });
+  } catch {}
   try {
     ctx.on("tools/post-execute", async (exec, result, next) => {
       const decision = await next();

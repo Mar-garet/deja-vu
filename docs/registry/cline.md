@@ -43,7 +43,8 @@ not indexed.
   `deja-history` skill bundled in the plugin. A `package.json` listing
   `index.js` under `cline.plugins` makes the directory a plugin package, which
   is the only way Cline loads its `skills/` (#4316). Cline's own hooks cannot
-  carry context back, so the plugin is the channel.
+  carry context back, so the plugin is the channel. Its `afterRun` hook runs
+  `deja hook-session-end` for the session setup was handed.
 - **Resume**: `cd <cwd> && cline --id <sessionId>` for modern sessions only;
   `cline --id` reopens the transcript from anywhere but runs its tools in the
   current directory, so the command runs in the manifest's `cwd` (#4318).

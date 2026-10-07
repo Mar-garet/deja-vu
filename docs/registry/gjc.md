@@ -57,7 +57,8 @@ project directory names the project, and the header's cwd wins when it is there.
   directory with an index), and the events in
   `src/extensibility/extensions/types.ts` are pi's — `session_start`,
   `before_agent_start`, `context`, `tool_result`, `session_compact` — with the
-  same result shapes.
+  same result shapes. `session_shutdown`, which gjc 0.18.7 fires on exit, runs
+  `deja hook-session-end`.
 - The directory hooks stay unwired, and not for want of a path. gjc's two
   documents disagree on it (`~/.gjc/hooks/{pre,post}` against
   `~/.gjc/agent/hooks/{pre,post}`), and the loader settles it:

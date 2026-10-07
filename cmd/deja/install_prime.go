@@ -290,6 +290,15 @@ export default function (pi: any) {
       run(["hook-precompact"], JSON.stringify({ session_id: sessionID(), transcript_path: sessionFile, cwd: process.cwd(), harness: "prime" }));
     } catch {}
   });
+
+  // The session is over, so its live stamp goes: the next session's MCP
+  // recall can answer with it now rather than twenty minutes from now (#4210).
+  pi.on("session_shutdown", async (_event: any) => {
+    try {
+      const id = sessionID();
+      if (id) run(["hook-session-end"], JSON.stringify({ session_id: id }), 2000);
+    } catch {}
+  });
 }
 `, exe)
 }

@@ -577,6 +577,17 @@ func writeGooseHook(exe string) (string, error) {
 					"timeout": 20,
 				}},
 			}},
+			// The prompt hook stamps the session live, which keeps it out of
+			// its own MCP recall; when goose says the session is over the stamp
+			// goes, so the next session can be answered with it now rather than
+			// twenty minutes from now.
+			"SessionEnd": []any{map[string]any{
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": hookRun(exe, "hook-session-end"),
+					"timeout": 10,
+				}},
+			}},
 		},
 	}, "", "  ")
 	if err != nil {
@@ -630,9 +641,10 @@ func refreshGooseForPrompt(dir string, payload []byte) error {
 	}
 	var input struct {
 		// Goose calls it message; matcher_context carries the same text.
-		Message string `json:"message"`
-		Prompt  string `json:"prompt"`
-		CWD     string `json:"cwd"`
+		Message   string `json:"message"`
+		Prompt    string `json:"prompt"`
+		CWD       string `json:"cwd"`
+		SessionID string `json:"session_id"`
 	}
 	_ = json.NewDecoder(bytes.NewReader(payload)).Decode(&input)
 	prompt := input.Message
@@ -642,11 +654,13 @@ func refreshGooseForPrompt(dir string, payload []byte) error {
 	// The project travels with the prompt: this re-encodes a payload of its
 	// own, and dropping the cwd left the recall scoped to wherever the process
 	// stood (#2187). Marshalled rather than quoted by hand, since strconv.Quote
-	// writes \x escapes that are not JSON.
+	// writes \x escapes that are not JSON. The session goes too: it is what
+	// stamps the session live and keeps recall from repeating itself in it.
 	inner, err := json.Marshal(struct {
-		Prompt string `json:"prompt"`
-		CWD    string `json:"cwd"`
-	}{prompt, input.CWD})
+		Prompt    string `json:"prompt"`
+		CWD       string `json:"cwd"`
+		SessionID string `json:"session_id,omitempty"`
+	}{prompt, input.CWD, input.SessionID})
 	if err != nil {
 		return err
 	}

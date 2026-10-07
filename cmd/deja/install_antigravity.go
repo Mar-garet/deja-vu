@@ -73,6 +73,16 @@ func installAntigravityPlugin(exe string, uninstall bool) (installResult, error)
 				"command": fmt.Sprintf("%q hook-antigravity", exe),
 				"timeout": 10,
 			}},
+			// Antigravity has no session-end event; Stop, when the execution
+			// loop ends, is the nearest. PreInvocation stamps the conversation
+			// live and this drops the stamp, so another conversation's recall
+			// can answer with it between turns, as opencode's turn end does.
+			// The answer is the empty object every hook here may give.
+			"Stop": []any{map[string]any{
+				"type":    "command",
+				"command": fmt.Sprintf("%q hook-session-end --json", exe),
+				"timeout": 10,
+			}},
 		},
 	}, "", "  ")
 	if err != nil {

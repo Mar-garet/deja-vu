@@ -1151,7 +1151,10 @@ func installKimiAuto(exe string, uninstall bool) (installResult, error) {
 			// for this hook before it compacts, so the session is read here
 			// from wire.jsonl and its packet rides the next prompt. The payload
 			// names only the session, hence --harness.
-			"\n" + kimiHookEntry("PreCompact", hookRun(exe, "hook-precompact", "--harness", "kimi"))
+			"\n" + kimiHookEntry("PreCompact", hookRun(exe, "hook-precompact", "--harness", "kimi")) +
+			// The session is over, so its live stamp goes: the next session's
+			// MCP recall can answer with it now rather than in twenty minutes.
+			"\n" + kimiHookEntry("SessionEnd", hookRun(exe, "hook-session-end"))
 		if s != "" {
 			s += "\n\n"
 		}

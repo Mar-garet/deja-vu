@@ -45,6 +45,11 @@ func runHookAntigravity(dir string, stdin io.Reader, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "{}")
 		return nil
 	}
+	// The conversation is being written: its MCP recall must not answer with
+	// it. The plugin's Stop hook drops the stamp when the turn ends.
+	if !recallIsOff() {
+		markSessionLive(dir, input.ConversationID)
+	}
 	// Antigravity runs the hook with the working directory set to the folder
 	// holding hooks.json, not the user's project, so scoping recall by cwd
 	// would silently recall nothing. The payload names the real workspace.

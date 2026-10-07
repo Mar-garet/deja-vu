@@ -312,6 +312,9 @@ func runReasonixExt(dir string, in io.Reader, out io.Writer) error {
 
 func (x *rxExt) serve() error {
 	c := x.conn
+	// The host shutting the sidecar down, or closing its stdin, is the end of
+	// the session being served, whether or not a session.end came first.
+	defer x.endServed()
 	defer c.handlers.Wait()
 	for {
 		line, err := c.readFrame()
@@ -395,7 +398,7 @@ type rxInitParams struct {
 // handshake.
 var rxSubscriptions = []string{
 	"input.receive", "tool.after", "compaction.prepare",
-	"session.start", "session.load", "session.rotate",
+	"session.start", "session.load", "session.rotate", "session.end",
 }
 
 // initialize answers the handshake and reports whether the connection is

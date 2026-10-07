@@ -84,7 +84,8 @@
 <p><code>deja-history</code> skill bundled in the plugin. A <code>package.json</code> listing</p>
 <p><code>index.js</code> under <code>cline.plugins</code> makes the directory a plugin package, which</p>
 <p>is the only way Cline loads its <code>skills/</code> (#4316). Cline&#39;s own hooks cannot</p>
-<p>carry context back, so the plugin is the channel.</p>
+<p>carry context back, so the plugin is the channel. Its <code>afterRun</code> hook runs</p>
+<p><code>deja hook-session-end</code> for the session setup was handed.</p>
 <ul>
 <li><strong>Resume</strong>: <code>cd &lt;cwd&gt; &amp;&amp; cline --id &lt;sessionId&gt;</code> for modern sessions only;</li>
 </ul>
