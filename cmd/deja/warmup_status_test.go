@@ -172,7 +172,7 @@ func TestOpencodePluginRecallsPerPrompt(t *testing.T) {
 	src := opencodePluginJS("/bin/deja")
 	for _, want := range []string{
 		`ctx.session.hook("context"`,
-		`role === "user"`, // the last user turn, not the last message
+		`role !== "user"`, // user turns, not every message
 		"hook-prompt",
 		"additionalContext",
 	} {
@@ -181,7 +181,7 @@ func TestOpencodePluginRecallsPerPrompt(t *testing.T) {
 		}
 	}
 	// It appends to the prompt rather than replacing it.
-	if !strings.Contains(src, `parts[parts.length - 1].text += `) {
+	if !strings.Contains(src, `tail.text += `) {
 		t.Fatalf("recall does not append to the user's own text:\n%s", src)
 	}
 }

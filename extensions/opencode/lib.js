@@ -22,19 +22,21 @@ export function contextText(raw) {
   }
 }
 
-// lastUserText is what the person typed on this turn, which is what the
-// per-prompt recall is ranked against. Parts a plugin appended earlier are
-// part of the same message, so the text is joined and matched whole.
-export function lastUserText(messages) {
+// userTurns is every user message in a request, oldest first, each with a key
+// that stays the same from one request to the next: opencode's message id, or
+// where a shape carries none, the message's place among the user messages and
+// its text.
+export function userTurns(messages) {
   const list = Array.isArray(messages) ? messages : []
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i]?.info?.role !== "user") continue
-    const sessionID = list[i].info?.sessionID || ""
-    const parts = (list[i].parts || []).filter((p) => p?.type === "text" && p.text)
-    if (!parts.length) return { parts: [], prompt: "", sessionID }
-    return { parts, prompt: parts.map((p) => p.text).join("\n").trim(), sessionID }
+  const out = []
+  for (const m of list) {
+    if (m?.info?.role !== "user") continue
+    const sessionID = m.info?.sessionID || ""
+    const parts = (m.parts || []).filter((p) => p?.type === "text" && p.text)
+    const prompt = parts.map((p) => p.text).join("\n").trim()
+    out.push({ key: m.info?.id || sessionID + "#" + out.length + "#" + prompt, parts, prompt, sessionID })
   }
-  return { parts: [], prompt: "", sessionID: "" }
+  return out
 }
 
 // cliPluginPath is where `deja install opencode-auto` writes its own plugin.
@@ -195,13 +197,13 @@ export function turnEnded(event) {
   return ""
 }
 
-// v1Messages shows 2.x's request messages in the 1.x shape lastUserText reads.
+// v1Messages shows 2.x's request messages in the 1.x shape userTurns reads.
 // The parts are 2.x's own content objects, so text appended to one lands in
 // the request.
 export function v1Messages(messages, sessionID) {
   const list = Array.isArray(messages) ? messages : []
   return list.map((m) => ({
-    info: { role: m?.role, sessionID: sessionID || "" },
+    info: { id: m?.id, role: m?.role, sessionID: sessionID || "" },
     parts: Array.isArray(m?.content) ? m.content : [],
   }))
 }
