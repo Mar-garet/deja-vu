@@ -536,7 +536,7 @@ func completionCommands() []string {
 	return []string{
 		"bench", "blame", "brief", "check", "completion", "ctx", "doctor", "embed",
 		"files", "fix", "forget", "friction", "handoff", "help", "how", "index",
-		"install", "last", "log", "mcp", "promote", "recap", "remember", "restore",
+		"install", "last", "log", "mcp", "promote", "recall", "recap", "remember", "restore",
 		"resume", "rules", "search", "secrets", "share", "show", "sources", "stats",
 		"statusline", "sync", "tests", "uninstall", "update", "version", "view",
 		"warmup", "wip",

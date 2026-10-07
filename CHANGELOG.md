@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `deja recall <words>` prints the page the MCP recall tool answers, for a skill or script that runs deja through the shell. `deja search --json` was the only option there and ran to 1-2 MB, which harnesses truncate to nothing (#4781).
+
 ### Changed
 
 - The agent-facing `blame` answers in the same framed text as recall, `fix` and `how` instead of a JSON array: a numbered row per session in the `[harness] project · id` form, its title, the files it also worked on and its excerpts. The same 8 KB answer now carries all ten sessions where it carried five to seven, and a decision that was later taken back says so, which the JSON had no field for. `deja blame --json` is unchanged (#4634).

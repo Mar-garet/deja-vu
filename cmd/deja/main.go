@@ -309,6 +309,7 @@ var commands = map[string]command{
 	"recap":           func(dir string, rest []string) error { return runRecap(dir, rest, os.Stdout) },
 	"fix":             func(dir string, rest []string) error { return runFix(dir, rest, os.Stdout) },
 	"how":             func(dir string, rest []string) error { return runHow(dir, rest, os.Stdout) },
+	"recall":          func(dir string, rest []string) error { return runRecall(dir, rest, os.Stdout) },
 	"log":             runLog,
 	"sync":            runSync,
 	"ctx":             cmdCtx,
@@ -4139,6 +4140,8 @@ Usage:
   deja check -       (read a plan from stdin and print factual co-occurrences)
   deja view [--no-open]  (browse your memory: sessions, recalls, notes — one local HTML)
   deja ctx <query|id-prefix>
+  deja recall <words> [--project name] [--harness name] [--limit n]
+             (what the MCP recall tool answers an agent: about 4 KB, this project first)
   deja blame <path>[:line] [--all] [--json] [--project name] [--harness name] [--since 30d]
   deja blame <path>:<line> --attribution [--json] [--git-note]  (the line answer alone)
   deja files <topic> [--project name] [--all-projects] [--limit n] [--json]
