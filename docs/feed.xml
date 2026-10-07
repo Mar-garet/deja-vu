@@ -109,16 +109,18 @@
     <summary>Roo Code has no lifecycle hooks yet, so deja arrives as an MCP server, a skill that says when to call it, a /deja command and an approval entry.</summary>
   </entry>
   <entry>
-    <title>Where Cline stores its history — session format</title>
-    <id>https://vshulcz.github.io/deja-vu/registry/cline.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/cline.html"></link>
-    <updated>2026-10-07T00:00:00Z</updated>
-    <summary>Where Cline writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
     <title>Privacy — deja-vu docs</title>
     <id>https://vshulcz.github.io/deja-vu/guide/privacy.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/privacy.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>deja is local by design: no background network, credentials redacted at index time, and forget/exclude controls over what is indexed and kept.</summary>
+  </entry>
+  <entry>
+    <title>Where Cline stores its history — session format</title>
+    <id>https://vshulcz.github.io/deja-vu/registry/cline.html</id>
+    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/cline.html"></link>
+    <updated>2026-10-07T00:00:00Z</updated>
+    <summary>Where Cline writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
   </entry>
   <entry>
     <title>Where VS Code Copilot Chat stores its history — session format</title>
@@ -224,6 +226,8 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/registry/reasonix.html"></link>
     <updated>2026-10-07T00:00:00Z</updated>
     <summary>Where Reasonix writes its conversation history on disk, what the files contain, the quirks deja found in them, and when the format was last verified against a real store.</summary>
+  </entry>
+  <entry>
     <title>Claude Code 丢了上下文：怎么找回来 — deja-vu</title>
     <id>https://vshulcz.github.io/deja-vu/zh/guide/lost-context.html</id>
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/zh/guide/lost-context.html"></link>
@@ -285,89 +289,5 @@
     <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-gemini-cli-history.html"></link>
     <updated>2026-10-05T00:00:00Z</updated>
     <summary>Where Gemini CLI keeps chats under ~/.gemini/tmp, how to map a project id back to a directory, what to delete and what the prompt log keeps.</summary>
-  </entry>
-  <entry>
-    <title>Delete Kilo Code task history — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-kilo-code-task-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-kilo-code-task-history.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Kilo Code keeps each task as JSON under the VS Code extension&#39;s storage, and its CLI keeps a separate SQLite store.</summary>
-  </entry>
-  <entry>
-    <title>Delete Kiro session history — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-kiro-session-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-kiro-session-history.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Kiro keeps CLI and IDE sessions in two different trees under ~/.kiro/sessions. Where each one is, how to remove one session or all, and what else Kiro keeps.</summary>
-  </entry>
-  <entry>
-    <title>Delete opencode session history — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/delete-opencode-session-history.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/delete-opencode-session-history.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>opencode keeps every session in one SQLite database. What the tables hold, how to remove a session, and why deleting rows does not free the space.</summary>
-  </entry>
-  <entry>
-    <title>Does Claude Code remember previous conversations? — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/does-my-agent-remember.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/does-my-agent-remember.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Claude Code, Codex, Cursor and Gemini CLI all forget between sessions. What each keeps on disk, what compaction preserves, and how to get history back.</summary>
-  </entry>
-  <entry>
-    <title>Find the coding session where you solved it — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/find-a-session.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/find-a-session.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>How to search chat history across every coding agent on the machine, by the token you remember rather than the topic you half-remember.</summary>
-  </entry>
-  <entry>
-    <title>Why your coding agent forgets between sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/forgetting.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/forgetting.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Why coding agents start from scratch every session, what compaction keeps, and how to read the history Claude Code, Codex and Cursor already wrote.</summary>
-  </entry>
-  <entry>
-    <title>Add memory to aider: its read-only context — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-aider.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-aider.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>aider appends every message to one markdown log and reads none of it back. deja keeps a read-only context file current and indexes every agent on the machine.</summary>
-  </entry>
-  <entry>
-    <title>Add memory to Amp: every agent&#39;s sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-amp.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-amp.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Amp keeps every thread on the server and starts each one empty. A plugin under ~/.config/amp/plugins puts this machine&#39;s own history before the model.</summary>
-  </entry>
-  <entry>
-    <title>Add memory to Antigravity: past sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-antigravity.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-antigravity.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Antigravity records every conversation and starts each one from nothing. deja injects matching history before each model call and indexes every agent.</summary>
-  </entry>
-  <entry>
-    <title>Cherry Studio memory: every agent&#39;s sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-cherrystudio.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-cherrystudio.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Cherry Studio writes its agent sessions under its own app data. deja reads them, and hands the same memory to every other agent on the machine.</summary>
-  </entry>
-  <entry>
-    <title>Add memory to Claude Code: every agent&#39;s sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-claude-code.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-claude-code.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>How to give Claude Code recall over every coding agent&#39;s sessions on this machine — the MCP server, the SessionStart hook and the plugin marketplace.</summary>
-  </entry>
-  <entry>
-    <title>Add memory to Cline: every agent&#39;s sessions — deja-vu</title>
-    <id>https://vshulcz.github.io/deja-vu/guide/memory-for-cline.html</id>
-    <link rel="alternate" type="text/html" href="https://vshulcz.github.io/deja-vu/guide/memory-for-cline.html"></link>
-    <updated>2026-10-05T00:00:00Z</updated>
-    <summary>Cline&#39;s hooks cannot carry context, so deja arrives as a plugin: a rule resolved as instructions are built, a message builder, and a /deja command.</summary>
   </entry>
 </feed>
