@@ -25,6 +25,21 @@ func runRecall(dir string, args []string, stdout io.Writer) error {
 		}
 		return args[i+1], nil
 	}
+	// --flag=value splits into the two-argument form, and after -- every
+	// word is the query, so a query may start with a dash.
+	var norm []string
+	for i, a := range args {
+		if a == "--" {
+			terms = append(terms, args[i+1:]...)
+			break
+		}
+		if k, v, ok := strings.Cut(a, "="); ok && strings.HasPrefix(k, "--") {
+			norm = append(norm, k, v)
+			continue
+		}
+		norm = append(norm, a)
+	}
+	args = norm
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; a {
 		case "--limit":

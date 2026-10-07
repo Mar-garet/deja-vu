@@ -45,6 +45,18 @@ func TestRecallOnTheCommandLineIsTheMCPAnswer(t *testing.T) {
 		t.Errorf("answered %d bytes, past the tool's budget", out.Len())
 	}
 
+	// The same answer whichever way the flag is written, and a query may come
+	// after -- even when it starts with a dash.
+	for _, args := range [][]string{{"zonkomatic", "--limit=1", "export"}, {"--limit", "1", "--", "zonkomatic", "export"}} {
+		var b bytes.Buffer
+		if err := runRecall(dir, args, &b); err != nil || !strings.Contains(b.String(), "CRLF") {
+			t.Errorf("recall %q: %v\n%s", args, err, b.String())
+		}
+	}
+	if err := runRecall(dir, []string{"--", "--zonkomatic"}, &bytes.Buffer{}); err != nil {
+		t.Errorf("a query after -- that starts with a dash was refused: %v", err)
+	}
+
 	for _, bad := range [][]string{nil, {"--limit"}, {"--limit", "0", "x"}, {"--nope", "x"}, {"--project", "", "x"}} {
 		if err := runRecall(dir, bad, &bytes.Buffer{}); err == nil {
 			t.Errorf("recall %q was accepted", bad)
