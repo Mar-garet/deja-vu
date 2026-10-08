@@ -757,6 +757,21 @@ func allHarnesses() []Harness {
 			}},
 		},
 		{
+			// Devin CLI keeps one SQLite store for every local session: the
+			// conversation is the chain sessions.main_chain_id heads, walked
+			// back over parent_node_id and deduped by message_id, because the
+			// agent rebuilds its context chain each time the system prefix
+			// changes and the table keeps every copy. Subagent runs share the
+			// same table as chains the main one cannot reach.
+			Name: "devin", Load: LoadDevin, Files: DevinFiles,
+			Kinds: []FileKind{{
+				Name:      "devin",
+				Match:     devinDBMatch,
+				Parse:     dbParse(ParseDevinDB, ParseDevinDBSince),
+				ParseFrom: dbParseFrom(ParseDevinDB, ParseDevinDBSince),
+			}},
+		},
+		{
 			// Junie, the CLI and the agent AI Assistant runs: a directory per
 			// session with an events.jsonl the CLI appends to. A block is
 			// updated in place by later lines, so it is read whole.

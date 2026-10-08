@@ -5,7 +5,7 @@ This document is for people changing `deja` internals.
 ## Source parsers
 
 Parsers live in `internal/sources` and return `[]model.Session`. The table is
-what the loader registers: the forty coding agents plus deja's own notes,
+what the loader registers: the forty-one coding agents plus deja's own notes,
 which is what `deja sources` prints. `docs/registry/` describes each store's
 layout in detail, and `internal/sources/registry_test.go` checks that index
 against the loader list.
@@ -42,6 +42,7 @@ against the loader list.
 | TRAE CLI | `trae.go`, `codex.go` | Codex rollouts under `${TRAE_HOME:-~/.trae}/cli` (`sessions/`, `archived_sessions/`, `history.jsonl`); user turns from `user_message` and `item_completed` events only, tool calls from `history_mutation` |
 | Muse Code | `muse.go` | one event-sourced JSONL per session under `${XDG_DATA_HOME:-~/.local/share}/muse/sessions/YYYY/MM/DD/<id>/`, `retained_frame` children unwrapped; subagent logs under `subagent/` only with `DEJA_INCLUDE_SUBAGENTS=1` |
 | Zed | `zed.go` | threads in the SQLite store at `Zed/threads/threads.db` |
+| Devin CLI | `devin.go` | one SQLite store at `${XDG_DATA_HOME:-~/.local/share}/devin/cli/sessions.db`, the live chain walked back over `parent_node_id` and deduped by `message_id`, subagent runs read as side chains |
 | Crush | `crush.go` | SQLite databases named by `projects.json`, plus `<project>/.crush/crush.db` |
 | Cherry Studio | `cherrystudio.go` | Claude-format JSONL under the app's `Data/Agents/.claude/projects`, plus pi and dsh logs under `Data/Agents/.pi` and `.dsh`; a data dir moved in the app's settings is read from `~/.cherrystudio/boot-config.json` |
 | Kilo Code | `kilo.go` | task JSON under the VS Code extension's storage, plus the CLI's `kilo.db` |

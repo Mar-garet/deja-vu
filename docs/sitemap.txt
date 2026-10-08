@@ -2,6 +2,10 @@ https://vshulcz.github.io/deja-vu/
 https://vshulcz.github.io/deja-vu/guide/getting-started.html
 https://vshulcz.github.io/deja-vu/guide/forgetting.html
 https://vshulcz.github.io/deja-vu/guide/does-my-agent-remember.html
+https://vshulcz.github.io/deja-vu/
+https://vshulcz.github.io/deja-vu/guide/getting-started.html
+https://vshulcz.github.io/deja-vu/guide/forgetting.html
+https://vshulcz.github.io/deja-vu/guide/does-my-agent-remember.html
 https://vshulcz.github.io/deja-vu/guide/session-files-on-disk.html
 https://vshulcz.github.io/deja-vu/guide/delete-old-claude-sessions.html
 https://vshulcz.github.io/deja-vu/guide/where-sessions-are-stored.html
@@ -148,3 +152,4 @@ https://vshulcz.github.io/deja-vu/guide/delete-roo-task-history.html
 https://vshulcz.github.io/deja-vu/guide/delete-zed-thread-history.html
 https://vshulcz.github.io/deja-vu/registry/jetbrains.html
 https://vshulcz.github.io/deja-vu/registry/junie.html
+https://vshulcz.github.io/deja-vu/registry/devin.html

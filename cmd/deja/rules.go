@@ -32,7 +32,7 @@ const (
 
 // rulesHarnesses are the harnesses whose global rules file deja knows, in the
 // order `deja rules` lists them.
-var rulesHarnesses = []string{"claude-code", "codex", "opencode", "gemini", "qwen", "kimi", "grok", "goose", "copilot", "vscode", "cline", "kilocode", "zed", "antigravity", "cherrystudio", "hermes", "aider", "continue", "trae", "trae-ide", "pi", "omp", "senpi", "gjc", "prime", "kimchi", "codewhale", "junie", "crush", "codebuddy", "workbuddy", "commandcode", "kiro", "roo", "zcode", "amp", "cursor", "deepseek", "openclaw", "reasonix", "muse"}
+var rulesHarnesses = []string{"claude-code", "codex", "opencode", "gemini", "qwen", "kimi", "grok", "goose", "copilot", "vscode", "cline", "kilocode", "zed", "antigravity", "cherrystudio", "hermes", "aider", "continue", "trae", "trae-ide", "pi", "omp", "senpi", "gjc", "prime", "kimchi", "codewhale", "junie", "crush", "codebuddy", "workbuddy", "commandcode", "kiro", "roo", "zcode", "amp", "cursor", "deepseek", "openclaw", "reasonix", "muse", "devin"}
 
 // rulesPath is the file a harness reads its global rules from, or "" when deja
 // does not know one. Only paths something already showed reach the model —
@@ -194,6 +194,10 @@ func rulesFileFor(harness string) rulesFile {
 		// $JUNIE_HOME/AGENTS.md is in front of every task, project or not
 		// (stand on 3110.7).
 		return sharedRules(filepath.Join(sources.JunieHome(), "AGENTS.md"))
+	case "devin":
+		// Devin reads the AGENTS.md convention; its user config dir carries the
+		// global copy, beside the hooks and MCP config deja already writes there.
+		return sharedRules(filepath.Join(devinConfigDir(), "AGENTS.md"))
 	case "crush":
 		// <config dir>/CRUSH.md goes into every system prompt as a user
 		// preference (internal/config/load.go:575-580 on v0.97.1, and a stub

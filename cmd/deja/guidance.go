@@ -104,6 +104,9 @@ var sharedSkillHarnesses = map[string]bool{
 	// With Claude's copy there too it loads one and starts without a word;
 	// only `muse skills list` notes the other as shadowed.
 	"muse": true,
+	// Devin CLI's bundled docs name ~/.agents/skills among the user-level
+	// skill directories it scans, beside ~/.config/devin/skills.
+	"devin": true,
 	// CodeWhale 0.10.0 lists ~/.agents/skills beside its own skills directory
 	// and ~/.claude/skills, and shows each copy it finds; the shared one keeps
 	// it to the copy every other reader here already has.

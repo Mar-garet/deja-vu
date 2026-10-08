@@ -1,0 +1,68 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${DEVIN_PLUGIN_ROOT}/hooks/deja.sh\" hook-context",
+          "timeout": 60
+        }
+      ]
+    }
+  ],
+  "PostCompaction": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${DEVIN_PLUGIN_ROOT}/hooks/deja.sh\" hook-context",
+          "timeout": 60
+        }
+      ]
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${DEVIN_PLUGIN_ROOT}/hooks/deja.sh\" hook-prompt",
+          "timeout": 60
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "^(exec|edit|write|apply_patch|notebook_edit)$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${DEVIN_PLUGIN_ROOT}/hooks/deja.sh\" hook-tool",
+          "timeout": 60
+        }
+      ]
+    },
+    {
+      "matcher": "^exec$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${DEVIN_PLUGIN_ROOT}/hooks/deja.sh\" hook-tool-after",
+          "timeout": 60
+        }
+      ]
+    }
+  ],
+  "SessionEnd": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"${DEVIN_PLUGIN_ROOT}/hooks/deja.sh\" hook-session-end",
+          "timeout": 60
+        }
+      ]
+    }
+  ]
+}

@@ -41,6 +41,19 @@ type sessionStartHookResponse struct {
 	} `json:"hookSpecificOutput"`
 }
 
+// replyEventName picks the hook event a reply claims. Devin rejects a
+// reply that names a different event than the one that fired, so a payload
+// naming one of this hook's real events is honored — but only those. A host
+// that puts its own spelling in hook_event_name (Cursor's camelCase
+// postToolUse, Gemini's BeforeAgent) would otherwise have its reply renamed
+// to something its own hook contract never produced.
+func replyEventName(sent, fallback string, allowed ...string) string {
+	if slices.Contains(allowed, sent) {
+		return sent
+	}
+	return fallback
+}
+
 type precompactHookInput struct {
 	SessionID      string   `json:"session_id"`
 	ConversationID string   `json:"conversation_id"`
@@ -453,6 +466,10 @@ func runHookContextMode(dir string, plain, once bool) error {
 		// has no MCP of its own, and a lead naming recall_context sent the
 		// model to "Tool recall_context not found" on every first turn (#4584).
 		Shell bool `json:"deja_shell"`
+		// The event that fired, when the payload names one. Devin sends
+		// hook_event_name and rejects a reply that names a different event
+		// back; Claude names it too, in the same canonical spelling.
+		HookEventName string `json:"hook_event_name"`
 	}
 	// Best effort, as every hook is — but not silent about it. A payload deja
 	// cannot decode carries the session this injection went to, and losing it
@@ -463,6 +480,13 @@ func runHookContextMode(dir string, plain, once bool) error {
 	adoptCopilotHost(payload)
 	input.SessionID = adoptGrok(adoptGrok(input.SessionID, input.grokEnvelope.SessionID), input.ConversationID)
 	input.WorkspaceRoots = adoptGrokRoots(input.WorkspaceRoots, input.WorkspaceRoot)
+	// The reply goes out under the event it arrived on, not under
+	// SessionStart by right: Devin fires this hook on PostCompaction too,
+	// and drops a reply that names the wrong event back (verified on
+	// 3000.11.3). Only canonical names echo — hosts that spell their own
+	// events here (Cursor's camelCase sessionStart, Gemini's BeforeAgent)
+	// get the fallback they got before the echo existed.
+	eventName := replyEventName(input.HookEventName, "SessionStart", "SessionStart", "PostCompaction")
 	shape := hookToolClaude
 	if plain {
 		shape = hookToolPlain
@@ -487,7 +511,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// in parallel: both found the packet undelivered and it arrived twice. The
 	// prompt hook carries it there.
 	if !once {
-		if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "SessionStart", shape, os.Stdout); delivered {
+		if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), eventName, shape, os.Stdout); delivered {
 			return err
 		}
 	}
@@ -547,7 +571,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 				return nil
 			}
 			var resp sessionStartHookResponse
-			resp.HookSpecificOutput.HookEventName = "SessionStart"
+			resp.HookSpecificOutput.HookEventName = eventName
 			resp.HookSpecificOutput.AdditionalContext = out
 			// The environment block is not the project's memory, and while a
 			// build runs it is all there is: without this the whole rebuild
@@ -587,7 +611,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 			line = joinNotes(rewireNote(rewired), joinNotes(stuckWiringNote(stuckWiring), joinNotes(withheldEverythingNote(dir, withheld), line)))
 			if line != "" {
 				var resp sessionStartHookResponse
-				resp.HookSpecificOutput.HookEventName = "SessionStart"
+				resp.HookSpecificOutput.HookEventName = eventName
 				resp.SystemMessage = line
 				emitHookResponse(resp)
 			}
@@ -636,7 +660,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 		return nil
 	}
 	var resp sessionStartHookResponse
-	resp.HookSpecificOutput.HookEventName = "SessionStart"
+	resp.HookSpecificOutput.HookEventName = eventName
 	resp.HookSpecificOutput.AdditionalContext = digest
 	// Announce only when the recalled set changed since the last announcement:
 	// injection is recency-ranked, so repeating the same receipt every session
@@ -968,6 +992,11 @@ func hookCWD(fromPayload string) string {
 		return fromPayload
 	}
 	if cwd := os.Getenv("CLAUDE_PROJECT_DIR"); cwd != "" {
+		return cwd
+	}
+	// Devin carries no cwd in a hook payload; its launcher sets
+	// DEVIN_PROJECT_DIR for the hook's own process instead (3000.11.3).
+	if cwd := os.Getenv("DEVIN_PROJECT_DIR"); cwd != "" {
 		return cwd
 	}
 	cwd, _ := os.Getwd()
