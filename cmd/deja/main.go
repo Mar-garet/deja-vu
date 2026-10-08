@@ -1678,6 +1678,13 @@ func searchWithOptions(dir string, args []string, sourceInstance string, bare bo
 	if mistyped {
 		return errAlreadySaid
 	}
+	// One line, at most once a day, naming a command the reader may not have
+	// met (#4629). Only after an answer, only in a terminal and never for
+	// --json: a pipe, a script or a hook reads the results, not advice. On
+	// stderr, so the results themselves stay what they were.
+	if len(hits) > 0 && !o.JSON && briefWanted(os.Stdout) {
+		maybeTip(os.Stderr, dir+".tip", time.Now())
+	}
 	return nil
 }
 
