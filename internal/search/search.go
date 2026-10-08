@@ -2516,9 +2516,21 @@ func highlight(s, q string, isRe bool, color bool) string {
 	return regexp.MustCompile(`(?i)(`+strings.Join(parts, "|")+`)`).ReplaceAllStringFunc(s, func(x string) string { return cMatch + x + cReset })
 }
 
+// colorOK reports whether w is a terminal that should get colour. A writer
+// that wraps another (the counter `deja search` prints through so the log
+// records what went out) is looked through: checking only for a bare
+// *os.File turned colour off in every terminal the moment output was counted
+// (#4620).
 func colorOK(w io.Writer) bool {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
 		return false
+	}
+	for {
+		u, ok := w.(interface{ Unwrap() io.Writer })
+		if !ok {
+			break
+		}
+		w = u.Unwrap()
 	}
 	f, ok := w.(*os.File)
 	if !ok {

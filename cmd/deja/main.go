@@ -478,6 +478,10 @@ type countingWriter struct {
 	n int
 }
 
+// Unwrap is the writer underneath, so a printer deciding whether it is
+// talking to a terminal sees the terminal rather than the counter (#4620).
+func (c *countingWriter) Unwrap() io.Writer { return c.w }
+
 func (c *countingWriter) Write(p []byte) (int, error) {
 	n, err := c.w.Write(p)
 	c.n += n
