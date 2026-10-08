@@ -65,6 +65,7 @@ func countSubagentFiles(seen []string) int {
 func runDoctor(w io.Writer, args []string, lookup doctorVersionLookup, dir string) error {
 	jsonOutput := false
 	deep := false
+	all := false
 	offline := os.Getenv("DEJA_OFFLINE") == "1"
 	for _, arg := range args {
 		switch arg {
@@ -74,6 +75,8 @@ func runDoctor(w io.Writer, args []string, lookup doctorVersionLookup, dir strin
 			offline = true
 		case "--deep":
 			deep = true
+		case "--all":
+			all = true
 		default:
 			return unknownFlag("doctor", arg, doctorFlags)
 		}
@@ -107,7 +110,7 @@ func runDoctor(w io.Writer, args []string, lookup doctorVersionLookup, dir strin
 		}
 		return deepDriftErr(deepReport)
 	}
-	doctorHarnesses(w, dir)
+	doctorHarnessStores(w, dir, all)
 	printDoctorStoreWarnings(w, report.Stores)
 	// The third cause of a files-to-sessions gap, after a parse failure (#861)
 	// and an id collision (#1101): the reader forgot them. `last` and `stats`
@@ -634,6 +637,18 @@ func noteBucketsRegrouped(dir string) int {
 	return moved
 }
 
+// onlyAbsentDetail matches a row detail that says nothing beyond "none here":
+// "0 files", "0 CLI transcripts", "0 stores".
+var onlyAbsentDetail = regexp.MustCompile(`^0 [a-zA-Z ]+$`)
+
+// onlyAbsent reports whether a missing store's detail adds nothing to
+// "missing". A detail that does, like aider's note that it writes into each
+// project rather than one place, is advice for someone who uses that agent
+// and keeps the row (#4625).
+func onlyAbsent(detail string) bool {
+	return detail == "" || onlyAbsentDetail.MatchString(detail)
+}
+
 // storeLabels names stores the way the rows below do: the registry calls
 // deja's own notes "deja", and nothing a person reads does.
 func storeLabels(names []string) []string {
@@ -647,7 +662,18 @@ func storeLabels(names []string) []string {
 	return out
 }
 
+// doctorHarnesses lists every store, the form `deja doctor --all` prints.
 func doctorHarnesses(w io.Writer, dir string) {
+	doctorHarnessStores(w, dir, true)
+}
+
+// doctorHarnessStores prints the store rows. Without all, a store that is
+// simply absent folds into one closing line: doctor lists every agent deja
+// can read, so on a machine with two of them the rows that matter hid among
+// thirty-odd "missing" ones (#4625). Only a row with nothing to say beyond
+// "not here" folds; anything found, unreadable, excluded, unplugged, holding
+// indexed sessions or carrying advice keeps its row.
+func doctorHarnessStores(w io.Writer, dir string, all bool) {
 	fmt.Fprintln(w, "Harness stores:")
 	// Say the selection out loud. Without this line a narrowed run looks like
 	// a machine that has thirty-four stores missing, and the variable is set by
@@ -688,6 +714,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// empty crush.db claimed another project's sessions (#4379). The first row
 	// of a harness carries them.
 	counted := map[string]bool{}
+	var folded []string
 	printRow := func(name, path string, present bool, detail string) {
 		// A store DEJA_STORES silences has no row at all. The line above says
 		// which stores are being read; a row saying "missing" about one of the
@@ -793,6 +820,10 @@ func doctorHarnesses(w io.Writer, dir string) {
 		// A store path can come from the environment (DEJA_NOTES_FILE) or from
 		// disk. On a fixed-width row a newline in it prints a line of its own
 		// that reads as one of doctor's.
+		if !all && status == "missing" && onlyAbsent(detail) {
+			folded = append(folded, name)
+			return
+		}
 		line := fmt.Sprintf("  %-12s %-9s %s", name, status, reportPath(path))
 		if detail != "" {
 			line += "  (" + detail + ")"
@@ -1129,6 +1160,10 @@ func doctorHarnesses(w io.Writer, dir string) {
 		printRow("crush", db, doctorFilePresent(db), doctorSQLiteDetail(db, sqlite))
 	}
 	printRow("deja", sources.NotesFile(), doctorFilePresent(sources.NotesFile()), "notes")
+	if len(folded) > 0 {
+		fmt.Fprintf(w, "  %s not found on this machine — `deja doctor --all` lists them\n",
+			doctorCount(len(folded), "more store"))
+	}
 	if n := noteBucketsRegrouped(dir); n > 0 {
 		fmt.Fprintf(w, "  warning      %s of notes in the index %s not what this machine would build now — the zone changed, so the days regrouped; `deja index` renames them\n",
 			doctorCount(n, "day"), verbIs(n))
