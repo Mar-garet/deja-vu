@@ -759,6 +759,10 @@ type BuildSummary struct {
 	Dropped    int
 	Harnesses  int
 	PerHarness []HarnessCount
+	// Took is the build's wall time, set by the command that ran and timed it
+	// (the build itself cannot see the parse that came before it); zero when
+	// nothing timed it, and then no summary line states a time (#4630).
+	Took time.Duration
 }
 
 var LastBuild BuildSummary
