@@ -1549,9 +1549,9 @@ func Print(w io.Writer, hits []Hit, o Options) {
 		// because a directory was named at length (#604).
 		project = fitProject(project, o.Width, h.Session.Harness, d, id, h.Count, tierLabel(h))
 		if color {
-			fmt.Fprintf(w, "%s%s %-10s %s %s %s %s %s%s%d matches%s%s\n", cBold, harnessTag(h.Session.Harness, true), project, cDim+"·"+cReset+cBold, d, cDim+"·"+cReset+cBold, id, cDim+"— "+cReset, cBold, h.Count, cReset, tierLabel(h))
+			fmt.Fprintf(w, "%s%s %-10s %s %s %s %s %s%s%s%s%s\n", cBold, harnessTag(h.Session.Harness, true), project, cDim+"·"+cReset+cBold, d, cDim+"·"+cReset+cBold, id, cDim+"— "+cReset, cBold, MatchCount(h.Count), cReset, tierLabel(h))
 		} else {
-			fmt.Fprintf(w, "[%s] %-10s · %s · %s — %d matches%s\n", h.Session.Harness, project, d, id, h.Count, tierLabel(h))
+			fmt.Fprintf(w, "[%s] %-10s · %s · %s — %s%s\n", h.Session.Harness, project, d, id, MatchCount(h.Count), tierLabel(h))
 		}
 		if h.Reused > 1 {
 			note := fmt.Sprintf("  reused %d× by agents recently", h.Reused)
@@ -1607,6 +1607,16 @@ func Print(w io.Writer, hits []Hit, o Options) {
 	}
 }
 
+// MatchCount is a session's hit count as the result line prints it: "1 match",
+// "3 matches". One spelling, so the line and the width budget fitProject
+// measures it against cannot disagree (#4627).
+func MatchCount(n int) string {
+	if n == 1 {
+		return "1 match"
+	}
+	return fmt.Sprintf("%d matches", n)
+}
+
 // fitProject bounds the one variable-width field on a hit header so the rest of
 // the line survives a narrow terminal. Six runes is the floor: below that the
 // name says nothing and the reader is better served by the ellipsis alone.
@@ -1622,7 +1632,7 @@ func fitProject(project string, width int, harness, date, id string, count int, 
 	}
 	// The column is padded to ten, so a name shorter than that costs ten either
 	// way and the budget has to say so.
-	fixed := termwidth.Columns(fmt.Sprintf("[%s]  · %s · %s — %d matches%s", harness, date, id, count, tier))
+	fixed := termwidth.Columns(fmt.Sprintf("[%s]  · %s · %s — %s%s", harness, date, id, MatchCount(count), tier))
 	room := width - fixed
 	if room < 10 {
 		room = 10

@@ -1643,8 +1643,8 @@ func recallTextResultIn(dir, q, harness, project string, limit, offset, budget i
 	var hb strings.Builder
 	headerRoom := b.Len() + recallHeaderReserve(q, result.Tier, offset, limit, total)
 	for i, h := range hits {
-		fmt.Fprintf(&hb, "\n%d. [%s] %s · %s · %d matches", i+1,
-			recallListingLine(h.Session.Harness), recallListingLine(h.Session.Project), recallListingLine(h.Session.ID), h.Count)
+		fmt.Fprintf(&hb, "\n%d. [%s] %s · %s · %s", i+1,
+			recallListingLine(h.Session.Harness), recallListingLine(h.Session.Project), recallListingLine(h.Session.ID), search.MatchCount(h.Count))
 		// A session with no user turn is the agent's own words, and the lines
 		// below carry no role — so an assertion a model made arrived as a fact
 		// from the store (#1107, the shape #1100 fixed for the listing).

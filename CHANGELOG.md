@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A session with one hit reads `1 match`, not `1 matches`, in `deja search` and in the MCP recall listing (#4627).
 - `deja search` printed its results without colour even in a terminal: the output went through a counter for `deja log`, and the colour check only recognised a bare terminal, so the coloured header and highlighted matches never showed. It looks through the counter now; pipes, `NO_COLOR` and `TERM=dumb` stay plain (#4620).
 - An OpenClaw gateway session got the project digest twice on its first turn, once from the hook pack and once from the plugin, and the hook pack repeated it on every later turn. Both now ask under the session's id, once. The plugin's digest moved to an `agent:bootstrap` hook of its own, which also runs under `openclaw agent --local` and without `allowConversationAccess`; the ClawHub package does the same.
 - One session made of megabytes of tool output no longer tops recall's relevance tier for questions it never discussed. A match inside a tool record now counts half of one in what someone said, and a JSON dump is quoted as an excerpt only when nothing else in the session matched. On a real store of 1705 sessions the session that came first, third and third on three questions now ranks 8th, 14th and 10th; LongMemEval and LoCoMo do not move (#4780).
