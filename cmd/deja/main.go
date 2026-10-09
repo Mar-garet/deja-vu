@@ -1522,18 +1522,15 @@ func ensureForCLISearch(dir string, o search.Options, force bool, progress io.Wr
 // command name goes. That is the only form the mistyped-command hint is about:
 // `deja search doctro` is someone searching for the word (#2197).
 func runBareSearch(dir string, args []string, sourceInstance string) error {
-	if len(args) > 0 {
-		if near := oneEditCommand(args[0]); near != "" {
-			fmt.Fprintf(os.Stderr, "deja: %q is not a command — did you mean `deja %s`?\n", args[0], near)
-			return errAlreadySaid
-		}
-	}
 	return searchWithOptions(dir, args, sourceInstance, true)
 }
 
-// oneEditCommand catches a likely command typo before a bare search can build
-// the index or return history (#4628). Keep the broader prefix and two-edit
-// hints for after the search; a quoted multi-word query is still a query.
+// oneEditCommand names the command a bare search's first word is one edit
+// from, so the hint comes before the index build and the results (#4628). It
+// is a hint, not a refusal: lost, list, logs and fixes are one edit from a
+// command and are also words people search for. The broader prefix and
+// two-edit hints stay for after the search; a quoted multi-word query is
+// still a query.
 func oneEditCommand(first string) string {
 	low := strings.ToLower(first)
 	if len([]rune(low)) < 4 || strings.HasPrefix(low, "-") || strings.ContainsAny(low, " \t\r\n") || dispatchKnows(low) {
@@ -1573,6 +1570,16 @@ func searchWithOptions(dir string, args []string, sourceInstance string, bare bo
 		return err
 	}
 	sinceRaw := sinceRawArg(filtered)
+	// Before the index build, so the reader who meant a command sees it first,
+	// and then the search runs as typed. On stderr like every other command
+	// hint, and never for --json, where a script reads the results (#4628).
+	hinted := false
+	if bare && !o.JSON && len(args) > 0 {
+		if near := oneEditCommand(args[0]); near != "" {
+			fmt.Fprintf(os.Stderr, "deja: %q is not a command — did you mean `deja %s`?\n", args[0], near)
+			hinted = true
+		}
+	}
 	o.SourceInstance = sourceInstance
 	o.RecallWorn = usage.WornSessions(dir)
 	prepareFirstIndexGreeting(dir)
@@ -1711,7 +1718,7 @@ func searchWithOptions(dir string, args []string, sourceInstance string, bare bo
 			// the line lives for the other miss, so it says it itself.
 			fmt.Fprint(os.Stderr, ignoredHiddenNoteFor("answer", index.IgnoredWithAllTerms(dir, query.Tokens(o.Query))))
 		default:
-			mistyped = printNoMatches(os.Stderr, dir, o.Query, o.Regex)
+			mistyped = printNoMatchesHinted(os.Stderr, dir, o.Query, o.Regex, hinted) || hinted
 		}
 	}
 	if o.Capped && len(hits) > 0 {
@@ -1784,7 +1791,7 @@ func searchWithOptions(dir string, args []string, sourceInstance string, bare bo
 	// There, a hint costs nothing over a failed search; here it lands on an
 	// answer the reader may well have wanted, and "doctors pool" is a search
 	// however close its first word sits to a command name.
-	if bare && len(hits) > 0 && len(strings.Fields(o.Query)) == 1 {
+	if bare && !hinted && !o.JSON && len(hits) > 0 && len(strings.Fields(o.Query)) == 1 {
 		fmt.Fprint(os.Stderr, commandHint(o.Query))
 	}
 	// A search that found nothing is not a failure — that is the ordinary
@@ -1996,6 +2003,12 @@ func termCountLine(dir, q string) string {
 // their query missed. It fired on every ordinary miss, so the signature could
 // not be used to recognise the failure it was written for (#637).
 func printNoMatches(w io.Writer, dir, q string, regex bool) (mistypedCommand bool) {
+	return printNoMatchesHinted(w, dir, q, regex, false)
+}
+
+// printNoMatchesHinted is printNoMatches for a search whose command hint was
+// already printed before it ran, so the miss does not say it twice.
+func printNoMatchesHinted(w io.Writer, dir, q string, regex, hinted bool) (mistypedCommand bool) {
 	// An empty store is not a query problem: "fewer words" cannot help when
 	// nothing is indexed, and `last`, `blame` and the brief all say what to do
 	// instead. Search is the command a new machine reaches for first (#832).
@@ -2072,7 +2085,7 @@ func printNoMatches(w io.Writer, dir, q string, regex bool) (mistypedCommand boo
 	// which cannot help someone who was not searching (#674). Falling through
 	// stays the default; an empty result is where the other reading is worth
 	// naming.
-	if hint := commandHint(q); hint != "" {
+	if hint := commandHint(q); hint != "" && !hinted {
 		fmt.Fprint(w, hint)
 		mistypedCommand = true
 	}

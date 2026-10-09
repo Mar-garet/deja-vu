@@ -56,13 +56,15 @@ func TestAnUnknownHookNameIsNotAQuery(t *testing.T) {
 		t.Errorf("the index was built by a hook that does not exist")
 	}
 
-	// A one-edit command typo is refused before searching (#4628), without
-	// building the index that the retired hook also left alone.
-	if _, err := captureRun(t, "sarch"); !errors.Is(err, errAlreadySaid) {
-		t.Fatalf("a command typo was not refused: %v", err)
+	// A real mistyped command is still read as a search — the reading #674
+	// chose, and the right one for a word somebody typed. It goes to stderr,
+	// so what says it ran is the store it built to answer. The exit code says
+	// the command was wrong, which is the one thing a script can act on.
+	if _, err := captureRun(t, "sarch"); err != nil && !errors.Is(err, errAlreadySaid) {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "manifest.gob")); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("a mistyped command built an index: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "manifest.gob")); err != nil {
+		t.Errorf("a mistyped command stopped being read as a search: %v", err)
 	}
 }
 
