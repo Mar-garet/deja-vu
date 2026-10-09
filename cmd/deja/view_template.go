@@ -63,7 +63,7 @@ input[type=search]:focus{outline:none;border-color:var(--ph)}
 <div id="tab-sessions">
 <input type="search" id="q" placeholder="filter sessions — title, project, harness, preview text">
 <div id="list"></div>
-<p class="note">{{if .TotalSessions}}previews embedded for the {{.PreviewCount}} most recent sessions and capped — full-text search lives in <b>deja "query"</b> and the agents' recall tool.{{else}}no sessions on this page.{{end}}{{if .SessionsWithheld}} Held back by the trust policy ({{.PolicyRule}}): {{.SessionsWithheld}}.{{end}}</p>
+<p class="note">{{if .TotalSessions}}previews embedded for the {{.PreviewCount}} most recent sessions and capped — full-text search lives in <b>deja "query"</b> and the agents' recall tool.{{end}}{{if .SessionsWithheld}} Held back by the trust policy ({{.PolicyRule}}): {{.SessionsWithheld}}.{{end}}</p>
 </div>
 <div id="tab-recalls" style="display:none"><div id="rlist"></div>
 <p class="note">the injections agents received, verbatim — the audit trail behind <b>deja log</b>.{{if lt .RecallCount .TotalRecalls}} The {{.RecallCount}} most recent of {{.TotalRecalls}} are on this page; older ones stay in the log until it rotates.{{end}}{{if .RecallsWithheld}} Held back by the trust policy ({{.PolicyRule}}): {{.RecallsWithheld}}.{{end}}</p></div>
@@ -72,11 +72,12 @@ input[type=search]:focus{outline:none;border-color:var(--ph)}
 </div>
 <script>
 const S={{.SessionsJSON}},R={{.RecallsJSON}},N={{.NotesJSON}};
+const HC={{.HarnessColorsJSON}};
 // Quotes included: rowN puts a value inside a double-quoted class attribute,
 // and every row here is built by concatenation, so an escaper that stops at
 // &<> is one attribute away from letting a project or note field close it.
 const esc=s=>(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function rowS(s){return '<div class="row" onclick="this.classList.toggle(\'open\')"><span class="h">['+esc(s.harness)+']</span> <span class="t">'+esc(s.title||s.id)+'</span> <span class="m">'+esc(s.project)+' · '+esc(s.updated)+'</span>'+(s.preview?'<pre>'+esc(s.preview)+'</pre>':'')+'</div>'}
+function rowS(s){return '<div class="row" onclick="this.classList.toggle(\'open\')"><span class="h" style="color:'+esc(HC[s.harness]||'')+'">['+esc(s.harness)+']</span> <span class="t">'+esc(s.title||s.id)+'</span> <span class="m">'+esc(s.project)+' · '+esc(s.updated)+'</span>'+(s.preview?'<pre>'+esc(s.preview)+'</pre>':'')+'</div>'}
 function rowR(r){return '<div class="row" onclick="this.classList.toggle(\'open\')"><span class="h">['+esc(r.kind)+']</span> <span class="t">'+r.sessions+' sessions · '+r.bytes+' B</span> <span class="m">'+esc(r.time)+(r.policy?' · '+esc(r.policy):'')+(r.terms&&r.terms.length?' · via: '+esc(r.terms.join(', ')):'')+'</span><pre>'+esc(r.digest)+'</pre></div>'}
 // The decision heads the row. A note's title is the session's own opening line
 // — the question — so leading with it put an "accepted" badge on the question
@@ -84,7 +85,7 @@ function rowR(r){return '<div class="row" onclick="this.classList.toggle(\'open\
 function rowN(n){var head=n.text||n.title,under=(n.text&&n.title)?n.title:'';return '<div class="row"><span class="badge '+esc(n.state)+'">'+esc(n.state)+'</span> <span class="t">'+esc(head)+'</span> <span class="m">'+esc(n.project)+' · '+esc(n.at)+(n.tags&&n.tags.length?' · #'+esc(n.tags.join(' #')):'')+'</span>'+(under?'<pre style="display:block">'+esc(under)+'</pre>':'')+'</div>'}
 function draw(){const q=(document.getElementById('q').value||'').toLowerCase();
 const hit=S.filter(s=>!q||[s.title,s.project,s.harness,s.preview,s.id].join(' ').toLowerCase().includes(q));
-document.getElementById('list').innerHTML=hit.length?hit.map(rowS).join(''):'<div class="empty">nothing matches — try deja "'+esc(q)+'" for full-text search</div>'}
+document.getElementById('list').innerHTML=hit.length?hit.map(rowS).join(''):q?'<div class="empty">nothing matches — try deja "'+esc(q)+'" for full-text search</div>':'<div class="empty">no sessions indexed yet — <code>deja sources</code> shows where deja looked</div>'}
 document.getElementById('q').addEventListener('input',draw);
 document.getElementById('rlist').innerHTML=R.length?R.map(rowR).join(''):'<div class="empty">no recalls recorded yet</div>';
 document.getElementById('nlist').innerHTML=N.length?N.map(rowN).join(''):'<div class="empty">no curated notes yet — deja promote &lt;id&gt;</div>';

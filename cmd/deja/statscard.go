@@ -95,7 +95,7 @@ func renderStatsCard(r stats.Report) string {
 		// The files behind the spans cell, which is the sentence that makes
 		// the number mean something: 1,653 files on one real store.
 		cardText(&b, w-pad, rowY, 12, "400",
-			"across "+formatStatNumber(r.SpanFiles)+" file"+pluralS(r.SpanFiles)+" deja can restore", "#8b989a",
+			formatStatNumber(r.Spans)+" replaced span"+pluralS(r.Spans)+" in "+formatStatNumber(r.SpanFiles)+" file"+pluralS(r.SpanFiles)+" deja can restore", "#8b989a",
 			"text-anchor=\"end\"")
 	case r.RepeatQuestions > 0 && formatStatNumber(r.RepeatQuestions) != hero:
 		cardText(&b, w-pad, rowY, 12, "400",
@@ -174,7 +174,7 @@ func cardPunchline(r stats.Report) string {
 	case r.WeekRecalls > 0:
 		return fmt.Sprintf("deja handed your agents memory %s time%s this week.", formatStatNumber(r.WeekRecalls), pluralS(r.WeekRecalls))
 	case r.RepeatQuestions > 0:
-		return fmt.Sprintf("You asked the same thing %s time%s — deja remembered.", formatStatNumber(r.RepeatQuestions), pluralS(r.RepeatQuestions))
+		return fmt.Sprintf("You asked %s question%s more than once — deja remembered.", formatStatNumber(r.RepeatQuestions), pluralS(r.RepeatQuestions))
 	case r.Recall.Recalls+r.Recall.Injections > 0:
 		handed := r.Recall.Recalls + r.Recall.Injections
 		return fmt.Sprintf("deja handed your agents memory %s time%s.", formatStatNumber(handed), pluralS(handed))
