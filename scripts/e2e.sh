@@ -41,6 +41,8 @@ $D last 5 | grep -q "claude" || fail "last"
 $D sources | grep -q "claude" || fail "sources"
 $D version | grep -q "deja" || fail "version"
 $D help | grep -q "Usage" || fail "help"
+# bare deja into a pipe is a short welcome that points at the full list (#4621)
+$D | grep -q "deja help" || fail "bare welcome"
 # ctx digest
 $D ctx frobnicator | grep -q "deja context" || fail "ctx"
 # json output is one envelope on every path, and says which tier answered

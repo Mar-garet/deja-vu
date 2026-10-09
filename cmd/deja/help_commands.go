@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/vshulcz/deja-vu/internal/index"
 )
 
 // helpEntry is one command as `deja help` lists it and as `deja <cmd> --help`
@@ -368,9 +370,15 @@ Examples:
 	return b.String()
 }
 
-// bareDejaPointer is what a bare deja prints when stdout is not a terminal.
-func bareDejaPointer() string {
-	return "deja - persistent memory for coding agents\n\n" +
+// bareDejaPointer is what a bare deja prints when stdout is not a terminal:
+// what the index holds, read from its manifest without building anything, and
+// where to go next (#4621).
+func bareDejaPointer(dir string) string {
+	held := "nothing indexed yet"
+	if ov, err := index.OverviewServable(dir); err == nil && ov.Sessions > 0 {
+		held = fmt.Sprintf("%d session%s indexed across %d agent%s", ov.Sessions, pluralS(ov.Sessions), ov.Harnesses, pluralS(ov.Harnesses))
+	}
+	return "deja - persistent memory for coding agents\n" + held + "\n\n" +
 		helpRow("deja <query>", "search your past agent sessions") + "\n" +
 		helpRow("deja brief", "the screen bare deja prints on a terminal") + "\n" +
 		helpRow("deja help", "every command, with a line on each") + "\n"

@@ -384,8 +384,8 @@ func run(args []string) error {
 		}
 		// Piped, the full page was 106 lines nobody asked for. Nothing deja
 		// installs runs a bare deja, and the brief would build an index into a
-		// pipe, so the reader gets where to go next instead.
-		fmt.Print(bareDejaPointer())
+		// pipe, so the reader gets what is indexed and where to go next (#4621).
+		fmt.Print(bareDejaPointer(dir))
 		return nil
 	}
 	sourceInstance := os.Getenv("DEJA_SOURCE_INSTANCE")
