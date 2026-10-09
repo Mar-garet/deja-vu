@@ -104,7 +104,8 @@ Reasonix takes everything as one plugin package (`reasonix-plugin.json`,
   and last eight lines) they go in front, on one line. At
   `compaction.prepare` it adds deja's record of the folded turns, read from
   what the person typed rather than the recall appended to it, to the
-  summarizer's guidance. It publishes a status line while the first index
+  summarizer's guidance, and holds the same packet for the next turn, which
+  carries it in place of that turn's recall. It publishes a status line while the first index
   builds and one "recalled N prior sessions" notice per session. Every answer
   has a budget under the host's timeout (4 s per prompt, 2 s per tool call,
   10 s for compaction); an error, a timeout or nothing to say leaves the turn
@@ -122,7 +123,7 @@ Reasonix takes everything as one plugin package (`reasonix-plugin.json`,
   ran `reasonix`, the receipt-signing key and crash directory that run
   created go too, unless Reasonix has used the key since.
 - **Resume**: `reasonix --resume <id>` in the session's workspace.
-- **Handoff**: paste.
+- **Handoff**: exec, `reasonix run <prompt>`; the TUI takes no prompt.
 
 **Last verified:** 2026-09-27
 

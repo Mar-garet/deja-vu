@@ -15,6 +15,7 @@ import (
 	"github.com/vshulcz/deja-vu/internal/digest"
 	"github.com/vshulcz/deja-vu/internal/model"
 	"github.com/vshulcz/deja-vu/internal/sources"
+	"github.com/vshulcz/deja-vu/internal/termwidth"
 
 	"github.com/vshulcz/deja-vu/internal/query"
 )
@@ -300,11 +301,15 @@ func Blame(ss []model.Session, target BlameTarget, o BlameOptions) []BlameHit {
 		if namedAPath(hits[i]) != namedAPath(hits[j]) {
 			return namedAPath(hits[i])
 		}
+		// Among sessions that wrote the path out, newest first, the way a log
+		// reads: by score, one that named it a few more times sat above a newer
+		// one, and the listing read 06-29, 06-27, 06-28. Bare mentions keep the
+		// score, which is what holds an echo of the name below real work.
+		if namedAPath(hits[i]) && !hits[i].Session.Updated.Equal(hits[j].Session.Updated) {
+			return hits[i].Session.Updated.After(hits[j].Session.Updated)
+		}
 		if hits[i].Score != hits[j].Score {
 			return hits[i].Score > hits[j].Score
-		}
-		if !hits[i].Session.Updated.Equal(hits[j].Session.Updated) {
-			return hits[i].Session.Updated.After(hits[j].Session.Updated)
 		}
 		return hits[i].Session.ID < hits[j].Session.ID
 	})
@@ -586,12 +591,38 @@ func PrintBlame(w io.Writer, hits []BlameHit, jsonOutput bool) {
 		_ = json.NewEncoder(w).Encode(out)
 		return
 	}
-	color := colorOK(w)
-	for _, hit := range hits {
-		date := "-"
-		if !hit.Session.Updated.IsZero() {
-			date = hit.Session.Updated.Format("2006-01-02")
+	PrintBlameWidth(w, hits, 0)
+}
+
+// PrintBlameWidth prints the blame rows in the search result header's form —
+// harness, project, day, short id, then the session's question — so the two
+// lists read alike. width is the terminal's (0 for a pipe): the question is
+// cut to it and the quoted lines under a row wrap at spaces.
+func PrintBlameWidth(w io.Writer, hits []BlameHit, width int) {
+	for i := range hits {
+		if hits[i].Tier == "" {
+			hits[i].Tier = TierExact
 		}
+	}
+	color := colorOK(w)
+	// One layout for the whole list: when the widest header leaves too little
+	// room for the question beside it, every question goes on the line under
+	// its header rather than some rows one way and some the other.
+	questionUnder := false
+	if width > 0 {
+		for _, hit := range hits {
+			if hit.Title == "" {
+				continue
+			}
+			plain := fmt.Sprintf("[%s] %s · %s · %s", hit.Session.Harness, SafeLine(hit.Session.Project), blameDate(hit), SafeLine(short(hit.Session.ID)))
+			if width-termwidth.Columns(plain)-3 < 32 {
+				questionUnder = true
+				break
+			}
+		}
+	}
+	for _, hit := range hits {
+		date := blameDate(hit)
 		// id, project and title reach a terminal here and the agent through the
 		// MCP blame tool. All three are free text from the transcript — an
 		// imported peer's title especially — so a bare escape or bidi run would
@@ -600,34 +631,55 @@ func PrintBlame(w io.Writer, hits []BlameHit, jsonOutput bool) {
 		id := SafeLine(short(hit.Session.ID))
 		project := SafeLine(hit.Session.Project)
 		title := SafeLine(hit.Title)
+		plain := fmt.Sprintf("[%s] %s · %s · %s", hit.Session.Harness, project, date, id)
+		// Too little room beside the header and the question goes on the line
+		// under it rather than being cut to three words.
+		under := ""
+		if title != "" && width > 0 {
+			if questionUnder {
+				under, title = "  "+fitLine(title, width-2), ""
+			} else {
+				title = fitLine(title, width-termwidth.Columns(plain)-3)
+			}
+		}
 		if color {
-			sep := cDim + " · " + cReset
-			fmt.Fprintf(w, "%s%s%s %s%s%s%s", harnessTag(hit.Session.Harness, true), sep, date, cBold+id+cReset, sep, project, "")
+			sep := cDim + "·" + cReset + cBold
+			fmt.Fprintf(w, "%s%s %s %s %s %s %s%s", cBold, harnessTag(hit.Session.Harness, true), project, sep, date, sep, id, cReset)
 			if title != "" {
-				fmt.Fprintf(w, "%s%s", sep, cBold+title+cReset)
+				fmt.Fprintf(w, " %s %s", cDim+"—"+cReset, title)
 			}
 		} else {
-			fmt.Fprintf(w, "%s · %s · %s · %s", date, hit.Session.Harness, id, project)
+			fmt.Fprint(w, plain)
 			if title != "" {
-				fmt.Fprintf(w, " · %s", title)
+				fmt.Fprintf(w, " — %s", title)
 			}
 		}
 		fmt.Fprintln(w)
+		if under != "" {
+			fmt.Fprintln(w, under)
+		}
 		if line := BlameLifecycleLine(hit); line != "" {
+			line = termwidth.Indent(line, width, "  ", "    ")
 			if color {
-				fmt.Fprintf(w, "  %s%s%s\n", cDim, line, cReset)
-			} else {
-				fmt.Fprintf(w, "  %s\n", line)
+				line = cDim + line + cReset
 			}
+			fmt.Fprintln(w, line)
 		}
 		for _, text := range hit.Snippets {
+			text = termwidth.Indent(text, width, "  ", "    ")
 			if color {
-				fmt.Fprintf(w, "  %s%s%s\n", cDim, text, cReset)
-			} else {
-				fmt.Fprintf(w, "  %s\n", text)
+				text = cDim + text + cReset
 			}
+			fmt.Fprintln(w, text)
 		}
 	}
+}
+
+func blameDate(hit BlameHit) string {
+	if hit.Session.Updated.IsZero() {
+		return "-"
+	}
+	return absoluteDate(hit.Session.Updated)
 }
 
 // blameSnippet renders one mention. The prose path collapses runs of whitespace
@@ -740,6 +792,10 @@ func BlameLifecycleLine(h BlameHit) string {
 // handful; `git status` on a busy tree, `find` and an index dump name dozens.
 const dumpListingPaths = 10
 
+// rowPrefix is how far into a line a JSON record may start and still make the
+// line a row of data: room for a timestamp and a separator.
+const rowPrefix = 40
+
 // dumpMinBytes is the least tool output that can be a dump.
 const dumpMinBytes = 200
 
@@ -758,11 +814,22 @@ func isDataDump(text string) bool {
 	// The document can follow a line or two of its own: deja prints "deja:
 	// updated 2 files" to stderr ahead of its --json, and the harness keeps
 	// both. JSON from there on that is most of the output is the dump.
+	//
+	// rows and rowBytes count lines that open a JSON record within a short
+	// prefix, as `sqlite3` prints "2026-05-24 20:02|{"type": …}" — values long
+	// enough that the key count below does not see them as data (#4780).
+	rows, rowBytes := 0, 0
 	for off := 0; off < len(t); {
 		line := t[off:]
 		// Or after a one-word label on its line: a web search hands back
 		// "Links: [{"title": …".
-		if i := strings.Index(line, ": "); i > 0 && i <= 24 && !strings.ContainsAny(line[:i], " \t\n") {
+		// Only the label's width is searched: the whole rest of the text made
+		// this quadratic in the number of lines.
+		head := line
+		if len(head) > 26 {
+			head = head[:26]
+		}
+		if i := strings.Index(head, ": "); i > 0 && i <= 24 && !strings.ContainsAny(line[:i], " \t\n") {
 			if startsJSON(line[i+2:]) && (len(line)-i-2)*2 >= len(t) {
 				return true
 			}
@@ -770,11 +837,22 @@ func isDataDump(text string) bool {
 		if startsJSON(line) && len(line)*2 >= len(t) {
 			return true
 		}
-		nl := strings.IndexByte(t[off:], '\n')
+		nl := strings.IndexByte(line, '\n')
+		end := nl
+		if end < 0 {
+			end = len(line)
+		}
+		if prefix := line[:min(end, rowPrefix)]; strings.Contains(prefix, `{"`) {
+			rows++
+			rowBytes += end
+		}
 		if nl < 0 {
 			break
 		}
 		off += nl + 1
+	}
+	if rows >= 3 && rowBytes*2 >= len(t) {
+		return true
 	}
 	// Or rows that each carry a JSON record, as a database query prints
 	// them: a key every 40 bytes is data, where prose quoting a small

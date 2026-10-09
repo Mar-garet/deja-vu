@@ -28,16 +28,28 @@ seconds) and `content` blocks (`type: text` only for v1). SQLite: `sessions` joi
   per prompt. `.goosehints` is where the block used to go; what deja wrote there
   is cleared, and anything else in that file is left alone. A `SessionEnd`
   hook runs `deja hook-session-end`, so the session is back in the next one's
-  MCP recall straight away.
+  MCP recall straight away. A `Stop`
+  hook runs `deja hook-stop`: a Stop hook's `{"decision":"block","reason"}`
+  is the one hook answer goose puts in front of the model, as a user message
+  in the same turn (agent.rs). It blocks only when something waits: the fix
+  pair for a command that failed this turn, read from `sessions.db` because
+  the failure event carries no output, the packet for a compaction this
+  turn, found in `sessions.db` by its agent-only note, or the pre-edit line
+  for each file the turn's `edit`, `write` or `text_editor` calls changed.
+  Each is handed over once.
+- **Status line**: goose has none. The one hook output it shows the person is
+  a `SessionStart` hook's `{"banner": …}`, printed once when an interactive
+  `goose session` opens (goose-cli session/mod.rs), so the `SessionStart`
+  hook prints `deja statusline` there. `goose run` shows no banner.
 - **Resume**: `goose session --resume --session-id <id>`. A session no longer in `sessions.db` (deleted in goose) is refused with a pointer to `deja show`.
 - **Handoff**: exec, `goose run -t`.
 - **Prerequisite**: the per-prompt half needs `GOOSE_MOIM_MESSAGE_FILE`, which
   the `deja goose` wrapper sets.
 
-## What the other nine hook events can carry
+## What the other hook events can carry
 
 Goose has eleven hook events (twelve on 1.49, which adds `PreToolUseResult`).
-deja wires three. Apart from `SessionEnd`, the rest were measured on a stand — isolated HOME, a recording
+deja wires four. Apart from `SessionEnd` and `Stop`, the rest were measured on a stand — isolated HOME, a recording
 endpoint, a hook on every event writing a marker into the MOIM file and a
 `{"additionalContext": …}` on stdout — on 1.46.0 and again on 1.49.0, with the
 same result both times.
@@ -49,7 +61,7 @@ Every tool event carries the same four fields — `event`, `session_id`,
 `tool_name`, `tool_input`, plus `working_dir` — and no output, no error text and
 no exit code. `Stop` carries `last_assistant_message`.
 
-Two things follow, and they are why the other eight stay unwired:
+Two things follow, and they are why the others stay unwired:
 
 - Hook stdout is discarded. No marker written there appeared in any recorded
   request, on either version.

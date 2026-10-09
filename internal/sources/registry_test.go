@@ -49,6 +49,7 @@ func TestFormatRegistryConformance(t *testing.T) {
 		"DEJA_MUSE_ROOTS",
 		"DEJA_CODEBUDDY_ROOTS", "CODEBUDDY_CONFIG_DIR", "WORKBUDDY_CONFIG_DIR",
 		"DEJA_NOTES_FILE",
+		"DEJA_JUNIE_ROOT", "JUNIE_HOME", "DEJA_JETBRAINS_ROOT",
 	} {
 		t.Setenv(key, "")
 	}
@@ -200,7 +201,25 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 	case "commandcode":
 		sessions, err = ParseCommandCodeFile(path)
 	case "zcode":
-		sessions, err = ParseZCodeFile(path)
+		// The transcripts, and the CLI's OpenCode-schema database.
+		if strings.HasSuffix(path, ".sql") {
+			if !SQLite3Available() {
+				t.Skip("sqlite3 not installed")
+			}
+			sql, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			db := filepath.Join(work, "db.sqlite")
+			build := exec.Command("sqlite3", db)
+			build.Stdin = strings.NewReader(string(sql))
+			if out, runErr := build.CombinedOutput(); runErr != nil {
+				t.Fatalf("create sqlite fixture: %v: %s", runErr, out)
+			}
+			sessions, err = ParseZCodeDB(db)
+		} else {
+			sessions, err = ParseZCodeFile(path)
+		}
 	case "kiro":
 		// One store per client: the CLI's pair under cli/ and the IDE's
 		// per-workspace session directory.
@@ -342,6 +361,27 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 		// uncompressed one still parses, which is the degradation the harness
 		// is documented to have rather than a reason to skip the row.
 		sessions, err = ParseZedDB(db)
+	case "devin":
+		if !SQLite3Available() {
+			t.Skip("sqlite3 not installed")
+		}
+		sql, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		// cli/sessions.db under the data dir: DevinSessionDir reads the
+		// working directory off the same file, so the fixture sits at its
+		// real depth.
+		db := filepath.Join(work, "cli", "sessions.db")
+		if mkErr := os.MkdirAll(filepath.Dir(db), 0o755); mkErr != nil {
+			t.Fatal(mkErr)
+		}
+		build := exec.Command("sqlite3", db)
+		build.Stdin = strings.NewReader(string(sql))
+		if out, runErr := build.CombinedOutput(); runErr != nil {
+			t.Fatalf("create sqlite fixture: %v: %s", runErr, out)
+		}
+		sessions, err = ParseDevinDB(db)
 	case "qwen":
 		sessions, err = ParseQwenFile(path)
 	case "pi":
@@ -354,6 +394,10 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 		sessions, err = ParseCopilotFile(path)
 	case "copilot-chat":
 		sessions, err = ParseCopilotChatFile(path)
+	case "junie":
+		sessions, err = ParseJunieFile(path)
+	case "jetbrains":
+		sessions, err = ParseJetBrainsFile(path)
 	case "deepseek":
 		// The fixture is stored raw: the harness writes zstd frames by default,
 		// and a registry fixture that needs an external tool to read cannot be
@@ -370,7 +414,7 @@ func parseRegistryFixtureIn(t *testing.T, id, path, work string) []model.Session
 
 // registryFixturesWithCalls are the registry fixtures whose tool calls are
 // read into work records.
-var registryFixturesWithCalls = map[string]bool{"deepseek": true, "continue": true, "trae": true, "muse": true, "codebuddy": true}
+var registryFixturesWithCalls = map[string]bool{"deepseek": true, "continue": true, "trae": true, "muse": true, "codebuddy": true, "devin": true, "junie": true, "jetbrains": true}
 
 func validateRegistrySessions(t *testing.T, id string, sessions []model.Session) {
 	t.Helper()
@@ -394,7 +438,9 @@ func validateRegistrySessions(t *testing.T, id string, sessions []model.Session)
 			role := message.Role
 			work := registryFixturesWithCalls[id] &&
 				(role == RoleFiles || role == RoleCommand || role == RoleEdit || role == RoleWrote)
-			if (role != "user" && role != "assistant" && role != "tool-output" && !work) ||
+			// A compaction summary is allowed where the harness wrote one; the
+			// fixtures that carry one are pinned in compaction_summary_fixtures_test.go.
+			if (role != "user" && role != "assistant" && role != "tool-output" && role != RoleSummary && !work) ||
 				strings.TrimSpace(message.Text) == "" || message.Time.IsZero() {
 				t.Fatalf("%s fixture produced invalid message: %#v", id, message)
 			}

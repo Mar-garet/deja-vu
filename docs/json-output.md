@@ -228,9 +228,11 @@ The existing positional count remains the bound, for example
 
 ## `deja show <exact-id> --harness <name> --json`
 
-Machine reads require the composite harness plus exact native session ID. They
-return redacted index content in a bounded message window; the default limit is
-50 and the maximum is 200.
+The harness plus the exact native session ID is the stable form for a script,
+since ids can collide across harnesses. Without `--harness`, an id prefix that
+names one session is read; one that names more than one is refused with what
+separates them. Reads return redacted index content in a bounded message window;
+the default limit is 50 and the maximum is 200.
 
 ```json
 {
@@ -1118,7 +1120,7 @@ material the screen prints:
 Every count has its arithmetic in the shape rather than in prose. `work.records`
 is how many records of each kind fall inside the window; `work.files` and
 `work.commands` are the distinct paths and command lines those records name, so
-forty records naming one file are one file. `questions.repeated` is how many
+forty-one records naming one file are one file. `questions.repeated` is how many
 distinct questions were asked in more than one session, and
 `questions.distinct` is the population it is a fraction of — a repeat count
 without its denominator is not a figure about anything. `work.undated` is the
@@ -1231,7 +1233,7 @@ Returns a JSON array of blame hits (same stability rules as exact search):
 ```
 
 Each row also carries the session's `touched` list, bounded to the three files
-it worked on most. The manifest holds up to forty, and serving all of them spent
+it worked on most. The manifest holds up to forty-one, and serving all of them spent
 3186 of an 8044-byte answer on files the question did not ask about — and the
 answer is trimmed by dropping whole sessions to fit its budget, so those bytes
 cost history. Over six real paths the same budget went from 20 sessions and

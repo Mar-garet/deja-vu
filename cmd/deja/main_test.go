@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,9 @@ func withTempStores(t *testing.T) string {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
 	t.Setenv("USERPROFILE", h)
+	// Windows keeps notes under APPDATA, which HOME does not move: a note one
+	// test wrote surfaced in the next test's `deja last`.
+	t.Setenv("APPDATA", filepath.Join(h, "AppData", "Roaming"))
 	claude, _ := filepath.Abs(filepath.Join("..", "..", "fixtures", "synthetic", "claude"))
 	t.Setenv("DEJA_CLAUDE_ROOT", claude)
 	t.Setenv("DEJA_CODEX_ROOT", filepath.Join(t.TempDir(), "codex"))
@@ -81,7 +85,8 @@ func TestRunDispatcherSyntheticFixtures(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{"usage", nil, "Usage:", ""},
+		{"usage", nil, "deja help", ""},
+		{"help", []string{"help"}, "Usage:", ""},
 		{"version", []string{"version"}, "deja dev", ""},
 		{"search", []string{"frobnicator"}, "frobnicator bug", ""},
 		{"search json", []string{"--json", "frobnicator"}, `"count"`, ""},
@@ -93,7 +98,7 @@ func TestRunDispatcherSyntheticFixtures(t *testing.T) {
 		{"sources", []string{"sources"}, "opencode", ""},
 		{"stats", []string{"stats"}, "deja stats", ""},
 		{"ctx missing", []string{"ctx"}, "", "ctx needs query"},
-		{"show missing", []string{"show"}, "", "show needs id-prefix"},
+		{"show missing", []string{"show"}, "", "show needs an id prefix"},
 		{"bad duration", []string{"--since", "nope", "needle"}, "", "not a duration deja understands"},
 	}
 	for _, tc := range cases {
@@ -260,7 +265,7 @@ func TestLastFiltersProjectAndHarness(t *testing.T) {
 	// No user turn: the assistant's first sentence is the title, because the
 	// alternative is a row that says nothing at all (#692) — marked as the
 	// agent's words since #1100, so it does not read as the reader's question.
-	if !strings.Contains(out, "[claude · gamma · 2026-01-05 · claude-gamma] agent: assistant-only memory") {
+	if !regexp.MustCompile(`\[claude\] gamma\s+Jan 5\s+claude-gamma\s+agent: assistant-only memory`).MatchString(out) {
 		t.Fatalf("title-less last output = %q", out)
 	}
 
@@ -411,7 +416,7 @@ func TestShareOutputsRedactedMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"# deja share:", "## User problem statement", "## Key assistant conclusions", "conclusion: sanitize"} {
+	for _, want := range []string{"# deja share:", "## What was asked", "## What the assistant concluded", "conclusion: sanitize"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("share output missing %q: %s", want, out)
 		}
@@ -524,7 +529,7 @@ func TestStatsCommandJSONAndNoColor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out, "\x1b[") || strings.Contains(out, "█") || !strings.Contains(out, "##") || !strings.Contains(out, "[claude]") || !strings.Contains(out, "Recalls served   2") ||
+	if strings.Contains(out, "\x1b[") || strings.Contains(out, "█") || !strings.Contains(out, "##") || !strings.Contains(out, "[claude]") || !strings.Contains(out, "Memory served    3") ||
 		// The headline is about memory handed over at all, so it still sums
 		// the two agent recalls and the one injection.
 		!strings.Contains(out, "memory served 3 times") {
@@ -585,7 +590,7 @@ func TestParseSearchAndSmallHelpers(t *testing.T) {
 	if err := runShare(index.DefaultDir(), nil, io.Discard); err == nil || !strings.Contains(err.Error(), "share needs") {
 		t.Fatalf("runShare missing args err=%v", err)
 	}
-	if err := runSync(index.DefaultDir(), []string{"export"}); err == nil || !strings.Contains(err.Error(), "sync needs") {
+	if err := runSync(index.DefaultDir(), []string{"export"}); err == nil || !strings.Contains(err.Error(), "sync export needs a directory") {
 		t.Fatalf("runSync missing args err=%v", err)
 	}
 	if err := runSync(index.DefaultDir(), []string{"bogus", t.TempDir()}); err == nil || !strings.Contains(err.Error(), "unknown sync") {

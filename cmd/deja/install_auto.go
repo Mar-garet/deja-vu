@@ -1190,7 +1190,19 @@ func installKimiAuto(exe string, uninstall bool) (installResult, error) {
 			"\n" + kimiHookEntry("PreCompact", hookRun(exe, "hook-precompact", "--harness", "kimi")) +
 			// The session is over, so its live stamp goes: the next session's
 			// MCP recall can answer with it now rather than in twenty minutes.
-			"\n" + kimiHookEntry("SessionEnd", hookRun(exe, "hook-session-end"))
+			"\n" + kimiHookEntry("SessionEnd", hookRun(exe, "hook-session-end")) +
+			// A failed command's fix pair: Kimi fires these and drops what
+			// they print, so the pair waits for the session's next prompt
+			// (hook_deferred.go). The payload is snake_case with the shell
+			// tool named Bash and the failure under `error` (0.28.1
+			// toHookInputData, notifyPostToolUse).
+			"\n" + kimiHookEntryMatching("PostToolUse", "Bash", hookRun(exe, "hook-tool-after", "--defer")) +
+			"\n" + kimiHookEntryMatching("PostToolUseFailure", "Bash", hookRun(exe, "hook-tool-after", "--defer")) +
+			// The line about a file before Kimi edits it: runPreToolUse
+			// keeps only a block's reason, so the line waits for the next
+			// prompt too, with the edit made by then. The matcher is a
+			// regex tested unanchored, hence the anchors.
+			"\n" + kimiHookEntryMatching("PreToolUse", "^(Edit|Write)$", hookRun(exe, "hook-tool", "--defer"))
 		if s != "" {
 			s += "\n\n"
 		}
@@ -1206,6 +1218,12 @@ func installKimiAuto(exe string, uninstall bool) (installResult, error) {
 // removeKimiHookBlock takes them all and leaves a hand-written hook alone.
 func kimiHookEntry(event, command string) string {
 	return kimiHookMarker + "\n[[hooks]]\nevent = " + strconv.Quote(event) +
+		"\ncommand = " + strconv.Quote(command) + "\ntimeout = 30\n"
+}
+
+func kimiHookEntryMatching(event, matcher, command string) string {
+	return kimiHookMarker + "\n[[hooks]]\nevent = " + strconv.Quote(event) +
+		"\nmatcher = " + strconv.Quote(matcher) +
 		"\ncommand = " + strconv.Quote(command) + "\ntimeout = 30\n"
 }
 
@@ -1251,7 +1269,7 @@ func dejaHookEntry(entry map[string]any) bool {
 		// whatever the old binary called.
 		// Both tool subcommands are spelled out: the match wants the whole
 		// token, so "hook-tool" does not find "hook-tool-after".
-		for _, sub := range []string{"hook-context", "hook-prompt", "hook-precompact", "hook-goose", "hook-antigravity",
+		for _, sub := range []string{"hook-context", "hook-prompt", "hook-precompact", "hook-goose", "hook-antigravity", "hook-codewhale",
 			"hook-tool", "hook-tool-after", "hook-spawn", "hook-session-end"} {
 			if isDejaHookCommand(cmd, "deja "+sub) {
 				return true

@@ -127,7 +127,7 @@ func runInstall(dir string, args []string, uninstall bool) error {
 			sort.Strings(found)
 			return fmt.Errorf("%s needs a target — found here: %s (or --all, --auto)", verb, strings.Join(found, ", "))
 		}
-		return fmt.Errorf("%s needs a target — no agent config found here; `deja help` lists every target deja knows", verb)
+		return fmt.Errorf("%s needs a target — no agent config found here; `deja help install` lists every target deja knows", verb)
 	}
 	// Several names at once, because doctor asks for exactly that: the stale
 	// wiring row prints `deja install ` and the targets it recorded, and on any
@@ -232,7 +232,11 @@ func runInstall(dir string, args []string, uninstall bool) error {
 	// "index: built (0 sessions, 0 messages)" over a full store (#4268).
 	installBuildsIndex = !uninstall && !noIndex
 	defer func() { installBuildsIndex = false }()
+	// changed counts targets whose wiring this run actually wrote or removed,
+	// for the line that says what happens next.
+	changed := 0
 	for _, t := range targets {
+		guidanceMoved := false
 		r, err := installTarget(t, exe, uninstall)
 		// A client saved a config under the edit: edited again from its
 		// version rather than renamed over it (#4561).
@@ -267,8 +271,14 @@ func runInstall(dir string, args []string, uninstall bool) error {
 			} else if gr.Note != "" {
 				saidNotes[gr.Note] = true
 			}
-			if gr.Path != "" && !banner {
+			// Removing what was never there is not news: the line would say
+			// "unchanged" about a file deja has nothing in.
+			quietMiss := uninstall && gr.Action == "unchanged" && gr.Note == ""
+			if gr.Path != "" && !banner && !quietMiss {
 				fmt.Println(guidanceOutput(t, gr))
+			}
+			if gr.Path != "" && gr.Action != "unchanged" {
+				guidanceMoved = true
 			}
 			if gr.Path != "" && uninstall {
 				pruneGuidanceDirs(gr.Path)
@@ -307,11 +317,17 @@ func runInstall(dir string, args []string, uninstall bool) error {
 			}
 		}
 		written++
+		if r.Action != "unchanged" || guidanceMoved {
+			changed++
+		}
 		touchedPaths = append(touchedPaths, r.touched()...)
 		if banner {
 			done = append(done, lineItem{t, r.Action, shortHome(r.Path), r.Note})
 		} else {
-			if r.Path == "" {
+			if uninstall && r.Action == "unchanged" && r.Note == "" && !guidanceMoved {
+				// Nothing of deja's was in this agent's files.
+				fmt.Printf("%s: not installed\n", t)
+			} else if r.Path == "" {
 				fmt.Printf("%s: %s\n", t, r.Action)
 			} else {
 				fmt.Printf("%s: %s %s\n", t, r.Action, shortHome(r.Path))
@@ -371,6 +387,16 @@ func runInstall(dir string, args []string, uninstall bool) error {
 		}
 		refusal = fmt.Errorf("%s finished what it could; %d target%s refused: %s — %s",
 			verb, len(refused), pluralS(len(refused)), strings.Join(refused, "; "), refusalRemedy(refusedErrs))
+		// Nothing was done and every refusal is a name deja does not know:
+		// "finished what it could" and "fix what it reports" describe a run
+		// that never started. The name and the near miss are the whole answer.
+		if written == 0 && allUnknownTargets(refusedErrs) {
+			msgs := make([]string, len(refusedErrs))
+			for i, e := range refusedErrs {
+				msgs[i] = e.Error()
+			}
+			refusal = fmt.Errorf("%s: %s", verb, strings.Join(msgs, "; "))
+		}
 	}
 	// Every install builds, not only --auto and --all. Installing is the one
 	// moment a person has already accepted a wait — they just ran an installer
@@ -394,6 +420,16 @@ func runInstall(dir string, args []string, uninstall bool) error {
 	if uninstall {
 		if line := keptSnapshotsLine(touchedPaths); line != "" {
 			fmt.Fprint(os.Stderr, line)
+		}
+	}
+	// What happens next, for a run that named its targets: the wiring is read
+	// when an agent session starts, so one already open does not have it yet,
+	// and one already open keeps calling deja after an uninstall.
+	if !banner && changed > 0 && targetArgs[0] != "--auto" && targetArgs[0] != "--all" {
+		if uninstall {
+			fmt.Fprintln(os.Stderr, "next: restart sessions already open in that agent so they stop calling deja")
+		} else {
+			fmt.Fprintln(os.Stderr, "next: start a new session in that agent; the wiring loads at session start")
 		}
 	}
 	if banner && wired {
@@ -943,6 +979,10 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return wroteAll(mcp, hooks, status), nil
 	case "zed":
 		return installZedMCP(sources.ZedSettingsPath(), exe, uninstall)
+	case "devin":
+		return installDevinMCP(exe, uninstall)
+	case "devin-auto":
+		return installDevinAuto(exe, uninstall)
 	case "cline":
 		return installMCPJSON(sources.ClineMCPSettingsPath(), exe, uninstall)
 	case "roo":
@@ -953,6 +993,8 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return installKilocodeAuto(exe, uninstall)
 	case "cherrystudio":
 		return installCherryStudio(exe, uninstall)
+	case "cherrystudio-auto":
+		return installCherryStudioAuto(exe, uninstall)
 	case "kiro":
 		return installKiro(exe, uninstall)
 	case "kiro-auto":
@@ -963,6 +1005,18 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 		return installSenpiAuto(exe, uninstall)
 	case "kimchi":
 		return installKimchi(exe, uninstall)
+	case "kimchi-auto":
+		return installKimchiAuto(exe, uninstall)
+	case "codewhale":
+		return installCodeWhale(exe, uninstall)
+	case "codewhale-auto":
+		return installCodeWhaleAuto(exe, uninstall)
+	case "junie":
+		return installJunie(exe, uninstall)
+	case "junie-auto":
+		return installJunieAuto(exe, uninstall)
+	case "jetbrains":
+		return installJetBrains(exe, uninstall)
 	case "gjc":
 		return installGjc(exe, uninstall)
 	case "gjc-auto":
@@ -1009,7 +1063,15 @@ func installTarget(target, exe string, uninstall bool) (installResult, error) {
 	case "vscode", "copilot-chat":
 		return installVSCode(exe, uninstall)
 	case "vscode-auto", "copilot-chat-auto":
-		return installVSCodeAuto(exe, uninstall)
+		hooks, err := installVSCodeAuto(exe, uninstall)
+		if err != nil {
+			return installResult{}, err
+		}
+		status, err := installVSCodeStatusItem(exe, uninstall)
+		if err != nil {
+			return installResult{}, err
+		}
+		return wroteAll(hooks, status), nil
 	case "hermes":
 		return installHermesMCP(exe, uninstall)
 	case "hermes-auto":
@@ -1086,6 +1148,7 @@ func wroteAll(rs ...installResult) installResult {
 		}
 	}
 	var also []string
+	seen := map[string]bool{}
 	for _, r := range rs {
 		if r.Path != "" && r.Path == out.Path && r.Note != "" && !strings.Contains(out.Note, r.Note) {
 			// A second write to the same file with something to say: the
@@ -1099,7 +1162,9 @@ func wroteAll(rs ...installResult) installResult {
 		// does anything the other result was already carrying: the
 		// kept-snapshot line reads these paths, and a second run that changes
 		// nothing still has a snapshot beside each of them (review of #3389).
-		out.also = append(out.also, r.Path)
+		if !slices.Contains(out.also, r.Path) {
+			out.also = append(out.also, r.Path)
+		}
 		out.also = append(out.also, r.also...)
 		if r.Action == "unchanged" {
 			// A write that changed nothing can still have something to say: an
@@ -1110,6 +1175,15 @@ func wroteAll(rs ...installResult) installResult {
 			}
 			continue
 		}
+		// Two writes to one file — TRAE's MCP entry and status line — are one
+		// line in the report, not "created" and then "updated" about it.
+		if seen[r.Path] {
+			if r.Note != "" {
+				also = append(also, r.Note)
+			}
+			continue
+		}
+		seen[r.Path] = true
 		line := fmt.Sprintf("also %s %s", r.Action, shortHome(r.Path))
 		// The other write's own note rides with its line: gemini's extension
 		// says what switch it left on, and that was lost with the result.
@@ -1159,7 +1233,11 @@ func installAntigravityAuto(exe string, uninstall bool) (installResult, error) {
 	if err != nil {
 		return installResult{}, err
 	}
-	return wroteAll(mcp, plugin), nil
+	status, err := installAntigravityStatusline(exe, uninstall)
+	if err != nil {
+		return installResult{}, err
+	}
+	return wroteAll(mcp, plugin, status), nil
 }
 
 func installOpenClawAuto(exe string, uninstall bool) (installResult, error) {
@@ -1532,7 +1610,7 @@ func mentionsDeja(b []byte) bool {
 	// path deja was installed from, which need not end in "deja" at all.
 	for _, marker := range []string{
 		"hook-prompt", "hook-context", "hook-tool", "hook-goose", "hook-plan",
-		"hook-precompact", "hook-antigravity", "deja:", "\"deja\"", "deja-recall",
+		"hook-precompact", "hook-antigravity", "hook-codewhale", "deja:", "\"deja\"", "deja-recall",
 		// The harnesses that do not write the word on its own: zed names the
 		// server, dsh opens a block, codex and grok put the name in a TOML
 		// table header, and aider only points at deja's context file. Without
@@ -2045,8 +2123,17 @@ var claudeHookWiring = []struct{ Event, Sub, Matcher string }{
 }
 
 func installClaudeHook(exe string, uninstall bool) (installResult, error) {
+	var events []string
+	for _, h := range claudeWiring() {
+		events = append(events, h.Event)
+	}
+	return installClaudeHooksAt(filepath.Join(sources.ClaudeConfigDir(), "settings.json"), exe, events, uninstall)
+}
+
+// installClaudeHooksAt writes deja's Claude Code hooks into one settings.json,
+// keeping the events named and taking every other deja hook out.
+func installClaudeHooksAt(path, exe string, events []string, uninstall bool) (installResult, error) {
 	exe = hookExeFor(exe, uninstall)
-	path := filepath.Join(sources.ClaudeConfigDir(), "settings.json")
 	old, err := readConfig(path)
 	if err != nil {
 		return installResult{}, err
@@ -2062,8 +2149,8 @@ func installClaudeHook(exe string, uninstall bool) (installResult, error) {
 	// written: one it does not know fails the whole file (#4488).
 	keep := map[string]bool{}
 	if !uninstall {
-		for _, h := range claudeWiring() {
-			keep[h.Event] = true
+		for _, e := range events {
+			keep[e] = true
 		}
 	}
 	for _, h := range claudeHookWiring {
@@ -2180,6 +2267,7 @@ func retiredDejaHook(existing any) bool {
 // two from drifting, the same arrangement helpHidden uses.
 var hookNames = map[string]bool{
 	"hook-antigravity":  true,
+	"hook-codewhale":    true,
 	"hook-context":      true,
 	"hook-goose":        true,
 	"hook-goose-prompt": true,
@@ -2189,6 +2277,7 @@ var hookNames = map[string]bool{
 	"hook-prompt":       true,
 	"hook-refresh":      true,
 	"hook-session-end":  true,
+	"hook-stop":         true,
 	"hook-tool":         true,
 	"hook-tool-after":   true,
 }
@@ -2211,6 +2300,12 @@ func hookCommandKindOf(existing any, cmd string) hookCommandKind {
 	}
 	s, cmd = unwrapPowerShellHook(s), unwrapPowerShellHook(cmd)
 	sub := cmd[strings.LastIndex(cmd, " ")+1:]
+	// A line that ends in flags is told apart by all of them: Junie runs
+	// `hook-context --plain --once --junie` and `hook-prompt --plain --junie`
+	// on one event, and the last word alone made each of them the other's.
+	if i := strings.LastIndex(cmd, " hook-"); i >= 0 && strings.Contains(cmd[i+1:], " ") {
+		sub = cmd[i+1:]
+	}
 	for i := 0; i < len(s); {
 		j := strings.Index(s[i:], " "+sub)
 		if j < 0 {
@@ -4911,11 +5006,29 @@ func withAutoTargets(targets []string) []string {
 	return out
 }
 
+// unknownTargetErr marks a refusal for a name that is no target at all, so a
+// run made only of those can say so without the partial-run summary.
+type unknownTargetErr struct{ error }
+
+func allUnknownTargets(errs []error) bool {
+	for _, e := range errs {
+		var u unknownTargetErr
+		if !errors.As(e, &u) {
+			return false
+		}
+	}
+	return len(errs) > 0
+}
+
 // unknownTargetError names what would have worked. There are two dozen targets
 // and the difference between them is a few characters, so a bare "unknown
 // target" leaves someone who typed `claud` guessing — while `deja completion`
 // two commands away lists its three valid values.
 func unknownTargetError(target string) error {
+	return unknownTargetErr{unknownTargetMessage(target)}
+}
+
+func unknownTargetMessage(target string) error {
 	names := installTargetNames()
 	// `kiro-auto` is one edit from `kimi-auto`, and following that hint wires a
 	// different agent. A known target with `-auto` on it is someone asking for
@@ -4928,7 +5041,7 @@ func unknownTargetError(target string) error {
 		}
 	}
 	if near := nearestTarget(target, names); near != "" {
-		return fmt.Errorf("unknown target %q — did you mean %q? (`deja install --all` wires every agent it finds)", target, near)
+		return fmt.Errorf("unknown target %q — did you mean %q?", target, near)
 	}
 	return fmt.Errorf("unknown target %q — try one of: %s, or --all / --auto", target, strings.Join(names, ", "))
 }
@@ -5020,7 +5133,7 @@ func installTargetNames() []string {
 		"cline", "cline-auto",
 		"goose", "goose-auto",
 		"crush", "crush-auto",
-		"grok", "grok-auto", "copilot", "copilot-auto", "roo", "kilocode", "kilocode-auto", "cherrystudio", "kiro", "kiro-auto", "senpi", "senpi-auto", "kimchi", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
+		"grok", "grok-auto", "copilot", "copilot-auto", "roo", "kilocode", "kilocode-auto", "cherrystudio", "cherrystudio-auto", "kiro", "kiro-auto", "senpi", "senpi-auto", "kimchi", "kimchi-auto", "codewhale", "codewhale-auto", "junie", "junie-auto", "jetbrains", "gjc", "gjc-auto", "zcode", "zcode-auto", "commandcode", "commandcode-auto", "aider",
 		// Continue keeps the server and the slash command in one assistant
 		// config, and its skill in the folder beside it; there is no hook to
 		// wire, so there is nothing an -auto target would add (#3062).
@@ -5031,6 +5144,9 @@ func installTargetNames() []string {
 		// Zed's agent takes MCP servers and nothing else: no CLI to hand a
 		// prompt to, so there is no -auto pair to install.
 		"zed",
+		// Devin CLI reads Claude-shaped hooks from its own config.json and
+		// MCP servers from mcp_config.json — the pair exists.
+		"devin", "devin-auto",
 		"statusline",
 	}
 	// Not a harness, and deliberately not "-auto": that suffix means a
@@ -5172,6 +5288,9 @@ func existingTargetChecks() map[string]string {
 		"kiro":         sources.KiroRoot(),
 		"senpi":        sources.SenpiRoot(),
 		"kimchi":       sources.KimchiRoot(),
+		"codewhale":    sources.CodeWhaleRoot(), // its sessions; deja creates mcp.json
+		"junie":        sources.JunieRoot(),     // its sessions; deja creates config.json and mcp/
+		"jetbrains":    sources.JetBrainsRoot(), // the IDEs' config; deja writes ~/.ai/mcp
 		"gjc":          sources.GjcRoot(),
 		"zcode":        sources.ZCodeRoot(),
 		"commandcode":  commandCodeFirstRoot(),
@@ -5209,6 +5328,10 @@ func existingTargetChecks() map[string]string {
 		"continue": filepath.Join(sources.ContinueRoot(), "sessions"),
 		// Zed's data directory, not the config file deja edits.
 		"zed": sources.ZedRoot(),
+		// The CLI's own versions live under config/devin/cli — a directory
+		// `devin` creates and deja only reads beside, so a machine that merely
+		// installed deja does not look like a Devin machine.
+		"devin": filepath.Join(devinConfigDir(), "cli"),
 		// VS Code's own User folder, which the editor creates on first run;
 		// deja only ever writes inside it.
 		"vscode": vsCodeFirstRoot(),

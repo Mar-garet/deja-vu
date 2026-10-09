@@ -22,8 +22,11 @@ func doctorCommands(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	skills := false
 	for _, c := range doctorCommandFiles() {
-		fmt.Fprintf(w, "  %-12s %-14s %s\n", c.name, c.state(), reportPath(c.path))
-		skills = skills || c.skill
+		state := c.state()
+		fmt.Fprintf(w, "  %-12s %-14s %s\n", c.name, state, reportPath(c.path))
+		// Only when a row says it: under a list of missing files the note
+		// explained a word nobody could see.
+		skills = skills || state == "skill"
 	}
 	// Ten harnesses have no file, and an omitted row reads as "deja has no
 	// command here" when the truth is that the command is the skill and it is
@@ -88,7 +91,7 @@ func doctorCommandFiles() []doctorCommandFile {
 	// The shared table, in the order `deja install --all` walks it.
 	for _, name := range []string{
 		"opencode", "cursor", "roo", "kilocode", "crush",
-		"omp", "gjc", "commandcode", "codebuddy", "workbuddy",
+		"omp", "gjc", "commandcode", "codebuddy", "workbuddy", "zcode", "junie", "kiro", "codewhale",
 	} {
 		if p := commandFilePath(name); p != "" {
 			out = append(out, doctorCommandFile{name: name, path: p})
@@ -148,14 +151,17 @@ func commandSkillPath(harness string) string {
 // Kimi invokes /skill:<name>; Copilot invokes /<skill-name>. Grok Build lists
 // skills with user-invocable frontmatter and an argument hint for its
 // slash-command autocomplete. Zed lists skills under `/` and invokes them by
-// their frontmatter name. Gemini is measured by its own complaint: with a
+// their frontmatter name. TRAE CLI 0.207.1's own system prompt says "When the
+// user types /<skill-name>, invoke it via Skill". Muse 1.4.3 lists the skill
+// in its slash menu as /deja-history and loads it with the arguments (stand).
+// Gemini is measured by its own complaint: with a
 // command file of deja's present it renamed one of the two (#3665).
 //
 // One list, read by the report and by the capability test, so neither can
 // drift from the other.
 func skillIsTheCommandHarnesses() []string {
 	return []string{"antigravity", "codex", "copilot", "gemini", "grok",
-		"kimi", "openclaw", "qwen", "zed"}
+		"kimi", "openclaw", "qwen", "trae", "muse", "zed"}
 }
 
 func skillIsTheCommand(harness string) bool {

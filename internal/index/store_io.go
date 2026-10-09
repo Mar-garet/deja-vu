@@ -1105,7 +1105,15 @@ func writeGobAtomic(p string, v any) error {
 		_ = os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, p)
+	// The lock keeps other writers out but not readers, and on Windows a
+	// reader decoding manifest.gob refuses the rename onto it with "Access is
+	// denied": a recall beside a remember failed that way on windows CI. The
+	// reader is a decode away from closing, so wait it out as the swap does.
+	if err := renameWaiting(tmp, p, parkRenameWait); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func readGob(p string, v any) error {
@@ -1421,6 +1429,12 @@ const RoleEdit = roleEdit
 // nobody reads a command list then (#577). Measured at ~180 ms on a
 // 160k-record store, so it belongs on a page someone opens deliberately.
 func SpanInventory(dir string) (spans, files int, err error) {
+	return SpanInventoryWhere(dir, nil)
+}
+
+// SpanInventoryWhere is SpanInventory over the sessions keep accepts, for a
+// report narrowed to a project, a harness or a window. A nil keep takes all.
+func SpanInventoryWhere(dir string, keep func(SessionMeta) bool) (spans, files int, err error) {
 	if dir == "" {
 		dir = DefaultDir()
 	}
@@ -1439,7 +1453,7 @@ func SpanInventory(dir string) (spans, files int, err error) {
 		// so counting it here promised something the command would decline
 		// (#2650).
 		meta, ok := m.Sessions[r.Key]
-		if !ok || pol.Ignored(meta.Path, meta.Project) {
+		if !ok || pol.Ignored(meta.Path, meta.Project) || (keep != nil && !keep(meta)) {
 			return
 		}
 		spans++

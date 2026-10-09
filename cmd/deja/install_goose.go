@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -588,6 +589,20 @@ func writeGooseHook(exe string) (string, error) {
 					"timeout": 10,
 				}},
 			}},
+			// A failed command's fix pair. Goose drops what every hook prints,
+			// and its PostToolUseFailure carries no output (agent.rs builds it
+			// from the tool name and input only), so the Stop hook reads the
+			// turn's failed command out of sessions.db and hands the pair to
+			// the model once, as the reason it blocks the turn from ending:
+			// that reason reaches the model as a user message in the same turn
+			// (1.46 and 1.53, measured).
+			"Stop": []any{map[string]any{
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": hookRun(exe, "hook-stop"),
+					"timeout": 20,
+				}},
+			}},
 		},
 	}, "", "  ")
 	if err != nil {
@@ -612,17 +627,43 @@ func writeGooseHook(exe string) (string, error) {
 // The UserPromptSubmit half is hook-goose-prompt: same file, but the recall is
 // searched against what the user just typed rather than chosen when the
 // session opened.
-func cmdGooseHook(_ string, _ []string) error {
+func cmdGooseHook(dir string, _ []string) error {
 	// The payload names the project, when the host puts it there. This door
 	// discarded it and recalled from wherever the process stood, so a host that
 	// runs its hooks from a plugin directory rather than the project got the
 	// recall of nowhere (#2187). Decoded rather than unmarshalled, like the
 	// other doors, so trailing bytes cost nothing.
+	raw := readHookStdin()
 	var input struct {
 		CWD string `json:"cwd"`
 	}
-	_ = json.NewDecoder(bytes.NewReader(readHookStdin())).Decode(&input)
-	return refreshGooseHintsFor(input.CWD)
+	_ = json.NewDecoder(bytes.NewReader(raw)).Decode(&input)
+	err := refreshGooseHintsFor(input.CWD)
+	gooseStatusBanner(dir, raw, os.Stdout)
+	return err
+}
+
+// gooseStatusBanner prints deja's status line as a SessionStart banner, which
+// goose shows the person once when an interactive session opens
+// (goose-cli session/mod.rs interactive, hooks/mod.rs extract_banner). goose
+// has no status line of its own, and the banner never reaches the model.
+func gooseStatusBanner(dir string, raw []byte, w io.Writer) {
+	if dir == "" || recallIsOff() {
+		return
+	}
+	var line bytes.Buffer
+	if runStatusline(dir, bytes.NewReader(raw), &line) != nil {
+		return
+	}
+	text := strings.TrimSpace(line.String())
+	if text == "" {
+		return
+	}
+	b, err := json.Marshal(map[string]string{"banner": text})
+	if err != nil {
+		return
+	}
+	fmt.Fprintln(w, string(b))
 }
 
 // refreshGooseForPrompt rewrites the recall for what was just typed, so the

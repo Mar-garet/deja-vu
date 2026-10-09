@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ import (
 	"github.com/vshulcz/deja-vu/internal/redact"
 	"github.com/vshulcz/deja-vu/internal/search"
 	"github.com/vshulcz/deja-vu/internal/sources"
+	"github.com/vshulcz/deja-vu/internal/termwidth"
 	"github.com/vshulcz/deja-vu/internal/usage"
 )
 
@@ -204,9 +206,9 @@ type command func(dir string, rest []string) error
 
 var commands = map[string]command{
 	"version":   cmdVersion,
-	"help":      func(_ string, _ []string) error { printUsage(); return nil },
-	"--help":    func(_ string, _ []string) error { printUsage(); return nil },
-	"-h":        func(_ string, _ []string) error { printUsage(); return nil },
+	"help":      cmdHelp,
+	"--help":    cmdHelp,
+	"-h":        cmdHelp,
 	"--version": cmdVersion,
 	"-version":  cmdVersion,
 	"sources": func(dir string, rest []string) error {
@@ -226,13 +228,15 @@ var commands = map[string]command{
 	"index":         cmdIndex,
 	"embed":         runEmbed,
 	"bench":         func(_ string, rest []string) error { return runBench(rest) },
-	"statusline":    func(dir string, _ []string) error { return runStatusline(dir, os.Stdin, os.Stdout) },
-	"stats":         runStats,
-	"remember":      runRemember,
-	"promote":       func(dir string, rest []string) error { return runPromote(dir, rest, os.Stdout) },
-	"rules":         runRules,
-	"forget":        runForget,
-	"mcp":           func(dir string, _ []string) error { return serveMCPProcess(dir, os.Stdin, os.Stdout) },
+	"statusline": func(dir string, _ []string) error {
+		return endLineOnTerminal(os.Stdout, func(w io.Writer) error { return runStatusline(dir, os.Stdin, w) })
+	},
+	"stats":    runStats,
+	"remember": runRemember,
+	"promote":  func(dir string, rest []string) error { return runPromote(dir, rest, os.Stdout) },
+	"rules":    runRules,
+	"forget":   runForget,
+	"mcp":      func(dir string, _ []string) error { return serveMCPProcess(dir, os.Stdin, os.Stdout) },
 	"hook-prompt": func(dir string, rest []string) error {
 		if sayIfTypedByHand("hook-prompt") {
 			return nil
@@ -242,7 +246,7 @@ var commands = map[string]command{
 		if len(rest) > 0 && (rest[0] == "--copilot" || rest[0] == "-copilot") {
 			copilotHookOutput = true
 		}
-		return runHookPromptMode(dir, os.Stdin, os.Stdout, plain)
+		return endLineOnTerminal(os.Stdout, func(w io.Writer) error { return runHookPromptMode(dir, os.Stdin, w, plain) })
 	},
 	"hook-antigravity": func(dir string, _ []string) error {
 		return runHookAntigravity(dir, os.Stdin, os.Stdout)
@@ -255,6 +259,12 @@ var commands = map[string]command{
 			fmt.Fprintln(os.Stdout, "{}")
 		}
 		return nil
+	},
+	"hook-codewhale": func(dir string, rest []string) error {
+		return runHookCodeWhale(dir, rest, os.Stdin, os.Stdout)
+	},
+	"hook-stop": func(dir string, _ []string) error {
+		return runHookStop(dir, os.Stdin, os.Stdout)
 	},
 	"hook-mcp-call": func(dir string, _ []string) error {
 		runHookMCPCall(dir, os.Stdin, os.Stdout)
@@ -270,7 +280,9 @@ var commands = map[string]command{
 		if sayIfTypedByHand("hook-tool") {
 			return nil
 		}
-		return runHookToolMode(dir, os.Stdin, os.Stdout, hookToolShapeOf(rest))
+		return endLineOnTerminal(os.Stdout, func(w io.Writer) error {
+			return runHookToolMode(dir, os.Stdin, w, hookToolShapeOf(rest))
+		})
 	},
 	"hook-tool-after": func(dir string, rest []string) error {
 		if sayIfTypedByHand("hook-tool-after") {
@@ -281,7 +293,7 @@ var commands = map[string]command{
 		if len(rest) > 0 && (rest[0] == "--copilot" || rest[0] == "-copilot") {
 			copilotHookOutput = true
 		}
-		return runHookToolAfterMode(dir, os.Stdin, os.Stdout, plain)
+		return endLineOnTerminal(os.Stdout, func(w io.Writer) error { return runHookToolAfterMode(dir, os.Stdin, w, plain) })
 	},
 	"check": func(dir string, rest []string) error {
 		return runCheck(dir, rest, os.Stdin, os.Stdout)
@@ -370,7 +382,10 @@ func run(args []string) error {
 		if briefWanted(os.Stdout) {
 			return runBrief(dir, os.Stdout)
 		}
-		printUsage()
+		// Piped, the full page was 106 lines nobody asked for. Nothing deja
+		// installs runs a bare deja, and the brief would build an index into a
+		// pipe, so the reader gets what is indexed and where to go next (#4621).
+		fmt.Print(bareDejaPointer(dir))
 		return nil
 	}
 	sourceInstance := os.Getenv("DEJA_SOURCE_INSTANCE")
@@ -397,6 +412,9 @@ func run(args []string) error {
 		return cmdGoose(dir, args[1:], sourceInstance)
 	}
 	if cmd, ok := commands[args[0]]; ok {
+		if deferrableHooks[args[0]] {
+			return runHookDeferred(dir, args[0], args[1:], cmd)
+		}
 		return cmd(dir, args[1:])
 	}
 	// A `hook-…` this build does not have is a line in a config an older deja
@@ -468,6 +486,10 @@ type countingWriter struct {
 	w io.Writer
 	n int
 }
+
+// Unwrap is the writer underneath, so a printer deciding whether it is
+// talking to a terminal sees the terminal rather than the counter (#4620).
+func (c *countingWriter) Unwrap() io.Writer { return c.w }
 
 func (c *countingWriter) Write(p []byte) (int, error) {
 	n, err := c.w.Write(p)
@@ -566,7 +588,7 @@ func cmdIndex(dir string, rest []string) error {
 	if quiet {
 		// The live display paints the same progress the sink above is
 		// discarding, and it paints it to stdout.
-		draw = build
+		draw = func() error { return timeBuild(build) }
 	}
 	if err := withWarmupStatus(dir, draw); err != nil {
 		// The command whose whole job is building the index used to pass the
@@ -635,8 +657,8 @@ func cmdIndex(dir string, rest []string) error {
 	// came back from both of that harness's stores is one conversation and
 	// gets no warning, but it is still two transcripts against one row (#2066).
 	if b := index.LastBuild; index.ReportMerged() > 0 && b.Messages > 0 {
-		fmt.Fprintf(said, "deja: indexed %d session%s, %d message%s — the per-harness lines above count transcripts, not rows\n",
-			b.Sessions, pluralS(b.Sessions), b.Messages, pluralS(b.Messages))
+		fmt.Fprintf(said, "deja: indexed %d session%s, %d message%s%s — the per-harness lines above count transcripts, not rows\n",
+			b.Sessions, pluralS(b.Sessions), b.Messages, pluralS(b.Messages), tookSuffix(b.Took))
 	}
 	// A machine with no agent history built an empty index and said nothing:
 	// the step whose whole job is filling memory returned to the prompt after
@@ -666,7 +688,7 @@ func cmdIndex(dir string, rest []string) error {
 	// record of what was built. Piped output has said it all along; this is
 	// the same two numbers for the reader who watched it happen (#867).
 	if b := index.LastBuild; !b.Initial && b.Messages > 0 && logoWanted(os.Stdout) && os.Getenv("DEJA_WARMUP_SENTINEL") == "" {
-		fmt.Fprintf(said, "deja: indexed %d session%s, %d message%s\n", b.Sessions, pluralS(b.Sessions), b.Messages, pluralS(b.Messages))
+		fmt.Fprintf(said, "deja: indexed %d session%s, %d message%s%s\n", b.Sessions, pluralS(b.Sessions), b.Messages, pluralS(b.Messages), tookSuffix(b.Took))
 	}
 	return nil
 }
@@ -715,7 +737,7 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 		// nothing to show, not that an argument is missing. parseShow has no
 		// dir to ask, so the store-aware phrasing is applied here (#1063).
 		if err.Error() == showNeedsID {
-			return idPrefixNeeded(dir, "show needs an id-prefix", showNeedsID)
+			return idPrefixNeeded(dir, "show needs an id prefix", showNeedsID)
 		}
 		return err
 	}
@@ -723,7 +745,7 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 	// harness deja itself printed in front of it (#921).
 	o.id = index.PastedSelector(o.id)
 	if o.id == "" {
-		return idPrefixNeeded(dir, "show needs an id-prefix", showNeedsID)
+		return idPrefixNeeded(dir, "show needs an id prefix", showNeedsID)
 	}
 	// A harness that does not exist matches nothing, and the refusal then
 	// blamed the id the reader typed correctly (#2251). search, last, blame
@@ -741,8 +763,7 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 		// A store that cannot be rebuilt — read-only, no space — falls through
 		// to the loader, which refuses and says why.
 		_ = index.Ensure(dir, "", false, os.Stderr)
-		// Exact identity first — that is what --harness is for, and what
-		// --json requires. But the usage line documents an id *prefix*, and
+		// Exact identity first — that is what --harness is for. But the usage line documents an id *prefix*, and
 		// routing --harness straight to the exact lookup made every
 		// prefix+harness call fail: "deja show 019fa282 --harness codex" said
 		// no session matches while the same prefix without --harness worked.
@@ -752,6 +773,11 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 		}
 	} else {
 		s, ok, err = findByPrefix(dir, o.id)
+		// A machine reader cannot notice it was handed the newest of several
+		// matches, so --json answers only a prefix that names one session.
+		if err == nil && ok && o.json {
+			err = ambiguousJSONPrefix(dir, o.id)
+		}
 	}
 	if err != nil {
 		return err
@@ -760,7 +786,7 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 		if n, cerr := index.SessionCount(dir); cerr == nil && n == 0 {
 			return errors.New(strings.TrimPrefix(emptyIndexHint(fmt.Sprintf("no session matches %q", o.id)), "deja: "))
 		}
-		return fmt.Errorf("no session matches %q%s", o.id, movedBucketHint(dir, o.id))
+		return noSessionMatches(dir, o.id)
 	}
 	if err := denyPolicyHidden(o.id, s, os.Stderr); err != nil {
 		return err
@@ -800,7 +826,7 @@ func cmdShow(dir string, rest []string, sourceInstance string) error {
 	if line := clippedMessageNote(dir, s); line != "" {
 		fmt.Fprintln(os.Stderr, line)
 	}
-	search.PrintSession(os.Stdout, s)
+	search.PrintSessionStyled(os.Stdout, s, search.ColorOK(os.Stdout), printableWidth(os.Stdout))
 	return nil
 }
 
@@ -997,9 +1023,6 @@ func parseShow(args []string) (showOptions, error) {
 	if o.id == "" {
 		return o, errors.New(showNeedsID)
 	}
-	if o.json && o.harness == "" {
-		return o, fmt.Errorf("show --json requires --harness for exact identity")
-	}
 	if o.limit > 200 {
 		return o, fmt.Errorf("show --limit must not exceed 200")
 	}
@@ -1036,7 +1059,7 @@ func ctxFromIDPrefix(dir, q string) (bool, error) {
 	if line := lifecycleLine(hits[0]); line != "" {
 		fmt.Fprintln(os.Stdout, line)
 	}
-	search.PrintContext(os.Stdout, s, "")
+	search.PrintContextStyled(os.Stdout, s, "", search.ColorOK(os.Stdout), printableWidth(os.Stdout))
 	return true, nil
 }
 
@@ -1174,7 +1197,7 @@ func cmdCtx(dir string, rest []string) error {
 	if full, ok, ferr := findByPrefix(dir, whole.ID); ferr == nil && ok {
 		whole = full
 	}
-	search.PrintContext(os.Stdout, whole, q)
+	search.PrintContextStyled(os.Stdout, whole, q, search.ColorOK(os.Stdout), printableWidth(os.Stdout))
 	return nil
 }
 
@@ -1287,49 +1310,7 @@ func cmdLast(dir string, rest []string, sourceInstance string) error {
 	if total > len(ss) {
 		fmt.Fprintf(os.Stderr, "deja: showing %d of %d — `deja last %d` shows the rest\n", len(ss), total, total)
 	}
-	for _, s := range ss {
-		// A session whose timestamp was missing or unparseable carries the Go
-		// zero time, and "0001-01-01" reads as corrupted data rather than as a
-		// missing field. Search prints a dash here and the first screen leaves
-		// such sessions out of its range; this was the one place that did not
-		// follow the convention (#765).
-		when := "-"
-		if !s.Updated.IsZero() {
-			// The reader's zone, like the brief and stats: a session stamped
-			// 22:00 UTC is 01:00 tomorrow for its author, and this line put it
-			// on the day before the other two screens did (#849).
-			when = s.Updated.Local().Format("2006-01-02")
-		}
-		// The id's own day is not used here, unlike search: this line prints
-		// the id whole, so nothing has to be rebuilt from the date (#883),
-		// while borrowing the id's day made the column run 06, 07, 04 down
-		// the screen for a reader far enough east of the writer (#1038).
-
-		// Project, id and title are text a harness wrote, and this is one
-		// line: an escape byte in any of them recolours the rest of the
-		// listing and a carriage return rewinds it (#1090).
-		fmt.Printf("[%s · %s · %s · %s]", s.Harness, redact.SafeForDisplay(displayProject(s)), when, redact.SafeForDisplay(s.ID))
-		title := s.Title
-		if title == "" {
-			title = firstUserTitle(s)
-		}
-		// The title is transcript text going straight to a terminal: an escape
-		// in it repaints the screen and a carriage return rewinds the line.
-		// SafeForDisplay keeps a newline on purpose — the reading surfaces are
-		// the session's own layout — but this is one row of a listing, and a
-		// note title carries whatever a person wrote by hand (#2058).
-		if title = search.SafeNoteTitle(redact.SafeForDisplay(title)); title != "" {
-			// A session with no user turn borrows the assistant's opening line
-			// (#692), and unmarked it read like the reader's own question
-			// (#1100).
-			if s.AgentTitle {
-				fmt.Printf(" agent: %s", title)
-			} else {
-				fmt.Printf(" %s", title)
-			}
-		}
-		fmt.Println()
-	}
+	printLastRows(os.Stdout, ss)
 	// The listing is ordered by a date, so one that has not happened leads it
 	// and nothing else on the screen says why. The first screen carries the
 	// same sentence beside the same list, because leaving it unexplained makes
@@ -1339,6 +1320,126 @@ func cmdLast(dir string, rest []string, sourceInstance string) error {
 			n, pluralS(n), pluralThatThose(n))
 	}
 	return nil
+}
+
+// printLastRows lists sessions one per line in the form the search result
+// header uses — harness, project, day, short id — with the columns padded so
+// a screenful scans down, and the title after them. On a terminal the harness
+// is coloured, the day dimmed and the title cut to the width; a pipe gets every
+// title whole.
+func printLastRows(w io.Writer, ss []model.Session) {
+	type row struct{ tag, project, when, id, title string }
+	rows := make([]row, 0, len(ss))
+	wTag, wProject, wWhen, wID := 0, 0, 0, 0
+	for _, s := range ss {
+		// A session whose timestamp was missing or unparseable carries the Go
+		// zero time, and "0001-01-01" reads as corrupted data rather than as a
+		// missing field (#765). The reader's zone, like the brief and stats
+		// (#849).
+		when := "-"
+		if !s.Updated.IsZero() {
+			when = search.DisplayDate(s.Updated)
+		}
+		// Project, id and title are text a harness wrote, and this is one
+		// line: an escape byte in any of them recolours the rest of the
+		// listing and a carriage return rewinds it (#1090).
+		r := row{
+			tag:     "[" + s.Harness + "]",
+			project: redact.SafeForDisplay(displayProject(s)),
+			when:    when,
+			id:      redact.SafeForDisplay(search.ShortID(s.ID)),
+		}
+		title := s.Title
+		if title == "" {
+			title = firstUserTitle(s)
+		}
+		// SafeForDisplay keeps a newline on purpose — the reading surfaces are
+		// the session's own layout — but this is one row of a listing, and a
+		// note title carries whatever a person wrote by hand (#2058).
+		if title = search.SafeNoteTitle(redact.SafeForDisplay(title)); title != "" {
+			// A session with no user turn borrows the assistant's opening line
+			// (#692), and unmarked it read like the reader's own question
+			// (#1100).
+			if s.AgentTitle {
+				title = "agent: " + title
+			}
+		}
+		r.title = title
+		wTag = max(wTag, termwidth.Columns(r.tag))
+		wProject = max(wProject, termwidth.Columns(r.project))
+		wWhen = max(wWhen, termwidth.Columns(r.when))
+		wID = max(wID, termwidth.Columns(r.id))
+		rows = append(rows, r)
+	}
+	// A long project name would push every title off a narrow screen; past
+	// this it stops setting the column for the rest.
+	wProject = min(wProject, 24)
+	color, width := search.ColorOK(w), printableWidth(w)
+	pad := func(s string, n int) string {
+		if gap := n - termwidth.Columns(s); gap > 0 {
+			return s + strings.Repeat(" ", gap)
+		}
+		return s
+	}
+	for i, r := range rows {
+		tag := pad(r.tag, wTag)
+		if color {
+			tag = search.HarnessTag(ss[i].Harness, true) + strings.Repeat(" ", len(tag)-len(r.tag))
+		}
+		when := pad(r.when, wWhen)
+		if color {
+			when = statDim + when + statReset
+		}
+		head := tag + " " + pad(r.project, wProject) + "  " + when + "  " + pad(r.id, wID)
+		line := head
+		if r.title != "" {
+			title := r.title
+			if width > 0 {
+				used := wTag + 1 + max(wProject, termwidth.Columns(r.project)) + 2 + wWhen + 2 + wID + 2
+				// Too little room beside the columns and the title goes under
+				// them, the way a search hit's quote does, rather than being
+				// cut to a few words.
+				if width-used < 32 {
+					fmt.Fprintln(w, strings.TrimRight(line, " "))
+					fmt.Fprintln(w, "  "+cutToWidth(title, width-2))
+					continue
+				}
+				title = cutToWidth(title, width-used)
+			}
+			line += "  " + title
+		}
+		fmt.Fprintln(w, strings.TrimRight(line, " "))
+	}
+}
+
+// cutToWidth shortens s to width columns with an ellipsis, ending on a whole
+// word where one is near. Width zero or less leaves it alone.
+func cutToWidth(s string, width int) string {
+	if width <= 0 || termwidth.Columns(s) <= width {
+		return s
+	}
+	if width < 8 {
+		width = 8
+	}
+	cut := strings.TrimRight(termwidth.Cut(s, width-1), " ")
+	if at := strings.LastIndex(cut, " "); at > 0 && termwidth.Columns(cut[at:]) <= 14 {
+		cut = strings.TrimRight(cut[:at], " ")
+	}
+	return cut + "…"
+}
+
+// fitNotice wraps a one-line notice to the terminal w writes to, at spaces,
+// with the continuation indented under "deja: ". A pipe gets it unchanged.
+func fitNotice(w io.Writer, note string) string {
+	body, nl := strings.CutSuffix(note, "\n")
+	if strings.Contains(body, "\n") {
+		return note
+	}
+	out := termwidth.Indent(body, printableWidth(w), "", "      ")
+	if nl {
+		out += "\n"
+	}
+	return out
 }
 
 // stampedAheadCount counts the listed sessions whose stamp is after now, by the
@@ -1591,7 +1692,7 @@ func searchWithOptions(dir string, args []string, sourceInstance string, bare bo
 		fmt.Fprintf(os.Stderr, "deja: %s\n", note)
 	}
 	if note := otherWordFormsNote(dir, o, hits); note != "" {
-		fmt.Fprint(os.Stderr, note)
+		fmt.Fprint(os.Stderr, fitNotice(os.Stderr, note))
 	}
 	mistyped := false
 	if len(hits) == 0 {
@@ -1646,6 +1747,14 @@ func searchWithOptions(dir string, args []string, sourceInstance string, bare bo
 	// line, since a script reading deja wants the text and not the layout
 	// (#604).
 	o.Width = printableWidth(os.Stdout)
+	// --all is the whole list, and past the first screen the scores are near
+	// ties a reader cannot see, so the order read as random: Jun 2, May 13,
+	// Mar 4, then Jun 22 (#45). The whole list reads newest first; --json keeps
+	// the ranked order a script may rely on.
+	if o.All && !o.JSON && len(hits) > 1 {
+		sort.SliceStable(hits, func(i, j int) bool { return hits[i].Session.Updated.After(hits[j].Session.Updated) })
+		fmt.Fprintf(os.Stderr, "deja: all %d matches, newest first\n", len(hits))
+	}
 	// Through a counter, so the log records what actually went out rather than
 	// a guess at it. `deja log` is the audit of what deja did, and the search
 	// kind has been named in the docs, in the comment over the kind constants
@@ -1686,6 +1795,14 @@ func searchWithOptions(dir string, args []string, sourceInstance string, bare bo
 	// command is within one edit of what was typed.
 	if mistyped {
 		return errAlreadySaid
+	}
+	// One line, at most once a day, naming a command the reader may not have
+	// met (#4629). Only after an answer, only in a terminal and never for
+	// --json: a pipe, a script or a hook reads the results, not advice. On
+	// stderr, so the results themselves stay what they were, and only when
+	// stderr is a terminal too: `2>file` is a log, not a reader.
+	if len(hits) > 0 && !o.JSON && briefWanted(os.Stdout) && briefWanted(os.Stderr) {
+		maybeTip(os.Stderr, dir+".tip", time.Now())
 	}
 	return nil
 }
@@ -1933,9 +2050,9 @@ func printNoMatches(w io.Writer, dir, q string, regex bool) (mistypedCommand boo
 		}
 		return
 	} else if ok {
-		fmt.Fprintf(w, "deja: no matches in %d indexed session%s — try fewer words or --re (query %q)\n", reach, pluralS(reach), q)
+		fmt.Fprint(w, fitNotice(w, fmt.Sprintf("deja: no matches in %d indexed session%s — try fewer words or --re (query %q)\n", reach, pluralS(reach), q)))
 	} else if n, err := index.SessionCount(dir); err == nil {
-		fmt.Fprintf(w, "deja: no matches in %d indexed session%s — try fewer words or --re (query %q)\n", n, pluralS(n), q)
+		fmt.Fprint(w, fitNotice(w, fmt.Sprintf("deja: no matches in %d indexed session%s — try fewer words or --re (query %q)\n", n, pluralS(n), q)))
 	} else {
 		fmt.Fprintf(w, "deja: no matches — try fewer words or --re (query %q)\n", q)
 	}
@@ -2520,6 +2637,22 @@ func noteAmbiguousPrefix(dir, id, action string) {
 	fmt.Fprintf(os.Stderr, "deja: %d sessions match %q — %s the most recent; %s\n", n, id, action, advice)
 }
 
+// ambiguousJSONPrefix refuses a --json read whose prefix names more than one
+// session, and says what separates them.
+func ambiguousJSONPrefix(dir, id string) error {
+	pol := policy.Load()
+	n := index.PrefixMatchesAllowed(dir, id, func(project string) bool {
+		return pol.Allows(policy.ActivationSearch, project)
+	})
+	if n <= 1 {
+		return nil
+	}
+	if hs := index.PrefixHarnesses(dir, id); len(hs) > 1 {
+		return fmt.Errorf("%d sessions share the id %q — --json reads one; add --harness %s", len(hs), id, strings.Join(hs, " or --harness "))
+	}
+	return fmt.Errorf("%d sessions match %q — --json reads one; use a longer prefix (`deja last` prints ids whole)", n, id)
+}
+
 func findByPrefix(dir, p string) (model.Session, bool, error) {
 	if err := index.Ensure(dir, "", false, os.Stderr); err == nil {
 		if s, ok, err := index.FindByPrefix(dir, p); err == nil {
@@ -2583,6 +2716,8 @@ func recentMatchingCounted(dir string, n int, o search.Options) ([]model.Session
 	return search.Recent(ss, n), len(ss), nil
 }
 
+var lastFlags = []string{"--json", "--project", "--harness", "--from", "--since", "--role", "--limit"}
+
 func parseLast(args []string) (int, search.Options, string, error) {
 	sinceRaw := ""
 	n := 10
@@ -2632,7 +2767,7 @@ func parseLast(args []string) (int, search.Options, string, error) {
 					// count last takes is a bare argument (#3405).
 					return n, o, sinceRaw, fmt.Errorf("last: unknown flag %q — the count is a bare argument, `deja last 3`", a)
 				}
-				return n, o, sinceRaw, fmt.Errorf("last: unknown flag %q", a)
+				return n, o, sinceRaw, unknownFlag("last", a, lastFlags)
 			}
 			// The only bare argument last takes is the count. Dropping anything
 			// else in silence answered `deja last api-gateway` — the filter the
@@ -2821,8 +2956,10 @@ var flagsOfOtherCommands = map[string]string{
 	"--before":           "forget",
 	"--to":               "handoff",
 	"--exec":             "resume",
+	"--write-back":       "resume",
 	"--plain":            "hook-prompt",
 	"--crush":            "hook-tool",
+	"--junie":            "hook-prompt",
 	"--no-open":          "view",
 	"--full":             "sync export",
 	"--include-imported": "sync export",
@@ -2849,7 +2986,7 @@ var (
 		"--json", "--html", "--redaction", "--impact", "--card", "--year",
 		"--harness", "--project", "--since", "--role",
 	}
-	doctorFlags   = []string{"--json", "--offline", "--deep"}
+	doctorFlags   = []string{"--json", "--offline", "--deep", "--all"}
 	viewFlags     = []string{"--out", "--no-open"}
 	logFlags      = []string{"--json", "--last"}
 	rememberFlags = []string{"--project", "--tag"}
@@ -2878,6 +3015,9 @@ type blameMode struct {
 	JSON        bool
 	Attribution bool
 	GitNote     bool
+	// AllProjects answers from the whole machine. A path names a file in this
+	// checkout, so by default sessions in other projects are left out.
+	AllProjects bool
 }
 
 func parseBlame(args []string) (string, search.BlameOptions, blameMode, error) {
@@ -2910,6 +3050,8 @@ func parseBlame(args []string) (string, search.BlameOptions, blameMode, error) {
 			mode.GitNote = true
 		case "--all":
 			o.All = true
+		case "--all-projects":
+			mode.AllProjects = true
 		case "--harness", "--project", "--since":
 			if i+1 >= len(args) {
 				return "", o, mode, fmt.Errorf("%s needs value", a)
@@ -2946,7 +3088,7 @@ func parseBlame(args []string) (string, search.BlameOptions, blameMode, error) {
 		}
 	}
 	if path == "" {
-		return "", o, mode, fmt.Errorf("blame needs a path — `deja blame internal/index/sync.go` says who last worked on it")
+		return "", o, mode, fmt.Errorf("blame needs a path — `deja blame <file>` or `deja blame <file>:<line>`")
 	}
 	return path, o, mode, nil
 }
@@ -2986,9 +3128,38 @@ func runBlame(dir string, args []string) error {
 	if target.LineNote != "" && !jsonOutput {
 		fmt.Fprintf(os.Stderr, "deja: %s — answering for the whole file\n", target.LineNote)
 	}
+	// A path names a file in this checkout. Other repos have their own
+	// internal/pool/pool.go, and their sessions are about that file, not this
+	// one; they were listed in among this project's.
+	scope := blameScope(howCwd(), target, o.Project, mode.AllProjects)
+	wantAll := o.All
+	if len(scope) > 0 {
+		o.All = true
+	}
 	hits, hidden, total, err := findBlameHits(dir, target, o, policy.ActivationSearch, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("blame search: %w", err)
+	}
+	elsewhere, onlyElsewhere := 0, false
+	if len(scope) > 0 {
+		var in []search.BlameHit
+		for _, h := range hits {
+			if howProjectMatches(h.Session.Project, scope) {
+				in = append(in, h)
+			}
+		}
+		elsewhere = len(hits) - len(in)
+		if len(in) > 0 {
+			hits = in
+		} else {
+			onlyElsewhere = len(hits) > 0
+		}
+		total = len(hits)
+		o.All = wantAll
+		hits = search.CapBlame(hits, o)
+	}
+	if onlyElsewhere && !jsonOutput && !mode.Attribution && !mode.GitNote {
+		fmt.Fprintf(os.Stderr, "deja: no session in %s mentions %s — these are from other projects\n", howScopeName(scope), target.Base)
 	}
 	// The line answer alone, in either rendering, and nothing about the file
 	// under it: that is what was asked for.
@@ -3035,7 +3206,7 @@ func runBlame(dir string, args []string) error {
 		}
 		return nil
 	}
-	search.PrintBlame(os.Stdout, hits, false)
+	search.PrintBlameWidth(os.Stdout, hits, printableWidth(os.Stdout))
 	// The name the reader has is the one in their editor, and a rename drops
 	// everything said under the old one out of this answer (#1627).
 	if note := earlierNameNote(dir, path, target); note != "" {
@@ -3048,7 +3219,25 @@ func runBlame(dir string, args []string) error {
 	if total > len(hits) {
 		fmt.Fprintf(os.Stderr, "deja: showing %d of %d — add --all to see the rest\n", len(hits), total)
 	}
+	if elsewhere > 0 && !onlyElsewhere {
+		fmt.Fprintln(os.Stderr, fitLine(os.Stderr, fmt.Sprintf("deja: %d session%s in other projects mention their own %s — --all-projects lists them", elsewhere, pluralS(elsewhere), target.Base)))
+	}
 	return nil
+}
+
+// blameScope is the project a blame answers from: the working directory's,
+// when the file lies inside it and nothing else was asked for. A file outside
+// the working directory, --project and --all-projects all leave it to the
+// rest of the options.
+func blameScope(cwd string, target search.BlameTarget, project string, allProjects bool) []string {
+	if allProjects || strings.TrimSpace(project) != "" || cwd == "" {
+		return nil
+	}
+	rel, err := filepath.Rel(cwd, target.FullPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	return howScope(cwd, "", false)
 }
 
 func findBlameHits(dir string, target search.BlameTarget, o search.BlameOptions, activation string, progress io.Writer) ([]search.BlameHit, int, int, error) {
@@ -3318,6 +3507,18 @@ func projectExcludePatterns() int {
 }
 
 func printSources(dir string) {
+	// A terminal gets a table; a pipe gets the tab-separated rows scripts
+	// read, exactly as before.
+	if briefWanted(os.Stdout) {
+		var buf bytes.Buffer
+		printSourcesTo(&buf, dir)
+		fmt.Print(sourcesScreen(buf.String(), statColorOK(os.Stdout), briefWidth()))
+		return
+	}
+	printSourcesTo(os.Stdout, dir)
+}
+
+func printSourcesTo(w io.Writer, dir string) {
 	redactions := map[string]int{}
 	if red, err := index.Redactions(dir); err == nil {
 		redactions = red.Files
@@ -3388,10 +3589,13 @@ func printSources(dir string) {
 		{"amp", sources.AmpRoot(), []string{sources.AmpRoot()}, sources.AmpThreadFiles, sources.LoadAmp},
 		{"openclaw", sources.OpenClawRoot(), []string{sources.OpenClawRoot()}, sources.OpenClawStoreFiles, sources.LoadOpenClaw},
 		{"codewhale", sources.CodeWhaleRoot(), sources.CodeWhaleRoots(), sources.CodeWhaleSessionFiles, sources.LoadCodeWhale},
+		{"junie", sources.JunieRoot(), []string{sources.JunieRoot()}, sources.JunieSessionFiles, sources.LoadJunie},
+		{"jetbrains", sources.JetBrainsRoot(), []string{sources.JetBrainsRoot()}, sources.JetBrainsSessionFiles, sources.LoadJetBrains},
 		{"reasonix", sources.ReasonixRoot(), sources.ReasonixRoots(), sources.ReasonixSessionFiles, sources.LoadReasonix},
 		{"muse", sources.MuseRoot(), sources.MuseRoots(), sources.MuseSessionFiles, sources.LoadMuse},
 		{"deepseek", sources.DeepSeekRoot(), []string{sources.DeepSeekRoot()}, sources.DeepSeekSessionFiles, sources.LoadDeepSeek},
 		{"zed", sources.ZedDB(), []string{sources.ZedDB()}, func() []string { return presentFiles(sources.ZedDB()) }, sources.LoadZed},
+		{"devin", filepath.Dir(sources.DevinSessionsDB()), []string{filepath.Dir(sources.DevinSessionsDB())}, sources.DevinFiles, sources.LoadDevin},
 		// The location is the registry, not a store: Crush keeps one store per
 		// project, under the project, and the registry is the only thing that
 		// says where they are.
@@ -3405,7 +3609,7 @@ func printSources(dir string) {
 		// just been told never to open, which is the opposite of what this
 		// screen is for (#3499).
 		if skipStore[it.name] {
-			fmt.Printf("%s\t%s\texcluded — `harness:%s` is in %s\n",
+			fmt.Fprintf(w, "%s\t%s\texcluded — `harness:%s` is in %s\n",
 				it.name, it.location, it.name, sources.ExcludePath())
 			continue
 		}
@@ -3425,10 +3629,7 @@ func printSources(dir string) {
 		raw := it.load()
 		ss := sources.FilterSessions(raw)
 		excluded := len(raw) - len(ss)
-		msg := 0
-		for _, s := range ss {
-			msg += len(s.Messages)
-		}
+		msg := sources.CountMessages(ss)
 		note := ""
 		// `deja sources` is where the empty-machine advice sends people, and a
 		// store deja is not allowed to read looked exactly like one nobody has
@@ -3456,7 +3657,7 @@ func printSources(dir string) {
 			note += fmt.Sprintf("\texcluded-sessions=%d", excluded)
 		}
 		note += unreadNote(it.name)
-		fmt.Printf("%s\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", it.name, location, sources.CountSessions(ss), msg, humanBytes(size), redacted, note)
+		fmt.Fprintf(w, "%s\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", it.name, location, sources.CountSessions(ss), msg, humanBytes(size), redacted, note)
 	}
 	// The two rows below are written by hand rather than driven by the table
 	// above, and the exclusion has to reach them too: the store #3499 named is
@@ -3466,7 +3667,7 @@ func printSources(dir string) {
 		if !skipStore[name] {
 			return false
 		}
-		fmt.Printf("%s\t%s\texcluded — `harness:%s` is in %s\n",
+		fmt.Fprintf(w, "%s\t%s\texcluded — `harness:%s` is in %s\n",
 			name, location, name, sources.ExcludePath())
 		return true
 	}
@@ -3488,7 +3689,7 @@ func printSources(dir string) {
 	}
 	aiderMessages := 0
 	for _, s := range aiderSessions {
-		aiderMessages += len(s.Messages)
+		aiderMessages += sources.CountMessages([]model.Session{s})
 	}
 	aiderLocation := filepath.Join(sources.Home(), ".aider.chat.history.md")
 	if roots := os.Getenv("DEJA_AIDER_ROOTS"); roots != "" {
@@ -3506,7 +3707,7 @@ func printSources(dir string) {
 		note += "\tnote=" + aiderNoHistoryHint
 	}
 	if !skipAider {
-		fmt.Printf("aider\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", aiderLocation, sources.CountSessions(aiderSessions), aiderMessages, humanBytes(aiderSize), aiderRedactions, note)
+		fmt.Fprintf(w, "aider\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", aiderLocation, sources.CountSessions(aiderSessions), aiderMessages, humanBytes(aiderSize), aiderRedactions, note)
 	}
 	if excludedRow("opencode", sources.OpencodeDB()) {
 		return
@@ -3564,7 +3765,7 @@ func printSources(dir string) {
 		note = "\t(cannot be read — " + reason + ")" + note
 	}
 	note += unreadNote("opencode")
-	fmt.Printf("opencode\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", sources.OpencodeDB(), s, m, humanBytes(size), redactions[sources.OpencodeDB()], note)
+	fmt.Fprintf(w, "opencode\t%s\tsessions=%d messages=%d size=%s redacted=%d%s\n", sources.OpencodeDB(), s, m, humanBytes(size), redactions[sources.OpencodeDB()], note)
 }
 
 // orphanedTombstones reports which tombstones name a session that exists
@@ -3871,11 +4072,11 @@ func runForget(dir string, args []string) error {
 		}
 		if scope != nil {
 			fmt.Fprintln(os.Stdout, scope.Error())
-			fmt.Fprintf(os.Stdout, "dry run — nothing was changed\nas it stands this run drops nothing; with --all-matches it would drop: %d session(s), %d message(s)\nwould add: %d tombstone(s)\n",
-				result.Sessions, result.Messages, result.Tombstones)
+			fmt.Fprintf(os.Stdout, "dry run — nothing was changed\nas it stands this run drops nothing; with --all-matches it would drop: %s\nwould add: %s\n",
+				forgetCounts(result.Sessions, result.Messages), countNoun(result.Tombstones, "tombstone"))
 		} else {
-			fmt.Fprintf(os.Stdout, "dry run — nothing was changed\nwould drop: %d session(s), %d message(s)\nwould add: %d tombstone(s)\n",
-				result.Sessions, result.Messages, result.Tombstones)
+			fmt.Fprintf(os.Stdout, "dry run — nothing was changed\nwould drop: %s\nwould add: %s\n",
+				forgetCounts(result.Sessions, result.Messages), countNoun(result.Tombstones, "tombstone"))
 		}
 		if line := forgetNotesLine(result); line != "" {
 			fmt.Fprintln(os.Stdout, line)
@@ -4138,6 +4339,7 @@ func wrapTargets(names []string, indent string, width int) string {
 // comparison.
 var helpHidden = map[string]bool{
 	"help":              true,
+	"hook-codewhale":    true,
 	"hook-context":      true,
 	"hook-goose":        true,
 	"hook-goose-prompt": true,
@@ -4145,6 +4347,7 @@ var helpHidden = map[string]bool{
 	"hook-precompact":   true,
 	"hook-refresh":      true,
 	"hook-session-end":  true,
+	"hook-stop":         true,
 	"reasonix-ext":      true,
 	"warmup-status":     true,
 }
@@ -4153,106 +4356,7 @@ func printUsage() {
 	fmt.Print(wrapUsage(usageText(), printableWidth(os.Stdout)))
 }
 
-// usageText renders the usage block so `--help` on a single command can quote
-// the lines that belong to it instead of the whole page.
-func usageText() string {
-	return fmt.Sprintf(`deja - persistent memory for coding agents
-
-Usage:
-  deja [flags] <query>
-  deja search [flags] <query>   (same, but a query may start with a dash)
-  deja show <id-prefix> [--json --harness name] [--offset n] [--limit n]
-  deja share <id-prefix>
-  deja resume <id-prefix> [--exec]
-  deja wip [--json]
-  deja handoff [--to <agent>] [id-prefix] [--exec]
-  deja hook-prompt [--plain]  (UserPromptSubmit hook: relevance recall per prompt)
-  deja hook-context [--plain] [--once] [--strict] [--copilot] [--notes]  (session start: the project digest, once per session)
-  deja hook-antigravity (Antigravity PreInvocation hook: inject on first turn)
-  deja hook-plan     (PreToolUse ExitPlanMode hook: factual plan/history co-occurrences)
-  deja hook-tool [--plain] [--crush]  (PreToolUse Bash/Edit hook: one line on what this command or file already has)
-  deja hook-tool-after  (PostToolUse Bash hook: the command that followed this error before)
-  deja check -       (read a plan from stdin and print factual co-occurrences)
-  deja view [--no-open]  (browse your memory: sessions, recalls, notes — one local HTML)
-  deja ctx <query|id-prefix>
-  deja recall <words> [--project name] [--harness name] [--limit n]
-             (what the MCP recall tool answers an agent: about 4 KB, this project first)
-  deja blame <path>[:line] [--all] [--json] [--project name] [--harness name] [--since 30d]
-  deja blame <path>:<line> --attribution [--json] [--git-note]  (the line answer alone)
-  deja files <topic> [--project name] [--all-projects] [--limit n] [--json]
-  deja restore <path> [--span n] [-o|--out file] [--force]
-  deja friction [--limit n] [--json]
-  deja secrets [--limit n] [--json] [--scrub [--dry-run]]  (credentials your agent transcripts are carrying; --scrub rewrites the files that hold one)
-  deja tests [--limit n] [--json]    (your build and test runs, week by week)
-  deja recap [--since 7d] [--limit n] [--json]  (what the week settled, with the session behind each line)
-  deja fix "<error text>" [--limit n] [--json]  (what was run after this error before)
-  deja how <what> [--project name] [--all-projects] [--limit n] [--json]
-             (commands this project actually ran; --all-projects for the machine)
-  deja sync export <dir> [--full] [--include-imported] [--peer name]
-  deja sync import <dir>
-  deja sync                       (exchange with every machine deja knows, both ways)
-  deja sync ssh <host> [--pull] [--both] [--full]
-  deja sync forget <host>
-  deja last [n] [--json] [--project name] [--harness name] [--from machine|local] [--since duration] [--role user|assistant|tool|files|command|edit|summary]
-  deja sources
-  deja completion <bash|zsh|fish|powershell>
-  deja forget --session <id-prefix> [--project <substring>] [--before <duration|date>] [--dry-run] [--all-matches]
-  deja forget --list | --unforget <id>
-  deja doctor [--json] [--deep] [--offline]
-  deja warmup
-  deja index [--rebuild] [--quiet]
-  deja embed
-  deja bench recall|context|prompt|block|ingest|read [--json] [--seed n]
-  deja brief         (the screen a bare deja prints on a terminal)
-  deja log [n] [--last] [--json]
-  deja statusline
-  deja stats [--json] [--impact] [--year] [--redaction] [--card [path]] [--html [path]]
-             [--project name] [--harness name] [--since 30d] [--role name]
-  deja remember "text" [--project name] [--tag name]
-  deja promote <id-prefix> [--state accepted|rejected|superseded|stale] [--note "text"] [--tag name] [--to path]
-  deja rules [sync]  (copy ~/.config/deja/rules.md into every agent's global rules file)
-  deja rules candidates [--json] [--limit n] [--since 90d]  (turns where you corrected an agent, for your agent to group into rules)
-  deja mcp
-  deja version
-  deja <command> --help
-  deja update [--force]
-  deja install <target>... | --all | --auto  [--no-guidance] [--no-index] [--force]
-  deja uninstall <target>... | --all | --auto
-    targets:
-%s
-
-Search flags (the bare "deja [flags] <query>" form above):
-  --harness <name>              only sessions from one harness (claude, codex, ...)
-  --project <name>              only sessions from one project
-  --since <duration>            only sessions newer than e.g. 30d, 12h
-  --role <name>                 only match turns from one role: user, assistant,
-                                tool (tool output), files, command, edit
-  --session <id>                only one session, by the id a hit prints
-  --limit <1-100>               max sessions to return (default 15)
-  --all                         return every match, no cap
-  --re                          treat the query as a regular expression
-  --json                        machine-readable output
-  --no-embed                    skip the semantic (embedding) tier
-
-Examples:
-  deja "jwt refresh token bug"
-  deja '"connection pool exhausted"'
-  deja "exhaustd"  # a typo: with no exact hit, close spellings are tried
-  deja --harness claude --since 30d "panic in indexer"
-  deja --all "connection pool"  # every match, not just the first 15
-  deja last 20 --harness codex
-  deja last --project api-gateway
-  deja last --since 7d --role user
-  deja --session 01a00feb --role tool "go build"   (what ran inside one session)
-  deja --re "timeout|deadline exceeded"
-  deja ctx "schema migration rollback" > deja-context.md
-  deja install --all
-
-See README.md for the full CLI reference.
-`, wrapTargets(installTargetNames(), "      ", usageWidth()))
-}
-
-// usageWidth is the column budget for the one block in help that is laid out
+// usageWidth is the column budget for the parts of help that are laid out
 // rather than typed. It follows the terminal, as the brief, files, restore and
 // search already do — the list was computed to a fixed 76 and so came out the
 // same six lines on a 30-column pane and a 120-column one (#1660).
@@ -4264,47 +4368,6 @@ func usageWidth() int {
 		return w
 	}
 	return 76
-}
-
-// helpForCommand answers `deja <cmd> --help`. Every command rejected it as an
-// unknown flag, and a couple did worse: `deja statusline --help` printed a
-// statusline and `deja mcp --help` started the server and hung the terminal
-// (#1111).
-func helpForCommand(name string) string {
-	var out []string
-	usage := usageText()
-	if i := strings.Index(usage, "\nUsage:\n"); i >= 0 {
-		usage = usage[i+len("\nUsage:\n"):]
-	}
-	if i := strings.Index(usage, "\nExamples:\n"); i >= 0 {
-		usage = usage[:i]
-	}
-	// A usage line can carry indented continuations under it — the install
-	// target list sits under the install/uninstall pair — so a match keeps
-	// collecting until the next "deja …" line that does not match.
-	matched := false
-	for _, line := range strings.Split(usage, "\n") {
-		t := strings.TrimSpace(line)
-		switch {
-		case t == "deja "+name || strings.HasPrefix(t, "deja "+name+" "):
-			out = append(out, line)
-			matched = true
-		case matched && t != "" && strings.HasPrefix(line, "    ") && !strings.HasPrefix(t, "deja "):
-			out = append(out, line)
-		case matched && strings.HasPrefix(t, "deja "):
-			// install and uninstall share one target list, printed under the
-			// second of the pair; every other command's help ends at the next
-			// command line.
-			pair := name == "install" || name == "uninstall"
-			matched = pair && (strings.HasPrefix(t, "deja install ") || strings.HasPrefix(t, "deja uninstall "))
-		default:
-			matched = false
-		}
-	}
-	if len(out) == 0 {
-		return ""
-	}
-	return strings.Join(out, "\n") + "\nSee `deja help` for every command and flag.\n"
 }
 
 // wantsHelp reports whether a command line asks for help rather than work.
@@ -4360,7 +4423,16 @@ func movedBucketHint(dir, id string) string {
 // thing the reader has no way to produce on their own; promote has pointed at
 // `deja last` all along, and show, share and resume are the three commands
 // reached for right after a search result (#1063).
-const showNeedsID = "show needs id-prefix (see `deja last`)"
+const showNeedsID = "show needs an id prefix (see `deja last`)"
+
+// noSessionMatches is the refusal for an id that names no session: the bucket
+// that moved when there is one, otherwise where the ids are listed (#1063).
+func noSessionMatches(dir, id string) error {
+	if hint := movedBucketHint(dir, id); hint != "" {
+		return fmt.Errorf("no session matches %q%s", id, hint)
+	}
+	return fmt.Errorf("no session matches %q — `deja last` lists recent ones", id)
+}
 
 // idPrefixNeeded is the refusal for a command that needs a session named on the
 // command line. "see `deja last`" is a step the reader can take and learn
@@ -4428,6 +4500,72 @@ func emptyIndexHint(what string) string {
 		return "deja: " + what + " — no agent history was found on this machine; `deja sources` shows where deja looked"
 	}
 	return "deja: " + what + " — run `deja index`, or `deja doctor` to see which agent stores were found"
+}
+
+// emptyStoreLine is emptyIndexHint for a command whose answer goes to stdout
+// without deja's prefix, when the index holds no session at all. tests,
+// secrets, recap and rules candidates each said their own nothing there —
+// "no provider keys … in your agent history" read as an all-clear on a machine
+// with no history to check.
+func emptyStoreLine(dir, what string) (string, bool) {
+	if n, err := index.SessionCount(dir); err != nil || n > 0 {
+		return "", false
+	}
+	// At a terminal, at its width and between words; piped, as one line.
+	return fitLine(os.Stdout, strings.TrimPrefix(emptyIndexHint(what), "deja: ")), true
+}
+
+// newestSessionNote is the tail of an empty windowed answer: when the newest
+// session it may show is older than the window, the date and the --since that
+// reaches it. The demo store of a machine idle for three months answered
+// `deja recap` with "nothing in the last 7d" and nothing else.
+func newestSessionNote(dir, command string, window time.Duration) string {
+	metas, err := index.AllMeta(dir)
+	if err != nil {
+		return ""
+	}
+	pol := policy.Load()
+	var newest time.Time
+	for _, m := range metas {
+		if m.Updated.After(newest) && pol.Allows(policy.ActivationSearch, m.Project) {
+			newest = m.Updated
+		}
+	}
+	if newest.IsZero() || time.Since(newest) <= window {
+		return ""
+	}
+	days := int(time.Since(newest).Hours()/24) + 1
+	return fmt.Sprintf(" — the newest session is from %s; `deja %s --since %dd` reaches it",
+		newest.Local().Format("2006-01-02"), command, days)
+}
+
+// fitLine wraps a sentence between words at the width of the terminal w is,
+// and leaves it whole for a pipe.
+func fitLine(w io.Writer, line string) string {
+	if n := printableWidth(w); n > 0 {
+		return wrapProse(line, n)
+	}
+	return line
+}
+
+// sinceArg is the --since value as the reader typed it.
+func sinceArg(args []string) string {
+	for i, a := range args {
+		if a == "--since" && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+// countNoun is "1 session" or "3 sessions"; the forget dry run printed
+// "1 session(s)".
+func countNoun(n int, noun string) string {
+	return fmt.Sprintf("%d %s%s", n, noun, pluralS(n))
+}
+
+func forgetCounts(sessions, messages int) string {
+	return countNoun(sessions, "session") + ", " + countNoun(messages, "message")
 }
 
 // deniedStoreCount reports how many harness stores exist but cannot be opened.

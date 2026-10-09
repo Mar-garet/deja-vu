@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/vshulcz/deja-vu/internal/index"
+	"github.com/vshulcz/deja-vu/internal/search"
 )
 
 // An id arrives from a chat wrapped in quotes or backticks, and off deja's own
@@ -42,7 +43,7 @@ func TestAPastedIdIsAccepted(t *testing.T) {
 			t.Errorf("show %q: %v", sel, err)
 			continue
 		}
-		if !strings.Contains(out, id) {
+		if !strings.Contains(out, search.ShortID(id)) {
 			t.Errorf("show %q found nothing:\n%s", sel, out)
 		}
 	}
@@ -59,7 +60,7 @@ func TestAPastedIdIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "would drop: 1 session(s)") {
+	if !strings.Contains(out, "would drop: 1 session,") {
 		t.Errorf("forget --session harness:id matched nothing:\n%s", out)
 	}
 }

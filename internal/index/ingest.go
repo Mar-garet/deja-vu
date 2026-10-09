@@ -33,10 +33,7 @@ import (
 func summarizeBuild(initial bool, sessions int, messages int, ss []model.Session) {
 	counts := map[string]*HarnessCount{}
 	order := []string{}
-	parsed := 0
-	for _, s := range ss {
-		parsed += len(s.Messages)
-	}
+	parsed := sources.CountMessages(ss)
 	for _, s := range ss {
 		c := counts[s.Harness]
 		if c == nil {
@@ -45,7 +42,7 @@ func summarizeBuild(initial bool, sessions int, messages int, ss []model.Session
 			order = append(order, s.Harness)
 		}
 		c.Sessions++
-		c.Messages += len(s.Messages)
+		c.Messages += sources.CountMessages([]model.Session{s})
 	}
 	sort.Strings(order)
 	per := make([]HarnessCount, 0, len(order))
@@ -594,7 +591,7 @@ func rebuildWithTombstones(dir string, harness string, scope string, files map[s
 	vanished := sources.FilterSessions(vanishedFromStores(dir, harness, files, ss))
 	ss = append(ss, vanished...)
 	if progress != nil && len(vanished) > 0 {
-		fmt.Fprintf(progress, "deja: %d session%s no longer in %s store — still searchable; `deja forget <id>` drops one for good\n",
+		fmt.Fprintf(progress, "deja: %d session%s no longer in %s store — still searchable; `deja resume <id> --write-back` puts one back, `deja forget <id>` drops one for good\n",
 			len(vanished), pluralS(len(vanished)), map[bool]string{true: "its", false: "their"}[len(vanished) == 1])
 	}
 	ss = filterTombstonedSet(ss, dead)
@@ -602,7 +599,7 @@ func rebuildWithTombstones(dir string, harness string, scope string, files map[s
 		files[p] = st
 	}
 	if progress != nil && len(orphans.files) > 0 {
-		fmt.Fprintf(progress, "deja: %d transcript%s no longer on disk — still searchable; `deja forget <id>` drops one for good\n",
+		fmt.Fprintf(progress, "deja: %d transcript%s no longer on disk — still searchable; `deja resume <id> --write-back` puts one back, `deja forget <id>` drops one for good\n",
 			len(orphans.files), pluralS(len(orphans.files)))
 	}
 	if progress != nil && orphans.unreadable > 0 {
@@ -706,7 +703,9 @@ func rebuildWithTombstones(dir string, harness string, scope string, files map[s
 				wroteMu.Lock()
 				wrote[key] = true
 				wroteMu.Unlock()
-				writtenMessages++
+				if sources.IsMessageRole(msg.Role) {
+					writtenMessages++
+				}
 				push(tokenJob{text: tokenizedPart(msg.Role, text), offset: off, sid: m.Sessions[key].Ord, when: msg.Time, tool: isToolRole(msg.Role)})
 			}
 		}
@@ -1217,11 +1216,7 @@ func loadProgress(h string, progress io.Writer) []model.Session {
 			results[i] = loaded{name: name, ss: ss}
 			// Report as this store lands rather than after every store has,
 			// so the bar moves during the parse instead of jumping at the end.
-			msgs := 0
-			for _, x := range ss {
-				msgs += len(x.Messages)
-			}
-			reportHarness(name, len(ss), msgs)
+			reportHarness(name, len(ss), sources.CountMessages(ss))
 			// Only what the per-file reports did not already cover, so a store
 			// counts its weight once.
 			readMu.Lock()
@@ -1346,10 +1341,7 @@ func roundedSeconds(d time.Duration) string { return d.Round(time.Second).String
 // it is missing from recall. The skip reason was printed only for a store that
 // yielded nothing at all (#1758, the shape of #794).
 func harnessNarration(name string, ss []model.Session, skipped string, unreadable, refused int) string {
-	msgs := 0
-	for _, s := range ss {
-		msgs += len(s.Messages)
-	}
+	msgs := sources.CountMessages(ss)
 	// "deja" is the notes pseudo-source; it narrates as "notes".
 	label := name
 	if label == "deja" {
@@ -1705,7 +1697,9 @@ func writeSessionsWithSync(tmp, dir string, ss []model.Session, files map[string
 				wroteMu.Lock()
 				wrote[key] = true
 				wroteMu.Unlock()
-				writtenMessages++
+				if sources.IsMessageRole(msg.Role) {
+					writtenMessages++
+				}
 				push(tokenJob{text: tokenizedPart(msg.Role, text), offset: off, sid: m.Sessions[key].Ord, when: msg.Time, tool: isToolRole(msg.Role)})
 			}
 		}
@@ -3887,7 +3881,7 @@ func updateIndex(dir, harness, scope string, files map[string]FileState, force b
 			}
 		}
 		if n := len(kept) - out; n > 0 {
-			fmt.Fprintf(progress, "deja: %d transcript%s no longer on disk — still searchable; `deja forget <id>` drops one for good\n", n, pluralS(n))
+			fmt.Fprintf(progress, "deja: %d transcript%s no longer on disk — still searchable; `deja resume <id> --write-back` puts one back, `deja forget <id>` drops one for good\n", n, pluralS(n))
 		}
 		if out > 0 {
 			fmt.Fprintf(progress, "deja: %d transcript%s outside the stores this run reads — still searchable\n", out, pluralS(out))
@@ -5193,11 +5187,12 @@ func missingTrees(removed map[string]bool) []missingTree {
 
 // sessionDirName is a directory named for one session: the id itself
 // (Cursor, Copilot CLI, Antigravity, a Claude transcript's sidecar), Kimi's
-// session_<id>, DeepSeek's session-<id>, Kiro's sess_<id>. Anchored, because
-// an encoded working directory under a store root carries a UUID whenever the
-// directory did — a temp dir, a sandbox — and that folder is a project, not a
-// session.
-var sessionDirName = regexp.MustCompile(`^(?:session[_-]|sess_)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+// session_<id>, DeepSeek's session-<id>, Kiro's sess_<id>, and Cline CLI's
+// <unix ms>_<suffix>, which `cline history delete` removes whole. Anchored,
+// because an encoded working directory under a store root carries a UUID
+// whenever the directory did — a temp dir, a sandbox — and that folder is a
+// project, not a session.
+var sessionDirName = regexp.MustCompile(`^(?:(?:session[_-]|sess_)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]{13}_[0-9a-z]{5})$`)
 
 // deletedFromLiveStore reports whether a file no longer on disk was deleted
 // from a store that is still there — the client's cleanup or a deletion by
@@ -5317,34 +5312,39 @@ func currentFilesWith(h string, old map[string]FileState) map[string]FileState {
 	out := map[string]FileState{}
 	for p := range paths {
 		if fi, err := os.Lstat(p); err == nil && fi.Mode()&os.ModeSymlink == 0 && !fi.IsDir() {
-			fs := FileState{Path: p, Size: fi.Size(), MTime: fi.ModTime().UnixNano()}
-			if strings.HasSuffix(p, ".jsonl") {
-				// Deriving these means reading the file: the tail for the last
-				// complete line, the head for the prefix hash. When size and
-				// mtime are unchanged the bytes are too, and on a large store
-				// this is the difference between a stat and 650 ms of reading.
-				if of, ok := old[p]; ok && of.Size == fs.Size && of.MTime == fs.MTime {
-					fs.SafeSize, fs.PrefixHash = of.SafeSize, of.PrefixHash
-					fs.PrefixSample = of.PrefixSample
-				} else {
-					fs.SafeSize = lastCompleteLineOffset(p, fi.Size())
-					fs.PrefixSample = filePrefixSample(p, fs.SafeSize)
-				}
-			}
-			if k, ok := kindForPath(p); ok && k.Sidecar != nil {
-				fs.MetadataSize, fs.MetadataMTime = k.Sidecar(p)
-			}
-			if harnessForPath(p) == "grok" {
-				if cwd, err := os.Lstat(filepath.Join(filepath.Dir(filepath.Dir(p)), ".cwd")); err == nil && cwd.Mode()&os.ModeSymlink == 0 && !cwd.IsDir() {
-					fs.CWDSize = cwd.Size()
-					fs.CWDMTime = cwd.ModTime().UnixNano()
-				}
-			}
-			out[p] = fs
+			out[p] = walkFileState(p, fi, old)
 		}
 	}
 	injectHermesPG(out, old)
 	return out
+}
+
+// walkFileState is what the walk records for a transcript file.
+func walkFileState(p string, fi os.FileInfo, old map[string]FileState) FileState {
+	fs := FileState{Path: p, Size: fi.Size(), MTime: fi.ModTime().UnixNano()}
+	if strings.HasSuffix(p, ".jsonl") {
+		// Deriving these means reading the file: the tail for the last
+		// complete line, the head for the prefix hash. When size and
+		// mtime are unchanged the bytes are too, and on a large store
+		// this is the difference between a stat and 650 ms of reading.
+		if of, ok := old[p]; ok && of.Size == fs.Size && of.MTime == fs.MTime {
+			fs.SafeSize, fs.PrefixHash = of.SafeSize, of.PrefixHash
+			fs.PrefixSample = of.PrefixSample
+		} else {
+			fs.SafeSize = lastCompleteLineOffset(p, fi.Size())
+			fs.PrefixSample = filePrefixSample(p, fs.SafeSize)
+		}
+	}
+	if k, ok := kindForPath(p); ok && k.Sidecar != nil {
+		fs.MetadataSize, fs.MetadataMTime = k.Sidecar(p)
+	}
+	if harnessForPath(p) == "grok" {
+		if cwd, err := os.Lstat(filepath.Join(filepath.Dir(filepath.Dir(p)), ".cwd")); err == nil && cwd.Mode()&os.ModeSymlink == 0 && !cwd.IsDir() {
+			fs.CWDSize = cwd.Size()
+			fs.CWDMTime = cwd.ModTime().UnixNano()
+		}
+	}
+	return fs
 }
 
 // injectHermesPG adds the Postgres-backed Hermes store, which has no inode to

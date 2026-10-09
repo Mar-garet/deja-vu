@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/vshulcz/deja-vu/internal/index"
+	"github.com/vshulcz/deja-vu/internal/search"
 	"github.com/vshulcz/deja-vu/internal/usage"
 )
 
@@ -62,7 +63,7 @@ func runLogTo(w io.Writer, dir string, args []string) error {
 			enc.SetIndent("", "  ")
 			return enc.Encode(s)
 		}
-		fmt.Fprintf(w, "# %s · %s · %d session%s · %s%s\n\n", s.Kind, s.Time.Local().Format("2006-01-02 15:04"), s.Sessions, pluralS(s.Sessions), humanBytes(int64(s.Bytes)), snapshotTail(s))
+		fmt.Fprintf(w, "# %s · %s · %d session%s · %s%s\n\n", logKindLabel(s.Kind), s.Time.Local().Format("2006-01-02 15:04"), s.Sessions, pluralS(s.Sessions), humanBytes(int64(s.Bytes)), snapshotTail(s))
 		fmt.Fprintln(w, s.Digest)
 		// This is the newest digest by its stamp (#2140), so a stamp from
 		// ahead of the clock holds the spot until the clock catches up — and
@@ -90,6 +91,9 @@ func runLogTo(w io.Writer, dir string, args []string) error {
 		fmt.Fprintln(w, "deja: no usage recorded yet — events appear when agents search, recall, or receive injected context")
 		return nil
 	}
+	// On a terminal the session id takes the short form the other screens
+	// print; the full uuid pushed every line past 80 columns.
+	tty := printableWidth(w) > 0
 	for _, e := range events {
 		mark := ""
 		if e.FoundNothing() {
@@ -101,6 +105,8 @@ func runLogTo(w io.Writer, dir string, args []string) error {
 		}
 		into := ""
 		switch {
+		case e.Into != "" && tty:
+			into = " · into: " + search.ShortID(e.Into)
 		case e.Into != "":
 			into = " · into: " + e.Into
 		case e.Unreadable:
@@ -109,7 +115,7 @@ func runLogTo(w io.Writer, dir string, args []string) error {
 			// a host that sent nothing at all (#2161).
 			into = " · into: unknown (the host sent a payload deja could not read)"
 		}
-		fmt.Fprintf(w, "%s  %-14s %s%s%s%s%s\n", e.Time.Local().Format("2006-01-02 15:04"), e.Kind, humanBytes(int64(e.Bytes)), sess, into, compactionFailureNote(e), mark)
+		fmt.Fprintf(w, "%s  %-14s %s%s%s%s%s\n", e.Time.Local().Format("2006-01-02 15:04"), logKindLabel(e.Kind), humanBytes(int64(e.Bytes)), sess, into, compactionFailureNote(e), mark)
 	}
 	if total > len(events) {
 		// Nobody typed the 20 — it is the default above — and this is the
@@ -145,6 +151,12 @@ func compactionFailureNote(e usage.Event) string {
 	if e.CompactionError == "" {
 		return ""
 	}
+	// These two stored the packet; only the edit count after it is not
+	// measured. On TRAE CLI every /compact read "stored nothing" while the
+	// packet reached the next turn.
+	if e.Kind == usage.KindCompactionCapture && (e.CompactionError == "incomplete_transcript" || e.CompactionError == "no_offsets") {
+		return "  (stored; edits after it not counted: " + compactionErrorWords(e.CompactionError) + ")"
+	}
 	return "  (stored nothing: " + compactionErrorWords(e.CompactionError) + ")"
 }
 
@@ -157,6 +169,8 @@ func compactionErrorWords(token string) string {
 		return "the host named a transcript deja could not read"
 	case "incomplete_transcript":
 		return "the transcript ended mid-turn"
+	case "no_offsets":
+		return "this host's store is read whole, with no byte offsets to count from"
 	case "transcript_rewritten":
 		return "the transcript was rewritten while deja read it"
 	case "boundary_unavailable":
@@ -213,4 +227,27 @@ func snapshotTail(s usage.Snapshot) string {
 		b.WriteString(" · terms: " + strings.Join(s.Terms, ", "))
 	}
 	return b.String()
+}
+
+// logKindLabel is an event kind as the log screen names it. The stored names
+// are internal — `hook`, `dejavu`, `tool` — and --json keeps them; the screen
+// says what each one was.
+func logKindLabel(kind string) string {
+	switch kind {
+	case usage.KindHook:
+		return "session digest"
+	case usage.KindDejaVu:
+		return "prompt recall"
+	case usage.KindTool:
+		return "tool hint"
+	case usage.KindContext:
+		return "recall context"
+	case usage.KindResource:
+		return "session read"
+	case usage.KindCompactionCapture:
+		return "compaction"
+	case usage.KindCompactionRecovery:
+		return "recovered"
+	}
+	return kind
 }

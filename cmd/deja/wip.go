@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/vshulcz/deja-vu/internal/digest"
 	"github.com/vshulcz/deja-vu/internal/index"
@@ -11,6 +13,7 @@ import (
 	"github.com/vshulcz/deja-vu/internal/model"
 	"github.com/vshulcz/deja-vu/internal/policy"
 	"github.com/vshulcz/deja-vu/internal/search"
+	"github.com/vshulcz/deja-vu/internal/termwidth"
 )
 
 // `deja wip` answers the question a session asks after it loses its context:
@@ -40,6 +43,12 @@ func runWIP(dir string, args []string, stdout io.Writer) error {
 			return fmt.Errorf("wip takes --json and nothing else")
 		}
 	}
+	// Built first, like every other reader: on a fresh machine the lookup
+	// below opened a manifest that was never written and printed the raw
+	// open error.
+	if err := index.Ensure(dir, "", false, os.Stderr); err != nil {
+		return ensureError(dir, err)
+	}
 	s, r, ok, err := wipSession(dir)
 	if err != nil {
 		return err
@@ -60,6 +69,10 @@ func runWIP(dir string, args []string, stdout io.Writer) error {
 		})
 	}
 	if !ok {
+		if n, err := index.SessionCount(dir); err != nil || n == 0 {
+			fmt.Fprintln(stdout, emptyIndexHint("no session to pick up"))
+			return nil
+		}
 		fmt.Fprintln(stdout, "deja: no session in this project to pick up")
 		return nil
 	}
@@ -68,10 +81,40 @@ func runWIP(dir string, args []string, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "deja: the last session in this project left nothing to pick up")
 		return nil
 	}
+	color, width := search.ColorOK(stdout), printableWidth(stdout)
 	for _, l := range lines {
-		fmt.Fprintln(stdout, safeWIPLine(l))
+		fmt.Fprintln(stdout, wipLineForScreen(safeWIPLine(l), color, width))
+	}
+	// On a terminal, where it came from: the session to open when the summary
+	// is not enough. A pipe keeps the lines it always had.
+	if color || width > 0 {
+		rest := " · "
+		if !s.Updated.IsZero() {
+			rest += search.DisplayDate(s.Updated) + " · "
+		}
+		rest += search.SafeLine(search.ShortID(s.ID)) + " (deja show for all of it)"
+		if color {
+			fmt.Fprintln(stdout, statDim+"from "+statReset+search.HarnessTag(s.Harness, true)+statDim+rest+statReset)
+		} else {
+			fmt.Fprintln(stdout, "from "+search.HarnessTag(s.Harness, false)+rest)
+		}
 	}
 	return nil
+}
+
+// wipLineForScreen bolds a line's label and wraps its text under itself, so a
+// long decision reads as one fact instead of folding mid-word at the edge.
+func wipLineForScreen(l string, color bool, width int) string {
+	label, text, ok := strings.Cut(l, ": ")
+	if !ok {
+		return termwidth.Indent(l, width, "", "  ")
+	}
+	hang := strings.Repeat(" ", termwidth.Columns(label)+2)
+	out := termwidth.Indent(text, width, label+": ", hang)
+	if color {
+		out = statBold + label + statReset + strings.TrimPrefix(out, label)
+	}
+	return out
 }
 
 // wipJSON is the shape a caller reads. Every field is omitted rather than

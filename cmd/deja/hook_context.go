@@ -41,6 +41,19 @@ type sessionStartHookResponse struct {
 	} `json:"hookSpecificOutput"`
 }
 
+// replyEventName picks the hook event a reply claims. Devin rejects a
+// reply that names a different event than the one that fired, so a payload
+// naming one of this hook's real events is honored — but only those. A host
+// that puts its own spelling in hook_event_name (Cursor's camelCase
+// postToolUse, Gemini's BeforeAgent) would otherwise have its reply renamed
+// to something its own hook contract never produced.
+func replyEventName(sent, fallback string, allowed ...string) string {
+	if slices.Contains(allowed, sent) {
+		return sent
+	}
+	return fallback
+}
+
 type precompactHookInput struct {
 	SessionID      string   `json:"session_id"`
 	ConversationID string   `json:"conversation_id"`
@@ -54,6 +67,9 @@ type precompactHookInput struct {
 	// turns it is compacting in Messages.
 	Harness  string          `json:"harness"`
 	Messages json.RawMessage `json:"messages"`
+	// CatchUp is a compaction found after the fact, which may be handed over
+	// again: it is captured once (catchUpCompactionWith).
+	CatchUp bool `json:"deja_catch_up"`
 	// Grok spells all of this in camelCase. See hook_grok.go.
 	grokEnvelope
 	// Antigravity names the conversation in camelCase too.
@@ -157,6 +173,18 @@ func runHookPrecompactFor(dir, harness string) {
 	input.adopt()
 	if input.Harness == "" {
 		input.Harness = harness
+	}
+	// A host that finds a compaction after the fact hands over the turns it
+	// had before it and may hand the same one over again: captured once, like
+	// Gemini's (Amp's plugin, on the next agent.start).
+	if input.CatchUp {
+		catchUpCompactionWith(dir, input, func() (sources.CompactionTranscript, bool, error) {
+			// The file is the harness's format wherever it was written.
+			t, err := sources.ReadCompactionSession(input.Harness, input.SessionID, input.TranscriptPath,
+				compactionWorkspace(hookProjectPath(input.CWD, input.WorkspaceRoots)))
+			return t, err == nil, err
+		})
+		return
 	}
 	// Compaction throws away the blocks this session was shown, and the list
 	// that stops them repeating outlives them — so the memory the agent just
@@ -438,6 +466,10 @@ func runHookContextMode(dir string, plain, once bool) error {
 		// has no MCP of its own, and a lead naming recall_context sent the
 		// model to "Tool recall_context not found" on every first turn (#4584).
 		Shell bool `json:"deja_shell"`
+		// The event that fired, when the payload names one. Devin sends
+		// hook_event_name and rejects a reply that names a different event
+		// back; Claude names it too, in the same canonical spelling.
+		HookEventName string `json:"hook_event_name"`
 	}
 	// Best effort, as every hook is — but not silent about it. A payload deja
 	// cannot decode carries the session this injection went to, and losing it
@@ -448,6 +480,13 @@ func runHookContextMode(dir string, plain, once bool) error {
 	adoptCopilotHost(payload)
 	input.SessionID = adoptGrok(adoptGrok(input.SessionID, input.grokEnvelope.SessionID), input.ConversationID)
 	input.WorkspaceRoots = adoptGrokRoots(input.WorkspaceRoots, input.WorkspaceRoot)
+	// The reply goes out under the event it arrived on, not under
+	// SessionStart by right: Devin fires this hook on PostCompaction too,
+	// and drops a reply that names the wrong event back (verified on
+	// 3000.11.3). Only canonical names echo — hosts that spell their own
+	// events here (Cursor's camelCase sessionStart, Gemini's BeforeAgent)
+	// get the fallback they got before the echo existed.
+	eventName := replyEventName(input.HookEventName, "SessionStart", "SessionStart", "PostCompaction")
 	shape := hookToolClaude
 	if plain {
 		shape = hookToolPlain
@@ -457,20 +496,9 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// The first moment this session exists, so the first recall of it — the one
 	// an agent plans against — already knows whose transcript to leave out.
 	markSessionLive(dir, input.SessionID)
-	// Grok shows the receipt and drops the context, so nothing is served,
-	// claimed or logged as arrived; a note about the index still goes to the
-	// user, which is the part grok does show (#4588).
-	if grokDropsContext() {
-		if !plain {
-			if line := joinNotes(rewireNote(rewired), joinNotes(stuckWiringNote(stuckWiring), buildNotice(dir))); line != "" {
-				var resp sessionStartHookResponse
-				resp.HookSpecificOutput.HookEventName = "SessionStart"
-				resp.SystemMessage = line
-				emitHookResponse(resp)
-			}
-		}
-		return nil
-	}
+	// Grok shows the receipt and drops the context (#4588); the digest waits
+	// for the session's first tool hook, which does reach the model
+	// (hook_deferred.go).
 	// CodeBuddy injects SessionStart context only while the input holds one
 	// user message (isFirstOrResumeMessage, 2.161.2), and after a compaction it
 	// holds the summary and the next prompt. Whatever this answered would be
@@ -483,7 +511,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 	// in parallel: both found the packet undelivered and it arrived twice. The
 	// prompt hook carries it there.
 	if !once {
-		if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), "SessionStart", shape, os.Stdout); delivered {
+		if delivered, err := emitCompactionRecovery(dir, input.SessionID, hookProjectPath(input.CWD, input.WorkspaceRoots), eventName, shape, os.Stdout); delivered {
 			return err
 		}
 	}
@@ -543,7 +571,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 				return nil
 			}
 			var resp sessionStartHookResponse
-			resp.HookSpecificOutput.HookEventName = "SessionStart"
+			resp.HookSpecificOutput.HookEventName = eventName
 			resp.HookSpecificOutput.AdditionalContext = out
 			// The environment block is not the project's memory, and while a
 			// build runs it is all there is: without this the whole rebuild
@@ -583,7 +611,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 			line = joinNotes(rewireNote(rewired), joinNotes(stuckWiringNote(stuckWiring), joinNotes(withheldEverythingNote(dir, withheld), line)))
 			if line != "" {
 				var resp sessionStartHookResponse
-				resp.HookSpecificOutput.HookEventName = "SessionStart"
+				resp.HookSpecificOutput.HookEventName = eventName
 				resp.SystemMessage = line
 				emitHookResponse(resp)
 			}
@@ -632,7 +660,7 @@ func runHookContextMode(dir string, plain, once bool) error {
 		return nil
 	}
 	var resp sessionStartHookResponse
-	resp.HookSpecificOutput.HookEventName = "SessionStart"
+	resp.HookSpecificOutput.HookEventName = eventName
 	resp.HookSpecificOutput.AdditionalContext = digest
 	// Announce only when the recalled set changed since the last announcement:
 	// injection is recency-ranked, so repeating the same receipt every session
@@ -964,6 +992,11 @@ func hookCWD(fromPayload string) string {
 		return fromPayload
 	}
 	if cwd := os.Getenv("CLAUDE_PROJECT_DIR"); cwd != "" {
+		return cwd
+	}
+	// Devin carries no cwd in a hook payload; its launcher sets
+	// DEVIN_PROJECT_DIR for the hook's own process instead (3000.11.3).
+	if cwd := os.Getenv("DEVIN_PROJECT_DIR"); cwd != "" {
 		return cwd
 	}
 	cwd, _ := os.Getwd()

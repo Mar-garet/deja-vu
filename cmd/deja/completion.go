@@ -74,7 +74,7 @@ _deja_completion() {
             if [[ "$prev" == "--harness" ]]; then
                 COMPREPLY=( $(compgen -W "$harnesses" -- "$cur") )
             elif [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "--all --json --harness --project --since --attribution --git-note" -- "$cur") )
+                COMPREPLY=( $(compgen -W "--all --all-projects --json --harness --project --since --attribution --git-note" -- "$cur") )
             else
                 COMPREPLY=( $(compgen -f -- "$cur") )
             fi
@@ -90,7 +90,7 @@ _deja_completion() {
             COMPREPLY=( $(compgen -W "bash zsh fish powershell pwsh" -- "$cur") )
             ;;
         doctor)
-            COMPREPLY=( $(compgen -W "--json --offline --deep" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--json --offline --deep --all" -- "$cur") )
             ;;
         forget)
             COMPREPLY=( $(compgen -W "--list --dry-run --session --project --before --unforget --all-matches" -- "$cur") )
@@ -136,7 +136,7 @@ _deja_completion() {
             fi
             ;;
         resume)
-            COMPREPLY=( $(compgen -W "--exec" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--exec --write-back" -- "$cur") )
             ;;
         secrets)
             if [[ "$prev" == "--limit" ]]; then
@@ -249,7 +249,7 @@ _deja() {
 
   case "$words[2]" in
     blame)
-      _arguments '--attribution[show line attribution]' '--git-note[write attribution as a git note; implies --attribution]' '--all[include all matching sessions]' '--json[print JSON]' '--harness=[filter by harness]:harness:($harnesses)' '--project=[filter by project]:project:' '--since=[filter by age]:duration:' '1:path:_files'
+      _arguments '--attribution[show line attribution]' '--git-note[write attribution as a git note; implies --attribution]' '--all[include all matching sessions]' '--all-projects[include other projects]' '--json[print JSON]' '--harness=[filter by harness]:harness:($harnesses)' '--project=[filter by project]:project:' '--since=[filter by age]:duration:' '1:path:_files'
       ;;
     bench)
       if (( CURRENT == 3 )); then
@@ -262,7 +262,7 @@ _deja() {
       _values 'shell' bash zsh fish powershell pwsh
       ;;
     doctor)
-      _arguments '--json[print JSON]' '--offline[skip version check]' '--deep[verify index against sources]'
+      _arguments '--json[print JSON]' '--offline[skip version check]' '--deep[verify index against sources]' '--all[list every store, missing ones included]'
       ;;
     forget)
       _arguments '--list[list tombstones]' '--dry-run[show changes without applying]' '--session=[session ID prefix]:session:' '--project=[project substring]:project:' '--before=[duration or date]:time:' '--unforget=[tombstone ID]:ID:' '--all-matches[act on every match]'
@@ -296,7 +296,7 @@ _deja() {
       fi
       ;;
     resume)
-      _arguments '--exec[launch the native harness]' '1:session ID prefix:'
+      _arguments '--exec[launch the native harness]' '--write-back[write a deleted transcript back from the index]' '1:session ID prefix:'
       ;;
     secrets)
       _arguments '--limit=[maximum findings]:count:' '--json[print JSON]' '--scrub[rewrite files to remove secrets]' '--dry-run[show what --scrub would change]'
@@ -353,6 +353,7 @@ complete -c deja -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish p
 complete -c deja -n '__fish_seen_subcommand_from blame' -l attribution -d 'Show line attribution'
 complete -c deja -n '__fish_seen_subcommand_from blame' -l git-note -d 'Write attribution as a git note; implies --attribution'
 complete -c deja -n '__fish_seen_subcommand_from blame' -l all
+complete -c deja -n '__fish_seen_subcommand_from blame' -l all-projects
 complete -c deja -n '__fish_seen_subcommand_from blame' -l json
 complete -c deja -n '__fish_seen_subcommand_from blame' -l harness -r -a '%HARNESSES%'
 complete -c deja -n '__fish_seen_subcommand_from blame' -l project -r
@@ -364,6 +365,7 @@ complete -c deja -n '__fish_seen_subcommand_from bench; and __fish_seen_subcomma
 complete -c deja -n '__fish_seen_subcommand_from doctor' -l json
 complete -c deja -n '__fish_seen_subcommand_from doctor' -l offline
 complete -c deja -n '__fish_seen_subcommand_from doctor' -l deep
+complete -c deja -n '__fish_seen_subcommand_from doctor' -l all
 complete -c deja -n '__fish_seen_subcommand_from forget; and not __fish_seen_subcommand_from sync' -l list
 complete -c deja -n '__fish_seen_subcommand_from forget; and not __fish_seen_subcommand_from sync' -l dry-run
 complete -c deja -n '__fish_seen_subcommand_from forget; and not __fish_seen_subcommand_from sync' -l session -r
@@ -398,6 +400,7 @@ complete -c deja -n '__fish_seen_subcommand_from rules; and __fish_seen_subcomma
 complete -c deja -n '__fish_seen_subcommand_from rules; and __fish_seen_subcommand_from candidates' -l limit -r
 complete -c deja -n '__fish_seen_subcommand_from rules; and __fish_seen_subcommand_from candidates' -l since -r
 complete -c deja -n '__fish_seen_subcommand_from resume' -l exec
+complete -c deja -n '__fish_seen_subcommand_from resume' -l write-back -d 'Write a deleted transcript back from the index'
 complete -c deja -n '__fish_seen_subcommand_from secrets' -l limit -r
 complete -c deja -n '__fish_seen_subcommand_from secrets' -l json
 complete -c deja -n '__fish_seen_subcommand_from secrets' -l scrub -d 'Rewrite files to remove secrets'
@@ -457,14 +460,14 @@ Register-ArgumentCompleter -Native -CommandName deja -ScriptBlock {
         $candidates = switch ($command) {
             'blame' {
                 if ($previous -eq '--harness') { $harnesses }
-                else { @('--all', '--json', '--harness', '--project', '--since', '--attribution', '--git-note') }
+                else { @('--all', '--all-projects', '--json', '--harness', '--project', '--since', '--attribution', '--git-note') }
             }
             'bench' {
                 if ($argumentPosition -eq 1) { @('recall', 'context', 'prompt', 'block', 'ingest', 'read') }
                 else { @('--json', '--seed') }
             }
             'completion' { @('bash', 'zsh', 'fish', 'powershell', 'pwsh') }
-            'doctor' { @('--json', '--offline', '--deep') }
+            'doctor' { @('--json', '--offline', '--deep', '--all') }
             'forget' { @('--list', '--dry-run', '--session', '--project', '--before', '--unforget', '--all-matches') }
             'handoff' {
                 if ($previous -eq '--to') { $handoffTargets }
@@ -485,7 +488,7 @@ Register-ArgumentCompleter -Native -CommandName deja -ScriptBlock {
                 elseif ($action -eq 'candidates' -and $previous -notin @('--limit', '--since')) { @('--json', '--limit', '--since') }
                 else { @() }
             }
-            'resume' { @('--exec') }
+            'resume' { @('--exec', '--write-back') }
             'secrets' {
                 if ($previous -eq '--limit') { @() }
                 else { @('--limit', '--json', '--scrub', '--dry-run') }

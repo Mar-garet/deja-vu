@@ -65,6 +65,7 @@ func countSubagentFiles(seen []string) int {
 func runDoctor(w io.Writer, args []string, lookup doctorVersionLookup, dir string) error {
 	jsonOutput := false
 	deep := false
+	all := false
 	offline := os.Getenv("DEJA_OFFLINE") == "1"
 	for _, arg := range args {
 		switch arg {
@@ -74,6 +75,8 @@ func runDoctor(w io.Writer, args []string, lookup doctorVersionLookup, dir strin
 			offline = true
 		case "--deep":
 			deep = true
+		case "--all":
+			all = true
 		default:
 			return unknownFlag("doctor", arg, doctorFlags)
 		}
@@ -107,7 +110,25 @@ func runDoctor(w io.Writer, args []string, lookup doctorVersionLookup, dir strin
 		}
 		return deepDriftErr(deepReport)
 	}
-	doctorHarnesses(w, dir)
+	// A terminal gets the screen laid out for reading: a verdict first, agents
+	// that are not on this machine folded into one line, columns aligned and
+	// wrapped to the width. A pipe keeps every row as it always printed.
+	if f, ok := w.(*os.File); ok && briefWanted(f) {
+		var buf bytes.Buffer
+		printDoctorText(&buf, report, deepReport, dir, all, offline)
+		_, err := io.WriteString(w, doctorScreen(buf.String(), report, all, statColorOK(w), briefWidth()))
+		if err != nil {
+			return err
+		}
+		return deepDriftErr(deepReport)
+	}
+	printDoctorText(w, report, deepReport, dir, all, offline)
+	return deepDriftErr(deepReport)
+}
+
+// printDoctorText is the report as every row prints it.
+func printDoctorText(w io.Writer, report doctorReport, deepReport *index.DeepReport, dir string, all, offline bool) {
+	doctorHarnessStores(w, dir, all)
 	printDoctorStoreWarnings(w, report.Stores)
 	// The third cause of a files-to-sessions gap, after a parse failure (#861)
 	// and an id collision (#1101): the reader forgot them. `last` and `stats`
@@ -155,7 +176,6 @@ func runDoctor(w io.Writer, args []string, lookup doctorVersionLookup, dir strin
 		fmt.Fprintln(w)
 		doctorDeep(w, *deepReport)
 	}
-	return deepDriftErr(deepReport)
 }
 
 // doctorDeep prints the source-vs-index proof. Everything above it is deja
@@ -207,7 +227,7 @@ func doctorKept(w io.Writer, r *index.DeepReport) {
 	if r == nil || len(r.Kept) == 0 {
 		return
 	}
-	fmt.Fprintf(w, "  kept     %d transcript%s no longer on disk, still searchable — `deja forget <id>` drops one for good\n", len(r.Kept), pluralS(len(r.Kept)))
+	fmt.Fprintf(w, "  kept     %d transcript%s no longer on disk, still searchable — `deja resume <id> --write-back` puts one back, `deja forget <id>` drops one for good\n", len(r.Kept), pluralS(len(r.Kept)))
 }
 
 func deepDriftErr(r *index.DeepReport) error {
@@ -229,11 +249,11 @@ func doctorHooks(w io.Writer) {
 	defer doctorCodexHook(w)
 	st := claudeHookWiringState()
 	if st.absent {
-		fmt.Fprintf(w, "  %-12s missing      %s\n", "claude-code", reportPath(st.path))
+		fmt.Fprintf(w, "  %-12s %-11s %s\n", "claude-code", "missing", reportPath(st.path))
 		return
 	}
 	if st.state == "unreadable" {
-		fmt.Fprintf(w, "  %-12s unreadable   %s\n", "claude-code", reportPath(st.path))
+		fmt.Fprintf(w, "  %-12s %-11s %s\n", "claude-code", "unreadable", reportPath(st.path))
 		return
 	}
 	fmt.Fprintf(w, "  %-12s %-11s %s\n", "claude-code", st.state, reportPath(st.path))
@@ -305,18 +325,18 @@ func doctorCodexHook(w io.Writer) {
 		// missing either.
 		if status == "plugin" {
 			fmt.Fprintf(w, "  %-12s %-11s %s  (the Codex plugin carries the hooks; codex asks once to trust them)\n",
-				"codex-hook", "plugin", hooksPath)
+				"codex-hook", "plugin", reportPath(hooksPath))
 			return
 		}
-		fmt.Fprintf(w, "  %-12s missing      %s\n", "codex-hook", reportPath(hooksPath))
+		fmt.Fprintf(w, "  %-12s %-11s %s\n", "codex-hook", "missing", reportPath(hooksPath))
 		return
 	}
 	if st.trustUnknown {
 		fmt.Fprintf(w, "  %-12s %-11s %s  (cannot read %s, so whether codex trusts the hook is unknown)\n",
-			"codex-hook", "wired", hooksPath, filepath.Join(sources.CodexHome(), "config.toml"))
+			"codex-hook", "wired", reportPath(hooksPath), reportPath(filepath.Join(sources.CodexHome(), "config.toml")))
 		return
 	}
-	line := fmt.Sprintf("  %-12s %-11s %s", "codex-hook", status, hooksPath)
+	line := fmt.Sprintf("  %-12s %-11s %s", "codex-hook", status, reportPath(hooksPath))
 	if len(missing) > 0 {
 		line += fmt.Sprintf("\n               %d of %d events wired — no %s; run `deja install`",
 			len(codexHookWiring)-len(missing), len(codexHookWiring), strings.Join(missing, ", "))
@@ -575,6 +595,13 @@ func doctorLocationRoots(location string) []string {
 }
 
 func oneStoreDiskGone(path string) bool {
+	// A row that names a description rather than a path — roo's "VS Code
+	// globalStorage ..." — has no disk to lose. Walked up from the working
+	// directory, Cherry Studio's relative placeholder read as unplugged on
+	// every machine without the app.
+	if !filepath.IsAbs(path) {
+		return false
+	}
 	// Two levels is not enough for every store: `~/.local/share/goose/sessions`
 	// and `~/.cline/data/sessions` lose three on a machine that never installed
 	// them. A home directory that is there means the disk is there.
@@ -634,6 +661,18 @@ func noteBucketsRegrouped(dir string) int {
 	return moved
 }
 
+// onlyAbsentDetail matches a row detail that says nothing beyond "none here":
+// "0 files", "0 CLI transcripts", "0 stores".
+var onlyAbsentDetail = regexp.MustCompile(`^0 [a-zA-Z ]+$`)
+
+// onlyAbsent reports whether a missing store's detail adds nothing to
+// "missing". A detail that does, like aider's note that it writes into each
+// project rather than one place, is advice for someone who uses that agent
+// and keeps the row (#4625).
+func onlyAbsent(detail string) bool {
+	return detail == "" || onlyAbsentDetail.MatchString(detail)
+}
+
 // storeLabels names stores the way the rows below do: the registry calls
 // deja's own notes "deja", and nothing a person reads does.
 func storeLabels(names []string) []string {
@@ -647,7 +686,18 @@ func storeLabels(names []string) []string {
 	return out
 }
 
+// doctorHarnesses lists every store, the form `deja doctor --all` prints.
 func doctorHarnesses(w io.Writer, dir string) {
+	doctorHarnessStores(w, dir, true)
+}
+
+// doctorHarnessStores prints the store rows. Without all, a store that is
+// simply absent folds into one closing line: doctor lists every agent deja
+// can read, so on a machine with two of them the rows that matter hid among
+// thirty-odd "missing" ones (#4625). Only a row with nothing to say beyond
+// "not here" folds; anything found, unreadable, excluded, unplugged, holding
+// indexed sessions or carrying advice keeps its row.
+func doctorHarnessStores(w io.Writer, dir string, all bool) {
 	fmt.Fprintln(w, "Harness stores:")
 	// Say the selection out loud. Without this line a narrowed run looks like
 	// a machine that has thirty-four stores missing, and the variable is set by
@@ -688,6 +738,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// empty crush.db claimed another project's sessions (#4379). The first row
 	// of a harness carries them.
 	counted := map[string]bool{}
+	var folded []string
 	printRow := func(name, path string, present bool, detail string) {
 		// A store DEJA_STORES silences has no row at all. The line above says
 		// which stores are being read; a row saying "missing" about one of the
@@ -793,6 +844,10 @@ func doctorHarnesses(w io.Writer, dir string) {
 		// A store path can come from the environment (DEJA_NOTES_FILE) or from
 		// disk. On a fixed-width row a newline in it prints a line of its own
 		// that reads as one of doctor's.
+		if !all && status == "missing" && onlyAbsent(detail) {
+			folded = append(folded, name)
+			return
+		}
 		line := fmt.Sprintf("  %-12s %-9s %s", name, status, reportPath(path))
 		if detail != "" {
 			line += "  (" + detail + ")"
@@ -1060,7 +1115,7 @@ func doctorHarnesses(w io.Writer, dir string) {
 	// Cherry Studio writes Claude Code transcripts under its own app data, so
 	// the row names the roots it found rather than the app directory (#3644).
 	cherryFiles := len(sources.CherryStudioSessionFiles())
-	cherryLoc := "CherryStudio/Data/Agents/.claude"
+	cherryLoc := sources.CherryStudioDefaultRoot()
 	if roots := sources.CherryStudioAllRoots(); len(roots) > 0 {
 		cherryLoc = strings.Join(roots, string(os.PathListSeparator))
 	}
@@ -1105,6 +1160,13 @@ func doctorHarnesses(w io.Writer, dir string) {
 	cwRoots := sources.CodeWhaleRoots()
 	printFilesBesideIn("codewhale", sources.CodeWhaleRoot(), cwRoots, false, doctorExists(sources.CodeWhaleRoot()),
 		sources.CodeWhaleSessionFiles(), sources.CodeWhaleSidecarFiles()...)
+	// Junie keeps an index and two renderings beside each session's log.
+	printFilesBeside("junie", sources.JunieRoot(), doctorExists(sources.JunieRoot()),
+		sources.JunieSessionFiles(), sources.JunieSidecarFiles()...)
+	// AI Assistant's chats are inside each IDE's workspace files, most of
+	// which hold none; the count is the workspace files.
+	printRow("jetbrains", sources.JetBrainsRoot(), doctorExists(sources.JetBrainsRoot()),
+		doctorCount(len(sources.JetBrainsSessionFiles()), "workspace file"))
 	// Reasonix keeps a dozen sidecars beside each transcript — metadata, event
 	// logs, locks, subagent logs — so those are placed, not counted as unread.
 	rxRoot := sources.ReasonixRoot()
@@ -1119,6 +1181,16 @@ func doctorHarnesses(w io.Writer, dir string) {
 	printFiles("deepseek", dshRoot, doctorExists(dshRoot), sources.DeepSeekSessionFiles())
 	zedDB := sources.ZedDB()
 	printRow("zed", zedDB, doctorFilePresent(zedDB), doctorSQLiteDetail(zedDB, sqlite))
+	// One store for every local session, as Zed has — but the file the row
+	// names may be either of the two Devin keeps side by side.
+	devinDB := sources.DevinSessionsDB()
+	devinLoc := devinDB
+	devinDetail := doctorSQLiteDetail(devinDB, sqlite)
+	if legacy := sources.DevinLegacySessionsDB(); !doctorFilePresent(devinDB) && doctorFilePresent(legacy) {
+		devinLoc = legacy
+		devinDetail = doctorSQLiteDetail(legacy, sqlite)
+	}
+	printRow("devin", devinLoc, doctorFilePresent(devinDB) || doctorFilePresent(sources.DevinLegacySessionsDB()), devinDetail)
 	// One store per project rather than one per machine, so the registry is
 	// what makes them findable at all. Name it even when it lists nothing:
 	// "the registry is empty" is the answer for someone whose crush sessions
@@ -1129,6 +1201,10 @@ func doctorHarnesses(w io.Writer, dir string) {
 		printRow("crush", db, doctorFilePresent(db), doctorSQLiteDetail(db, sqlite))
 	}
 	printRow("deja", sources.NotesFile(), doctorFilePresent(sources.NotesFile()), "notes")
+	if len(folded) > 0 {
+		fmt.Fprintf(w, "  %s not found on this machine — `deja doctor --all` lists them\n",
+			doctorCount(len(folded), "more store"))
+	}
 	if n := noteBucketsRegrouped(dir); n > 0 {
 		fmt.Fprintf(w, "  warning      %s of notes in the index %s not what this machine would build now — the zone changed, so the days regrouped; `deja index` renames them\n",
 			doctorCount(n, "day"), verbIs(n))
@@ -1993,6 +2069,7 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"continue", continueConfigPath(), doctorContinueWired, nil},
 		{"crush", crushConfigPath(), doctorJSONWired("mcp"), doctorJSONDejaKeys("mcp")},
 		{"zed", sources.ZedSettingsPath(), doctorZedWired, nil},
+		{"devin", devinMCPConfigPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		// The nine targets `deja install` has always had and this table never
 		// named. A row here is the only place a machine says whether the
 		// server is declared and which binary it runs, so for these the report
@@ -2004,6 +2081,9 @@ func doctorMCPConfigs() []doctorMCPConfig {
 		{"kiro", kiroMCPSettingsPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"senpi", senpiMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"kimchi", kimchiMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
+		{"codewhale", codewhaleMCPPath(), doctorJSONWired("servers"), doctorJSONDejaKeys("servers")},
+		{"junie", junieMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
+		{"jetbrains", jetBrainsMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"gjc", gjcMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
 		{"zcode", zcodeConfigPath(), doctorZCodeWired, nil},
 		{"commandcode", commandCodeMCPPath(), doctorJSONWired("mcpServers"), doctorJSONDejaKeys("mcpServers")},
@@ -2585,7 +2665,13 @@ func doctorIndex(w io.Writer, idx doctorIndexReport, dir string) {
 		// "run `deja warmup`" points at a path that is not there. doctor is
 		// what someone runs when memory looks broken (#931).
 		if parent := filepath.Dir(dir); !dirExists(parent) {
-			fmt.Fprintf(w, "  status   not reachable — %s is not there; the disk it lives on may have been unmounted\n", parent)
+			// A new home has no ~/.cache yet, and a build creates it: that
+			// is an index not built, not a disk that went away.
+			if freshHomePath(parent) {
+				fmt.Fprintln(w, "  status   not built (run `deja warmup`)")
+				return
+			}
+			fmt.Fprintf(w, "  status   not reachable — %s is not there; the disk it lives on may have been unmounted\n", reportPath(parent))
 			return
 		}
 		// The index directory is there but cannot be read — a permissions
@@ -2830,12 +2916,22 @@ func reportPath(p string) string {
 	// Some rows carry several paths in one string — a store deja looks for in
 	// two places, or a root list from the environment. Contracting the whole
 	// string would only reach the first, which is how the cursor row came out
-	// half in ~ and half in /Users/… .
+	// half in ~ and half in /Users/… . Joined back with ", ", the separator
+	// the cursor row already used, so every multi-path row reads the same.
 	parts := strings.Split(p, string(os.PathListSeparator))
 	for i, part := range parts {
 		parts[i] = search.SafePath(underHome(part))
 	}
-	return strings.Join(parts, string(os.PathListSeparator))
+	return strings.Join(parts, ", ")
+}
+
+// freshHomePath says whether a missing path lies inside the home directory
+// below a directory deja can write, so a build would simply create it. A
+// mount point that went away leaves its path outside the home, or under a
+// directory nothing here can write.
+func freshHomePath(p string) bool {
+	a := nearestExistingDir(p)
+	return a != "" && underHome(a) != a && dirWritable(a)
 }
 
 // underHome contracts a home-prefixed path to ~, and leaves everything else

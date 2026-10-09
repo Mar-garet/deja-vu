@@ -686,7 +686,13 @@ import (
 //
 // 68 reads the compaction summaries Zed, Cline and Continue write, under the
 // summary role, and Continue's no longer as the assistant's words (#4795).
-const version = 68
+// 68 drops the <turn_meta> block CodeWhale 0.10.0 saves in every user message,
+// which was indexed as the person's words (#4802).
+//
+// 69 keys each fix pair on every error line of the output it answers, not only
+// the first: `deja fix` with the line under a failing test's name found
+// nothing, while friction counted it. Only a rebuild re-mines the pairs.
+const version = 69
 
 // onDiskFormat is how the store is laid out on disk — the record encoding, the
 // bucket encoding, the manifest's own shape. It moves only when a reader of an
@@ -757,6 +763,10 @@ type BuildSummary struct {
 	Dropped    int
 	Harnesses  int
 	PerHarness []HarnessCount
+	// Took is the build's wall time, set by the command that ran and timed it
+	// (the build itself cannot see the parse that came before it); zero when
+	// nothing timed it, and then no summary line states a time (#4630).
+	Took time.Duration
 }
 
 var LastBuild BuildSummary

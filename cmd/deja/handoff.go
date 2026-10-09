@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -99,9 +100,9 @@ func runHandoff(dir string, args []string, stdout io.Writer) error {
 	}
 	fmt.Fprintf(os.Stderr, "deja: handing off %s · %s · %s · %s\n", s.Harness, s.Project, digest.Short(s.ID), age)
 	if !s.Updated.IsZero() && time.Since(s.Updated) > 7*24*time.Hour {
-		// humanAge already ends in "old"; appending the word again printed
-		// "this session is 11d old old" (#743).
-		fmt.Fprintf(os.Stderr, "deja: note — this session is %s; if you meant newer work, pass an id-prefix (see `deja last`)\n", age)
+		// The line above already says how old; saying it again here read as
+		// two warnings.
+		fmt.Fprintln(os.Stderr, "deja: older than a week — `deja last` lists newer sessions to hand off")
 	}
 	// The quoted half carries the same frame recall does: this text becomes
 	// the next agent's first prompt, and nothing else said which half of it
@@ -111,7 +112,7 @@ func runHandoff(dir string, args []string, stdout io.Writer) error {
 	if !doExec {
 		printSanitized(stdout, digest)
 		if pasteOnly {
-			fmt.Fprintf(os.Stderr, "\npaste this into a new chat, or hand off directly: deja handoff --to <%s> [--exec]\n", strings.Join(handoffTargets(), "|"))
+			fmt.Fprint(os.Stderr, pasteOnlyFooter(prefix))
 		} else {
 			argv, _ := handoffCommand(target, "")
 			head := make([]string, 0, len(argv))
@@ -202,7 +203,7 @@ func handoffSource(dir, prefix string) (model.Session, error) {
 			return model.Session{}, err
 		}
 		if !ok {
-			return model.Session{}, fmt.Errorf("no session matches %q", prefix)
+			return model.Session{}, noSessionMatches(dir, prefix)
 		}
 		return s, nil
 	}
@@ -322,7 +323,71 @@ func handoffCommand(target, prompt string) ([]string, bool) {
 	case "cursor":
 		return []string{"cursor-agent", prompt}, true
 	case "copilot":
-		return []string{"copilot", "-p", prompt}, true
+		// -i starts the interactive session and runs the prompt in it; -p
+		// answered once and exited (1.0.79 --help).
+		return []string{"copilot", "-i", prompt}, true
+	case "copilot-chat":
+		// Opens VS Code's chat in agent mode with the prompt (1.140.0
+		// `code chat --help`: `code chat [options] [prompt]`).
+		return []string{"code", "chat", "-m", "agent", prompt}, true
+	case "kilocode":
+		// The TUI's own option, "prompt to use" (kilo 7.8.8 --help).
+		return []string{"kilo", "--prompt", prompt}, true
+	case "continue":
+		// `cn [options] [command] [prompt]` starts an interactive session with
+		// the prompt (1.5.47).
+		return []string{"cn", prompt}, true
+	case "commandcode":
+		// `cmd "message"` starts with an initial message (1.77.0); on Windows
+		// the bin is cmdc, as for resume.
+		bin := "cmd"
+		if runtime.GOOS == "windows" {
+			bin = "cmdc"
+		}
+		return []string{bin, prompt}, true
+	case "codebuddy":
+		// Interactive by default, prompt as the trailing argument (2.161.4).
+		return []string{"codebuddy", prompt}, true
+	case "trae":
+		// `traecli [OPTIONS] [PROMPT]` (0.207.1); traex is the name resume
+		// prints too.
+		return []string{"traex", prompt}, true
+	case "muse":
+		// `muse exec "<prompt>"` runs one task and exits (1.4.2, #4709).
+		return []string{"muse", "exec", prompt}, true
+	case "kiro":
+		// `kiro-cli chat [INPUT]`, "the first question to ask" (2.22.0).
+		return []string{"kiro-cli", "chat", prompt}, true
+	case "gjc":
+		// Interactive mode with an initial prompt (0.18.7 cli-main.ts).
+		return []string{"gjc", prompt}, true
+	case "kimchi":
+		// `kimchi [options] [@files…] [messages…]` launches the harness with
+		// the messages (0.1.99).
+		return []string{"kimchi", prompt}, true
+	case "codewhale":
+		// "[PROMPT] Initial prompt to submit in the interactive TUI" (0.10.0).
+		return []string{"codewhale", prompt}, true
+	case "junie":
+		// `junie <task>` runs the task and exits (3110.7).
+		return []string{"junie", prompt}, true
+	case "hermes":
+		// `hermes chat -q` is a single query, the only prompt entry (0.17.0).
+		return []string{"hermes", "chat", "-q", prompt}, true
+	case "openclaw":
+		// `openclaw chat` is the TUI; --message is sent after it connects
+		// (2026.7.1-2).
+		return []string{"openclaw", "chat", "--message", prompt}, true
+	case "deepseek":
+		// The headless profile answers one task and exits (dsh 0.1.1-rc.2).
+		return []string{"dsh", "--profile", "headless", prompt}, true
+	case "reasonix":
+		// `reasonix run <task>` (2.30.0); the TUI takes no prompt.
+		return []string{"reasonix", "run", prompt}, true
+	case "zcode":
+		// `zcode -p <text>` runs one prompt without the TUI, the only prompt
+		// entry (zcode-app-cli 3.14.4).
+		return []string{"zcode", "-p", prompt}, true
 	case "cline":
 		// The CLI runs the extension headlessly and takes the prompt as its
 		// argument; verified by running one.
@@ -334,20 +399,68 @@ func handoffCommand(target, prompt string) ([]string, bool) {
 	case "antigravity":
 		// Antigravity's CLI is `agy`; -i seeds a prompt into an interactive session.
 		return []string{"agy", "-i", prompt}, true
+	case "devin":
+		// Devin CLI's one-shot mode: -p prints an answer and exits.
+		return []string{"devin", "-p", prompt}, true
 	default:
 		return nil, false
 	}
 }
 
 // handoffAlias lets a target be spelled the way its own CLI is invoked.
-var handoffAlias = map[string]string{"agy": "antigravity"}
+var handoffAlias = map[string]string{
+	"agy": "antigravity", "kilo": "kilocode", "cn": "continue", "cmd": "commandcode",
+	"cmdc": "commandcode", "traex": "trae", "traecli": "trae", "kiro-cli": "kiro",
+	"dsh": "deepseek", "code": "copilot-chat", "vscode": "copilot-chat",
+}
 
 // handoffPasteOnly mirrors the registry's `handoff: paste` entries; the
 // capability drift test keeps the two in sync.
-// Zed is paste-only for the same reason Roo is: the agent lives in the editor,
-// so there is no CLI invocation to hand a prompt to.
-var handoffPasteOnly = map[string]bool{"openclaw": true, "hermes": true, "roo": true, "kilocode": true, "cherrystudio": true, "kiro": true, "kimchi": true, "commandcode": true, "zcode": true, "gjc": true, "zed": true, "deepseek": true, "codewhale": true, "codebuddy": true, "trae": true, "muse": true, "reasonix": true, "copilot-chat": true, "continue": true}
+// Roo, Zed, Cherry Studio and JetBrains AI Assistant run the agent inside the app, so there is no
+// command line to hand a prompt to.
+var handoffPasteOnly = map[string]bool{"roo": true, "cherrystudio": true, "zed": true, "jetbrains": true}
+
+// pasteOnlyFooter ends a handoff printed for pasting. It named all of
+// handoffTargets inline, a four-line wall at 80 columns; the agents a reader
+// can actually open here are the ones whose command is on PATH.
+func pasteOnlyFooter(prefix string) string {
+	var found []string
+	for _, t := range handoffTargets() {
+		if handoffPasteOnly[t] {
+			continue
+		}
+		argv, ok := handoffCommand(t, "")
+		if !ok || len(argv) == 0 {
+			continue
+		}
+		if _, err := exec.LookPath(argv[0]); err == nil {
+			found = append(found, t)
+		}
+	}
+	if len(found) == 0 {
+		return "\npaste this into a new chat — `deja handoff --help` names the agents it can open directly\n"
+	}
+	const shown = 3
+	var b strings.Builder
+	b.WriteString("\npaste this into a new chat, or open it in an agent found here:\n")
+	for i, t := range found {
+		if i == shown {
+			width := printableWidth(os.Stderr)
+			if width <= 0 {
+				width = 76
+			}
+			more := fmt.Sprintf("(%d more: %s)", len(found)-shown, strings.Join(found[shown:], ", "))
+			for _, line := range strings.Split(wrapProse(more, width-2), "\n") {
+				b.WriteString("  " + line + "\n")
+			}
+			break
+		}
+		fmt.Fprintf(&b, "  deja handoff --to %s%s --exec\n", t, prefixArg(prefix))
+	}
+	return b.String()
+}
 
 func handoffTargets() []string {
-	return []string{"claude", "codex", "opencode", "cursor", "copilot", "gemini", "qwen", "antigravity", "aider", "pi", "senpi", "omp", "amp", "prime", "grok", "cline", "goose", "kimi", "crush"}
+	return []string{"claude", "codex", "opencode", "cursor", "copilot", "copilot-chat", "gemini", "qwen", "antigravity", "aider", "pi", "senpi", "omp", "amp", "prime", "grok", "cline", "goose", "kimi", "crush",
+		"kilocode", "continue", "commandcode", "codebuddy", "trae", "muse", "kiro", "gjc", "kimchi", "codewhale", "junie", "hermes", "openclaw", "deepseek", "reasonix", "zcode", "devin"}
 }

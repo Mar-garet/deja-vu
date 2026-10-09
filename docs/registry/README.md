@@ -36,6 +36,8 @@ This registry records observed on-disk session formats for the harnesses that de
 | [Command Code](commandcode.md) | session header + message envelopes, JSONL per session |
 | [ZCode](zcode.md) | flat role/content JSONL per session, plus the CLI's OpenCode-schema SQLite |
 | [CodeWhale](codewhale.md) | one JSON document per session, Anthropic-shaped content blocks |
+| [Junie](junie.md) | one event-log JSONL per session directory, blocks folded by step |
+| [JetBrains AI Assistant](jetbrains.md) | chats in each IDE's workspace XML, agent chats in base64 JSON task logs |
 | [CodeBuddy Code](codebuddy.md) | Claude Code's project tree, OpenAI Responses-style items per line |
 | [Reasonix](reasonix.md) | flat role/content JSONL per session, clock and workspace in a sidecar; 1.x keeps a zstd-framed event log per session directory |
 | [TRAE CLI](trae.md) | Codex rollouts under `~/.trae/cli`, user turns from events only, tool calls in `history_mutation` |
@@ -46,6 +48,7 @@ This registry records observed on-disk session formats for the harnesses that de
 | [Hermes](hermes.md) | SQLite state store, and Postgres when configured |
 | [DeepSeek Harness](deepseek.md) | append-only session log, zstd-framed JSONL |
 | [Zed](zed.md) | SQLite thread store, zstd-compressed bodies |
+| [Devin CLI](devin.md) | one SQLite store of linked message nodes; subagents read as sessions of their own |
 
 ## Reporting drift
 
